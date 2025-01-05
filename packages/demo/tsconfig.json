@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+
+    /* monorepo */
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "paths": {
+      "lexical-review": ["../lexical-review/src/index.ts"]
+    }
+  },
+  "references": [{ "path": "../lexical-review" }],
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

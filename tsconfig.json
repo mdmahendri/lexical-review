@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    /* Base Options: */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "es2023",
+    "allowJs": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+
+    /* Strictness */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+
+    /* If transpiling with TypeScript: */
+    "module": "Preserve",
+    "outDir": "dist",
+    "sourceMap": true,
+
+    "baseUrl": ".",
+    "types": ["vitest/globals"],
+    "paths": {
+      "*": ["packages/*/src/index.ts"]
+    }
+  },
+  "references": [{ "path": "packages/lexical-review" }],
+  "exclude": ["node_modules", "dist", "*.d.ts"]
+}

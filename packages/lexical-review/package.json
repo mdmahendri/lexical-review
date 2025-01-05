@@ -1,0 +1,29 @@
+{
+  "name": "lexical-review",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A custom lexical plugin provides suggestion, review, or track changes mode",
+  "keywords": [
+    "lexical",
+    "suggestion",
+    "review",
+    "track changes"
+  ],
+  "main": "src/index.ts",
+  "scripts": {
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@lexical/clipboard": "^0.20.0",
+    "@lexical/react": "^0.20.0",
+    "@lexical/utils": "^0.20.0",
+    "lexical": "^0.20.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

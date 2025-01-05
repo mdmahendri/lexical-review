@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist",
+    "baseUrl": ".",
+
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+
+    /* monorepo */
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
