@@ -6,6 +6,7 @@
   "main": "dist/src/index.js",
   "scripts": {
     "dev": "pnpm --filter demo dev",
+    "build:all": "nx run-many --target=build --all",
     "lint": "eslint .",
     "prettier": "pnpm exec prettier . --write",
     "test": "vitest --disable-console-intercept"
