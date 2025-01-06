@@ -47,7 +47,7 @@ function App() {
         </div>
         <footer className="mt-4 flex justify-between text-gray-600">
           <a
-            href="https://github.com/mdmahendri"
+            href="https://github.com/mdmahendri/lexical-review"
             className="text-blue-500 hover:underline"
             target="_blank"
             rel="noopener noreferrer"
