@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "pnpm --filter demo dev",
     "build:demo": "pnpm nx build demo",
+    "preview:demo": "pnpm nx preview demo",
     "lint": "eslint .",
     "prettier": "pnpm exec prettier . --write",
     "test": "vitest --disable-console-intercept"
