@@ -31,6 +31,6 @@ jobs:
         run: pnpm install --frozen-lockfile
         
       - name: Publish to NPM registry
-        run: pnpm publish packages/lexical-review --access public
+        run: pnpm publish packages/lexical-review --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
