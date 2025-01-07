@@ -2,6 +2,7 @@
   "name": "lexical-review-repo",
   "version": "1.0.0",
   "type": "module",
+  "private": true,
   "description": "A repo to lexical-review",
   "main": "dist/src/index.js",
   "scripts": {
