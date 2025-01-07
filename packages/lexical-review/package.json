@@ -10,10 +10,14 @@
     "track changes"
   ],
   "main": "src/index.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mdmahendri/lexical-review",
+    "directory": "packages/lexical-review"
+  },
   "scripts": {
     "build": "tsc"
   },
-  "author": "",
   "license": "MIT",
   "dependencies": {
     "@lexical/clipboard": "^0.20.0",
