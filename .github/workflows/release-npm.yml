@@ -28,7 +28,10 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies Frozen
-        run: pnpm install --frozen-lockfile
+        run: pnpm --filter lexical-review install --frozen-lockfile
+        
+      - name: Build Lexical-Review
+        run: pnpm --filter lexical-review build
         
       - name: Publish to NPM registry
         run: pnpm publish packages/lexical-review --access public --no-git-checks

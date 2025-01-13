@@ -1,6 +1,6 @@
 {
   "name": "lexical-review",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "description": "A custom lexical plugin provides suggestion, review, or track changes mode",
   "keywords": [
@@ -9,7 +9,7 @@
     "review",
     "track changes"
   ],
-  "main": "src/index.ts",
+  "main": "dist/src/index.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/mdmahendri/lexical-review",
