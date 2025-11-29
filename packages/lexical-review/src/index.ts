@@ -81,7 +81,7 @@ function $normalizeReviewTextNode(textNode: ReviewTextNode): void {
   }
 }
 
-export function registerReviewText(editor: LexicalEditor): () => void {
+export function registerReviewText(editor: LexicalEditor, granularity: "word" | "character" = "character"): () => void {
   const removeListener = mergeRegister(
     // needed to merge sibling of the same review type
     editor.registerNodeTransform(ReviewTextNode, (node) => {
@@ -135,7 +135,7 @@ export function registerReviewText(editor: LexicalEditor): () => void {
         if (!$isRangeSelection(selection)) {
           return false;
         }
-        $markForDelete(selection, true);
+        $markForDelete(selection, true, granularity);
 
         return true;
       },
@@ -151,7 +151,7 @@ export function registerReviewText(editor: LexicalEditor): () => void {
         if (!$isRangeSelection(selection)) {
           return false;
         }
-        $markForDelete(selection, false);
+        $markForDelete(selection, false, granularity);
 
         return true;
       },

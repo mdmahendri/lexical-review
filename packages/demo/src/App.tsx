@@ -54,7 +54,7 @@ function App() {
           >
             View on GitHub
           </a>
-          <p>&copy; 2024 mdmahendri</p>
+          <p>created by Mahendri Dwicahyo</p>
         </footer>
       </div>
     </div>
