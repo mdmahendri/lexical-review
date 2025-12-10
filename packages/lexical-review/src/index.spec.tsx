@@ -20,7 +20,7 @@ describe("Lexical Review Mode tests", () => {
   let editor: LexicalEditor;
 
   function useLexicalEditor(
-    rootElementRef: React.RefObject<HTMLDivElement>,
+    rootElementRef: React.RefObject<HTMLDivElement | null>,
     onError?: (error: Error) => void,
   ) {
     const editor = useMemo(
