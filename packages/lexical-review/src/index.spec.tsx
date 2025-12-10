@@ -313,7 +313,7 @@ describe("Lexical Review Mode tests", () => {
         
         origNode.select(0, 4); // Select "this"
         const selection = $getSelection() as RangeSelection;
-        $markForDelete(selection, false);
+        $markForDelete(selection, false, "character");
       });
 
       editor.getEditorState().read(() => {
@@ -334,7 +334,7 @@ describe("Lexical Review Mode tests", () => {
         const text = insNode.getTextContent();
         insNode.select(0, text.length);
         const selection = $getSelection() as RangeSelection;
-        $markForDelete(selection, false);
+        $markForDelete(selection, false, "character");
       });
 
       editor.getEditorState().read(() => {
@@ -360,7 +360,7 @@ describe("Lexical Review Mode tests", () => {
         const text = delNode.getTextContent();
         delNode.select(0, text.length);
         const selection = $getSelection() as RangeSelection;
-        $markForDelete(selection, false);
+        $markForDelete(selection, false, "character");
       });
 
       editor.getEditorState().read(() => {
