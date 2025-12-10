@@ -28,7 +28,7 @@
     "lexical": "^0.38.2"
   },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react": "^19.0.6",
+    "@types/react-dom": "^19.0.4"
   }
 }
