@@ -7,7 +7,6 @@ import {
   $getSelection,
   $isParagraphNode,
   $isRangeSelection,
-  ElementNode,
   PointType,
   RangeSelection,
 } from "lexical";
@@ -149,21 +148,10 @@ function suggestDeletion(selection: RangeSelection) {
 export function $markForDelete(
   selection: RangeSelection,
   isBackward: boolean,
+  granularity: "word" | "character",
 ): void {
   if (selection.isCollapsed()) {
-    const anchor = selection.anchor;
-    const anchorNode = anchor.getNode() as ReviewTextNode | ElementNode;
-
-    //different behavior only needed for insertion, to accomodate a typing error
-    if (
-      $isReviewTextNode(anchorNode) &&
-      anchorNode.hasReviewType("insertion") &&
-      isBackward
-    ) {
-      selection.modify("extend", isBackward, "character");
-    } else {
-      selection.modify("extend", isBackward, "word");
-    }
+   selection.modify("extend", isBackward, granularity);
   }
 
   suggestDeletion(selection);

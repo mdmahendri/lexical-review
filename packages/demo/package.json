@@ -13,7 +13,7 @@
     "react-dom": "^18.3.1",
     "lexical": "^0.20.0",
     "@lexical/react": "^0.20.0",
-    "lexical-review": "workspace:1.0.3"
+    "lexical-review": "workspace:1.0.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
