@@ -8,6 +8,7 @@ import {
   COPY_COMMAND,
   PASTE_COMMAND,
   KEY_ENTER_COMMAND,
+  COMMAND_PRIORITY_NORMAL,
 } from "lexical";
 import { LexicalEditor } from "lexical";
 import { copyToClipboard } from "@lexical/clipboard";
@@ -105,7 +106,7 @@ export function registerReviewText(editor: LexicalEditor, granularity: "word" | 
         $markTypingInsert(selection, content);
         return true;
       },
-      COMMAND_PRIORITY_EDITOR
+      COMMAND_PRIORITY_NORMAL
     ),
 
     /** this command does not work */
