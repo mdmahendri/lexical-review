@@ -1,0 +1,12 @@
+src/
+tsconfig.json
+tsconfig.tsbuildinfo
+dist/*.spec.d.ts
+dist/*.spec.js
+dist/*.test.d.ts
+dist/*.test.js
+dist/test-utils.d.ts
+dist/test-utils.js
+*.test.ts
+*.test.tsx
+.gitignore

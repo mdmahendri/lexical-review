@@ -20,7 +20,6 @@
     /* If transpiling with TypeScript: */
     "module": "Preserve",
     "outDir": "dist",
-    "sourceMap": true,
 
     "baseUrl": ".",
     "types": ["vitest/globals"],
