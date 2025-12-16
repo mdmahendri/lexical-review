@@ -54,7 +54,7 @@ importers:
         specifier: ^0.39.0
         version: 0.39.0
       lexical-review:
-        specifier: workspace:1.0.7
+        specifier: workspace:1.0.8
         version: link:../lexical-review
       react:
         specifier: ^19.2.3
