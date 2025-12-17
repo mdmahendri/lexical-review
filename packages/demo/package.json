@@ -11,7 +11,7 @@
   "dependencies": {
     "@lexical/react": "^0.39.0",
     "lexical": "^0.39.0",
-    "lexical-review": "workspace:1.0.8",
+    "lexical-review": "workspace:2.0.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
   },
