@@ -1,7 +1,7 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
-import { ReviewTextPlugin } from "lexical-review";
+import { ReviewTextPlugin } from "lexical-review/client";
 
 const placeholder = "";
 
