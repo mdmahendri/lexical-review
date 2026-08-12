@@ -4,7 +4,7 @@ import { registerReviewText } from "./registerReviewText";
 
 export function ReviewTextPlugin({
   contentEditable,
-  granularity = "character",  
+  granularity = "character",
 }: {
   contentEditable: JSX.Element;
   granularity?: "word" | "character";

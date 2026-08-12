@@ -37,11 +37,11 @@
     "@lexical/clipboard": "^0.39.0",
     "@lexical/react": "^0.39.0",
     "@lexical/utils": "^0.39.0",
-    "lexical": "^0.39.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "lexical": "^0.39.0"
   },
   "devDependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3"
   }
