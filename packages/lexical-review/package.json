@@ -30,7 +30,7 @@
     "directory": "packages/lexical-review"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc -p tsconfig.build.json"
   },
   "license": "MIT",
   "dependencies": {

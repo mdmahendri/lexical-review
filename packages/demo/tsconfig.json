@@ -20,7 +20,7 @@
       "lexical-review": ["../lexical-review/src/index.ts"]
     }
   },
-  "references": [{ "path": "../lexical-review" }],
+  "references": [{ "path": "../lexical-review/tsconfig.build.json" }],
   "include": ["src"],
   "exclude": ["node_modules"]
 }

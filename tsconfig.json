@@ -27,6 +27,6 @@
       "*": ["packages/*/src/index.ts"]
     }
   },
-  "references": [{ "path": "packages/lexical-review" }],
+  "references": [{ "path": "packages/lexical-review/tsconfig.build.json" }],
   "exclude": ["node_modules", "dist", "*.d.ts"]
 }
