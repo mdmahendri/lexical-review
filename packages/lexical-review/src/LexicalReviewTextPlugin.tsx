@@ -1,4 +1,4 @@
-import { JSX } from "react";
+import { JSX, useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { registerReviewText } from "./registerReviewText";
 
@@ -10,7 +10,10 @@ export function ReviewTextPlugin({
   granularity?: "word" | "character";
 }) {
   const [editor] = useLexicalComposerContext();
-  registerReviewText(editor, granularity);
+  useEffect(
+    () => registerReviewText(editor, granularity),
+    [editor, granularity],
+  );
 
   return <>{contentEditable}</>;
 }
