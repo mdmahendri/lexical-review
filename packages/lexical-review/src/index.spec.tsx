@@ -11,7 +11,7 @@ import {
 } from "lexical";
 import { createTestEditor } from "./test-utils";
 import { $createReviewTextNode, $isReviewTextNode, ReviewTextNode } from "./ReviewTextNode";
-import { registerReviewText } from ".";
+import { registerReviewText } from "./client";
 import { $markTypingInsert, $markForDelete } from "./ReviewSelection";
 
 describe("Lexical Review Mode tests", () => {
