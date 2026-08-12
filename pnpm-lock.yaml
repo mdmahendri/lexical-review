@@ -90,22 +90,22 @@ importers:
       '@lexical/clipboard':
         specifier: ^0.39.0
         version: 0.39.0
-      '@lexical/react':
-        specifier: ^0.39.0
-        version: 0.39.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(yjs@13.6.20)
       '@lexical/utils':
         specifier: ^0.39.0
         version: 0.39.0
-      lexical:
-        specifier: ^0.39.0
-        version: 0.39.0
     devDependencies:
+      '@lexical/react':
+        specifier: ^0.39.0
+        version: 0.39.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(yjs@13.6.20)
       '@types/react':
         specifier: ^19.2.7
         version: 19.2.7
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.7)
+      lexical:
+        specifier: ^0.39.0
+        version: 0.39.0
       react:
         specifier: ^19.2.3
         version: 19.2.3
