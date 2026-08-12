@@ -2,8 +2,15 @@
   "name": "lexical-review-repo",
   "version": "1.0.0",
   "type": "module",
+  "author": "",
+  "license": "MIT",
   "private": true,
   "description": "A repo to lexical-review",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=11 <12"
+  },
   "main": "dist/src/index.js",
   "scripts": {
     "dev": "pnpm nx dev demo",
@@ -19,8 +26,6 @@
     "review",
     "track changes"
   ],
-  "author": "",
-  "license": "MIT",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "eslint": "^9.39.2",
