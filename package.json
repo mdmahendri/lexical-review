@@ -34,11 +34,5 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.0",
     "vitest": "^4.0.15"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "nx"
-    ]
   }
 }
