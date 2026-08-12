@@ -6,6 +6,7 @@ import eslintConfigPrettier from "eslint-config-prettier";
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
+  { ignores: ["**/dist/**", "**/.nx/**", "**/coverage/**"] },
   { files: ["**/*.{ts,tsx}"] },
   { languageOptions: { globals: globals.browser } },
   pluginJs.configs.recommended,
