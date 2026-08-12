@@ -3,7 +3,7 @@
 - This is an implementation of review mode based on the ability of [Lexical](https://github.com/facebook/lexical) text-editor framework. The degree of customization offered through Lexical is good enough to add this feature.
 
 ## Demo
-demo can be accessed from [https://mdmahendri.github.io/lexical-review/](https://mdmahendri.github.io/lexical-review/) and the source code is available through the repo in `packages/demo`
+demo can be accessed from [https://mahendrimd.github.io/lexical-review/](https://mahendrimd.github.io/lexical-review/) and the source code is available through the repo in `packages/demo`
 
 ## Installation
 ```
