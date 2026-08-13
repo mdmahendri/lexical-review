@@ -31,7 +31,7 @@ describe("Lexical Review Mode tests", () => {
             {
               replace: TextNode,
               with: (node: TextNode) => {
-                return new ReviewTextNode(node.getTextContent());
+                return $createReviewTextNode(node.getTextContent(), "original");
               },
               withKlass: ReviewTextNode,
             },
@@ -237,6 +237,33 @@ describe("Lexical Review Mode tests", () => {
   });
 
   describe("Text Insertion Operations", () => {
+    it("requires ReviewTextNode to be registered", () => {
+      const editorWithoutReviewNode = createTestEditor();
+
+      expect(() => registerReviewText(editorWithoutReviewNode)).toThrow(
+        "registerReviewText requires ReviewTextNode to be registered in the editor.",
+      );
+    });
+
+    it("normalizes ordinary text nodes into review text nodes", async () => {
+      await update(() => {
+        const paragraph = $createParagraphNode();
+        paragraph.append(new TextNode("untracked"));
+        $getRoot().append(paragraph);
+      });
+
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getLastChild() as ParagraphNode;
+        const textNode = paragraph.getFirstChild();
+
+        expect($isReviewTextNode(textNode)).toBe(true);
+        expect((textNode as ReviewTextNode).hasReviewType("original")).toBe(
+          true,
+        );
+        expect(textNode?.getTextContent()).toBe("untracked");
+      });
+    });
+
     it("inserts text at the beginning of original node", async () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;

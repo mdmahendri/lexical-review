@@ -1,6 +1,6 @@
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { TextNode } from "lexical";
-import { ReviewTextNode } from "lexical-review";
+import { $createReviewTextNode, ReviewTextNode } from "lexical-review";
 import "./index.css";
 import ReviewEditor from "./ReviewEditor";
 
@@ -15,7 +15,7 @@ function App() {
       {
         replace: TextNode,
         with: (node: TextNode) => {
-          return new ReviewTextNode(node.getTextContent());
+          return $createReviewTextNode(node.getTextContent(), "original");
         },
         withKlass: ReviewTextNode,
       },

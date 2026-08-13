@@ -10,11 +10,16 @@ import {
   KEY_ENTER_COMMAND,
   COMMAND_PRIORITY_NORMAL,
   LexicalEditor,
+  TextNode,
 } from "lexical";
 import { copyToClipboard } from "@lexical/clipboard";
 import { mergeRegister, objectKlassEquals } from "@lexical/utils";
 import { $markForDelete, $markPasteInsert, $markTypingInsert } from "./ReviewSelection";
-import { $isReviewTextNode, ReviewTextNode } from "./ReviewTextNode";
+import {
+  $createReviewTextNode,
+  $isReviewTextNode,
+  ReviewTextNode,
+} from "./ReviewTextNode";
 
 function $canReviewTextNodesBeMerged(
   node1: ReviewTextNode,
@@ -70,11 +75,36 @@ function $normalizeReviewTextNode(textNode: ReviewTextNode): void {
   }
 }
 
+function $normalizeTextNodeToReviewTextNode(node: TextNode): void {
+  // Review mode is editor-wide. Convert text introduced through a Lexical
+  // API into an original review node before it can be edited normally.
+  if ($isReviewTextNode(node)) {
+    return;
+  }
+
+  const reviewNode = $createReviewTextNode(node.getTextContent(), "original");
+  reviewNode.setFormat(node.getFormat());
+  reviewNode.setDetail(node.getDetail());
+  reviewNode.setMode(node.getMode());
+  reviewNode.setStyle(node.getStyle());
+  node.replace(reviewNode);
+}
+
 export function registerReviewText(
   editor: LexicalEditor,
   granularity: "word" | "character" = "character"
 ): () => void {
+  if (!editor.hasNode(ReviewTextNode)) {
+    throw new Error(
+      "registerReviewText requires ReviewTextNode to be registered in the editor.",
+    );
+  }
+
   const removeListener = mergeRegister(
+    editor.registerNodeTransform(TextNode, (node) => {
+      $normalizeTextNodeToReviewTextNode(node);
+    }),
+
     editor.registerNodeTransform(ReviewTextNode, (node) => {
       $normalizeReviewTextNode(node);
     }),
