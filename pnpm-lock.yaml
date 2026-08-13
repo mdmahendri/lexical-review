@@ -48,10 +48,10 @@ importers:
   packages/demo:
     dependencies:
       '@lexical/react':
-        specifier: ^0.39.0
+        specifier: 0.39.0
         version: 0.39.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(yjs@13.6.20)
       lexical:
-        specifier: ^0.39.0
+        specifier: 0.39.0
         version: 0.39.0
       lexical-review:
         specifier: workspace:2.0.0
@@ -88,14 +88,14 @@ importers:
   packages/lexical-review:
     dependencies:
       '@lexical/clipboard':
-        specifier: ^0.39.0
+        specifier: 0.39.0
         version: 0.39.0
       '@lexical/utils':
-        specifier: ^0.39.0
+        specifier: 0.39.0
         version: 0.39.0
     devDependencies:
       '@lexical/react':
-        specifier: ^0.39.0
+        specifier: 0.39.0
         version: 0.39.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(yjs@13.6.20)
       '@types/react':
         specifier: ^19.2.7
@@ -104,7 +104,7 @@ importers:
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.7)
       lexical:
-        specifier: ^0.39.0
+        specifier: 0.39.0
         version: 0.39.0
       react:
         specifier: ^19.2.3
