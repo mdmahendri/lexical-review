@@ -4,6 +4,8 @@ import {
   $createParagraphNode,
   $getRoot,
   $getSelection,
+  BEFORE_INPUT_COMMAND,
+  CONTROLLED_TEXT_INSERTION_COMMAND,
   LexicalEditor,
   ParagraphNode,
   RangeSelection,
@@ -261,6 +263,153 @@ describe("Lexical Review Mode tests", () => {
           true,
         );
         expect(textNode?.getTextContent()).toBe("untracked");
+      });
+    });
+
+    it("marks ordinary beforeinput text as a review insertion", async () => {
+      await update(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const originalNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
+        const domTextNode = editor.getElementByKey(originalNode.getKey())
+          ?.firstChild;
+        const domSelection = window.getSelection();
+
+        originalNode.select(0, 0);
+        if (domTextNode == null || domSelection == null) {
+          throw new Error("Expected a DOM text node and selection.");
+        }
+
+        const domRange = document.createRange();
+        domRange.setStart(domTextNode, 0);
+        domRange.collapse(true);
+        domSelection.removeAllRanges();
+        domSelection.addRange(domRange);
+
+        const event = new InputEvent("beforeinput", {
+          data: "i",
+          inputType: "insertText",
+        });
+
+        expect(editor.dispatchCommand(BEFORE_INPUT_COMMAND, event)).toBe(true);
+      });
+
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const insertedNode = paragraph.getFirstChild() as ReviewTextNode;
+
+        expect(insertedNode.hasReviewType("insertion")).toBe(true);
+        expect(insertedNode.getTextContent()).toBe("i");
+      });
+    });
+
+    it("marks Unicode text inserted through Lexical's controlled insertion command", async () => {
+      await update(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const originalNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
+
+        originalNode.select(0, 0);
+        expect(
+          editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "é"),
+        ).toBe(true);
+      });
+
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const insertedNode = paragraph.getFirstChild() as ReviewTextNode;
+
+        expect(insertedNode.hasReviewType("insertion")).toBe(true);
+        expect(insertedNode.getTextContent()).toBe("é");
+      });
+    });
+
+    it("marks selected text as deleted before inserting replacement text", async () => {
+      await update(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const originalNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
+
+        originalNode.select(0, 4);
+        expect(
+          editor.dispatchCommand(
+            CONTROLLED_TEXT_INSERTION_COMMAND,
+            "new",
+          ),
+        ).toBe(true);
+      });
+
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const children = paragraph.getChildren() as ReviewTextNode[];
+
+        expect(children).toHaveLength(5);
+        expect(children[0].getTextContent()).toBe("this");
+        expect((children[0] as ReviewTextNode).hasReviewType("deletion")).toBe(
+          true,
+        );
+        expect(children[1].getTextContent()).toBe("new");
+        expect((children[1] as ReviewTextNode).hasReviewType("insertion")).toBe(
+          true,
+        );
+        expect(children[2].getTextContent()).toBe(" is original.");
+        expect((children[2] as ReviewTextNode).hasReviewType("original")).toBe(
+          true,
+        );
+      });
+    });
+
+    it("marks text replaced through an InputEvent as a review replacement", async () => {
+      await update(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const originalNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
+
+        originalNode.select(0, 4);
+        const event = new InputEvent("beforeinput", {
+          data: "new",
+          inputType: "insertReplacementText",
+        });
+
+        expect(
+          editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, event),
+        ).toBe(true);
+      });
+
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const children = paragraph.getChildren() as ReviewTextNode[];
+
+        expect(children[0].getTextContent()).toBe("this");
+        expect((children[0] as ReviewTextNode).hasReviewType("deletion")).toBe(
+          true,
+        );
+        expect(children[1].getTextContent()).toBe("new");
+        expect((children[1] as ReviewTextNode).hasReviewType("insertion")).toBe(
+          true,
+        );
+      });
+    });
+
+    it("inserts replacement text after a backwards selection", async () => {
+      await update(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const originalNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
+
+        originalNode.select(4, 0);
+        expect(
+          editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "new"),
+        ).toBe(true);
+      });
+
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const children = paragraph.getChildren() as ReviewTextNode[];
+
+        expect(children[0].getTextContent()).toBe("this");
+        expect((children[0] as ReviewTextNode).hasReviewType("deletion")).toBe(
+          true,
+        );
+        expect(children[1].getTextContent()).toBe("new");
+        expect((children[1] as ReviewTextNode).hasReviewType("insertion")).toBe(
+          true,
+        );
       });
     });
 

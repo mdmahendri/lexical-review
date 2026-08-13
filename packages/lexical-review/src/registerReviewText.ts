@@ -1,14 +1,15 @@
 import {
   $getSelection,
   $isRangeSelection,
+  BEFORE_INPUT_COMMAND,
+  COMMAND_PRIORITY_LOW,
   COMMAND_PRIORITY_EDITOR,
+  CONTROLLED_TEXT_INSERTION_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
-  KEY_DOWN_COMMAND,
   COPY_COMMAND,
   PASTE_COMMAND,
   KEY_ENTER_COMMAND,
-  COMMAND_PRIORITY_NORMAL,
   LexicalEditor,
   TextNode,
 } from "lexical";
@@ -110,22 +111,51 @@ export function registerReviewText(
     }),
 
     editor.registerCommand(
-      KEY_DOWN_COMMAND,
+      BEFORE_INPUT_COMMAND,
       (event) => {
-        const content = event.key;
-        const acceptableKeys = /^[a-zA-Z0-9\s\n.,;:'"()\-!&*?/]$/;
-        if (!acceptableKeys.test(content) || event.ctrlKey) {
+        if (
+          (event.inputType !== "insertText" &&
+            event.inputType !== "insertTranspose") ||
+          event.data == null ||
+          event.data === "" ||
+          event.data === "\n" ||
+          event.data === "\r\n"
+        ) {
           return false;
         }
-        event.preventDefault();
+
         const selection = $getSelection();
-        if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+        if (!$isRangeSelection(selection)) {
           return false;
         }
-        $markTypingInsert(selection, content);
+
+        event.preventDefault();
+        return editor.dispatchCommand(
+          CONTROLLED_TEXT_INSERTION_COMMAND,
+          event.data,
+        );
+      },
+      COMMAND_PRIORITY_LOW,
+    ),
+
+    editor.registerCommand(
+      CONTROLLED_TEXT_INSERTION_COMMAND,
+      (eventOrText) => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) {
+          return false;
+        }
+
+        const text =
+          typeof eventOrText === "string" ? eventOrText : eventOrText.data;
+        if (text == null) {
+          return false;
+        }
+
+        $markTypingInsert(selection, text);
         return true;
       },
-      COMMAND_PRIORITY_NORMAL
+      COMMAND_PRIORITY_LOW,
     ),
 
     editor.registerCommand(

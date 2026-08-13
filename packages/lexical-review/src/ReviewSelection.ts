@@ -220,6 +220,23 @@ export function $markTypingInsert(
   selection: RangeSelection,
   text: string,
 ): void {
+  if (!selection.isCollapsed()) {
+    $markForDelete(selection, false, "character");
+
+    const replacementSelection = $getSelection();
+    if ($isRangeSelection(replacementSelection)) {
+      const replacementNode = replacementSelection.anchor.getNode();
+      if (
+        $isReviewTextNode(replacementNode) &&
+        replacementNode.hasReviewType("deletion") &&
+        replacementSelection.anchor.offset === 0
+      ) {
+        replacementNode.selectEnd();
+      }
+      selection = replacementSelection;
+    }
+  }
+
   const anchor = selection.anchor;
   const anchorNode = anchor.getNode();
   if (
