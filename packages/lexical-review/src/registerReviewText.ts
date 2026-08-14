@@ -6,6 +6,7 @@ import {
   COMMAND_PRIORITY_EDITOR,
   CONTROLLED_TEXT_INSERTION_COMMAND,
   DELETE_CHARACTER_COMMAND,
+  DELETE_WORD_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
   COPY_COMMAND,
@@ -172,6 +173,20 @@ export function registerReviewText(
         }
 
         $markForDelete(selection, isBackward, granularity);
+        return true;
+      },
+      COMMAND_PRIORITY_LOW,
+    ),
+
+    editor.registerCommand(
+      DELETE_WORD_COMMAND,
+      (isBackward) => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) {
+          return false;
+        }
+
+        $markForDelete(selection, isBackward, "word");
         return true;
       },
       COMMAND_PRIORITY_LOW,
