@@ -18,7 +18,8 @@
     "preview:demo": "pnpm nx preview demo",
     "lint": "eslint .",
     "prettier": "pnpm exec prettier . --write",
-    "test": "vitest --disable-console-intercept"
+    "test": "vitest --disable-console-intercept",
+    "test:e2e": "playwright test"
   },
   "keywords": [
     "lexical",
@@ -28,6 +29,7 @@
   ],
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.62.1",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.37.5",

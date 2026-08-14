@@ -36,3 +36,7 @@ yarn-error.log*
 
 .nx/cache
 .nx/workspace-data
+
+# Playwright artifacts
+playwright-report/
+test-results/

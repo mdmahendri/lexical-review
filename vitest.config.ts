@@ -12,6 +12,7 @@ export default defineConfig({
       ".git",
       ".cache",
       "**/dist/**",
+      "**/e2e/**",
     ],
   },
 });
