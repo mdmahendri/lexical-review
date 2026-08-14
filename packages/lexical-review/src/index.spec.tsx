@@ -16,7 +16,11 @@ import {
   TextNode,
 } from "lexical";
 import { createTestEditor } from "./test-utils";
-import { $createReviewTextNode, $isReviewTextNode, ReviewTextNode } from "./ReviewTextNode";
+import {
+  $createReviewTextNode,
+  $isReviewTextNode,
+  ReviewTextNode,
+} from "./ReviewTextNode";
 import { registerReviewText } from "./client";
 import { $markTypingInsert, $markForDelete } from "./ReviewSelection";
 
@@ -146,7 +150,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
-        
+
         expect(origNode.hasReviewType("original")).toBe(true);
         origNode.setReviewType("deletion");
         expect(origNode.hasReviewType("deletion")).toBe(true);
@@ -157,7 +161,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const delNode = paragraph.getChildAtIndex(2) as ReviewTextNode;
-        
+
         expect(delNode.hasReviewType("deletion")).toBe(true);
         delNode.setReviewType("original");
         expect(delNode.hasReviewType("original")).toBe(true);
@@ -177,12 +181,18 @@ describe("Lexical Review Mode tests", () => {
     it("exports and imports JSON correctly", async () => {
       const stringifiedEditorState = editor.getEditorState().toJSON();
       const parsedEditorState = editor.parseEditorState(stringifiedEditorState);
-      
+
       parsedEditorState.read(() => {
         const parsedParagraph = $getRoot().getFirstChild() as ParagraphNode;
-        const parsedOrigText = parsedParagraph.getChildAtIndex(0) as ReviewTextNode;
-        const parsedInsText = parsedParagraph.getChildAtIndex(1) as ReviewTextNode;
-        const parsedDelText = parsedParagraph.getChildAtIndex(2) as ReviewTextNode;
+        const parsedOrigText = parsedParagraph.getChildAtIndex(
+          0,
+        ) as ReviewTextNode;
+        const parsedInsText = parsedParagraph.getChildAtIndex(
+          1,
+        ) as ReviewTextNode;
+        const parsedDelText = parsedParagraph.getChildAtIndex(
+          2,
+        ) as ReviewTextNode;
 
         expect(parsedParagraph.getTextContent()).toBe(
           "this is original.this is insertion.this is deletion.",
@@ -197,7 +207,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const node = $createReviewTextNode("test content", "insertion");
         const json = node.exportJSON();
-        
+
         expect(json.text).toBe("test content");
         expect(json.type).toBe("review");
       });
@@ -216,7 +226,9 @@ describe("Lexical Review Mode tests", () => {
       });
 
       const spans = container.querySelectorAll("span");
-      const testSpan = Array.from(spans).find(span => span.textContent === "test");
+      const testSpan = Array.from(spans).find(
+        (span) => span.textContent === "test",
+      );
       expect(testSpan).toBeTruthy();
       expect(testSpan?.textContent).toBe("test");
     });
@@ -236,7 +248,7 @@ describe("Lexical Review Mode tests", () => {
     it("applies theme classes to ins/del tags", async () => {
       const insTag = container.querySelector("ins");
       const delTag = container.querySelector("del");
-      
+
       expect(insTag?.classList.contains("review-insertion")).toBe(true);
       expect(delTag?.classList.contains("review-deletion")).toBe(true);
     });
@@ -274,8 +286,9 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const originalNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
-        const domTextNode = editor.getElementByKey(originalNode.getKey())
-          ?.firstChild;
+        const domTextNode = editor.getElementByKey(
+          originalNode.getKey(),
+        )?.firstChild;
         const domSelection = window.getSelection();
 
         originalNode.select(0, 0);
@@ -333,10 +346,7 @@ describe("Lexical Review Mode tests", () => {
 
         originalNode.select(0, 4);
         expect(
-          editor.dispatchCommand(
-            CONTROLLED_TEXT_INSERTION_COMMAND,
-            "new",
-          ),
+          editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "new"),
         ).toBe(true);
       });
 
@@ -421,7 +431,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
-        
+
         origNode.select(0, 0);
         const selection = $getSelection() as RangeSelection;
         $markTypingInsert(selection, "NEW ");
@@ -430,7 +440,7 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const children = paragraph.getChildren();
-        
+
         expect(children.length).toBeGreaterThan(1);
         const firstChild = children[0] as ReviewTextNode;
         expect($isReviewTextNode(firstChild)).toBe(true);
@@ -443,7 +453,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
-        
+
         origNode.select(5, 5); // After "this "
         const selection = $getSelection() as RangeSelection;
         $markTypingInsert(selection, "INSERTED ");
@@ -452,14 +462,15 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const children = paragraph.getChildren();
-        
+
         expect(children.length).toBeGreaterThan(3);
         // Should split: "this " + "INSERTED " + "is original."
-        const insertedNode = children.find(child => 
-          $isReviewTextNode(child) && 
-          child.getTextContent().includes("INSERTED")
+        const insertedNode = children.find(
+          (child) =>
+            $isReviewTextNode(child) &&
+            child.getTextContent().includes("INSERTED"),
         ) as ReviewTextNode;
-        
+
         expect(insertedNode).toBeTruthy();
         expect(insertedNode.hasReviewType("insertion")).toBe(true);
       });
@@ -470,7 +481,7 @@ describe("Lexical Review Mode tests", () => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const insNode = paragraph.getChildAtIndex(1) as ReviewTextNode;
         const textLength = insNode.getTextContent().length;
-        
+
         insNode.select(textLength, textLength);
         const selection = $getSelection() as RangeSelection;
         $markTypingInsert(selection, " MORE");
@@ -479,7 +490,7 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const insNode = paragraph.getChildAtIndex(1) as ReviewTextNode;
-        
+
         expect(insNode.getTextContent()).toBe("this is insertion. MORE");
       });
     });
@@ -492,19 +503,21 @@ describe("Lexical Review Mode tests", () => {
         const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
 
         origNode.select(0, 4);
-        expect(
-          editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true),
-        ).toBe(true);
+        expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(
+          true,
+        );
       });
 
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
-        const deletedNode = paragraph.getChildren().find(
-          (child) =>
-            $isReviewTextNode(child) &&
-            child.hasReviewType("deletion") &&
-            child.getTextContent() === "this",
-        );
+        const deletedNode = paragraph
+          .getChildren()
+          .find(
+            (child) =>
+              $isReviewTextNode(child) &&
+              child.hasReviewType("deletion") &&
+              child.getTextContent() === "this",
+          );
 
         expect(deletedNode).toBeTruthy();
       });
@@ -592,7 +605,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
-        
+
         origNode.select(0, 4); // Select "this"
         const selection = $getSelection() as RangeSelection;
         $markForDelete(selection, false, "character");
@@ -600,10 +613,13 @@ describe("Lexical Review Mode tests", () => {
 
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
-        const hasDelNode = paragraph.getChildren().some(child =>
-          $isReviewTextNode(child) && child.hasReviewType("deletion")
-        );
-        
+        const hasDelNode = paragraph
+          .getChildren()
+          .some(
+            (child) =>
+              $isReviewTextNode(child) && child.hasReviewType("deletion"),
+          );
+
         expect(hasDelNode).toBe(true);
       });
     });
@@ -612,7 +628,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const insNode = paragraph.getChildAtIndex(1) as ReviewTextNode;
-        
+
         const text = insNode.getTextContent();
         insNode.select(0, text.length);
         const selection = $getSelection() as RangeSelection;
@@ -622,14 +638,15 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const children = paragraph.getChildren();
-        
+
         // Insertion node should be removed or empty
-        const hasInsertionWithOriginalText = children.some(child =>
-          $isReviewTextNode(child) && 
-          child.hasReviewType("insertion") &&
-          child.getTextContent() === "this is insertion."
+        const hasInsertionWithOriginalText = children.some(
+          (child) =>
+            $isReviewTextNode(child) &&
+            child.hasReviewType("insertion") &&
+            child.getTextContent() === "this is insertion.",
         );
-        
+
         expect(hasInsertionWithOriginalText).toBe(false);
       });
     });
@@ -638,7 +655,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const delNode = paragraph.getChildAtIndex(2) as ReviewTextNode;
-        
+
         const text = delNode.getTextContent();
         delNode.select(0, text.length);
         const selection = $getSelection() as RangeSelection;
@@ -648,7 +665,7 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const lastNode = paragraph.getChildAtIndex(2) as ReviewTextNode;
-        
+
         expect(lastNode.hasReviewType("original")).toBe(true);
       });
     });
@@ -659,7 +676,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
-        
+
         origNode.select(8, 8); // After "this is "
         const selection = $getSelection() as RangeSelection;
         $markTypingInsert(selection, "NEW");
@@ -668,7 +685,7 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const children = paragraph.getChildren();
-        
+
         // Should have more children after split
         expect(children.length).toBeGreaterThan(3);
       });
@@ -679,7 +696,7 @@ describe("Lexical Review Mode tests", () => {
         const node = $createReviewTextNode("Hello World", "insertion");
         const paragraph = $createParagraphNode();
         paragraph.append(node);
-        
+
         node.deleteInsertionText(6, 5); // Remove "World"
         expect(node.getTextContent()).toBe("Hello ");
       });
@@ -691,9 +708,9 @@ describe("Lexical Review Mode tests", () => {
         const paragraph = $createParagraphNode();
         paragraph.append(node);
         $getRoot().append(paragraph);
-        
+
         const resultNodes = node.deleteOriginalText(6, 5); // Remove "World"
-        
+
         expect(resultNodes.length).toBe(3);
         expect(resultNodes[0]?.getTextContent()).toBe("Hello ");
         expect(resultNodes[1]?.getTextContent()).toBe("World");
@@ -712,7 +729,7 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const selection = $getSelection() as RangeSelection;
         const node = selection.getNodes()[0] as ReviewTextNode;
-        
+
         expect($isReviewTextNode(node)).toBe(true);
         expect(node.hasReviewType("deletion")).toBe(true);
       });
@@ -726,7 +743,7 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const selection = $getSelection() as RangeSelection;
         const node = selection.getNodes()[0] as ReviewTextNode;
-        
+
         expect($isReviewTextNode(node)).toBe(true);
         expect(node.hasReviewType("original")).toBe(true);
       });
@@ -739,7 +756,7 @@ describe("Lexical Review Mode tests", () => {
         const node = $createReviewTextNode("", "original");
         const paragraph = $createParagraphNode();
         paragraph.append(node);
-        
+
         expect(node.getTextContent()).toBe("");
         expect($isReviewTextNode(node)).toBe(true);
       });
@@ -749,7 +766,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const specialText = "Test\n\tSpecial™️ 🎉 chars";
         const node = $createReviewTextNode(specialText, "original");
-        
+
         expect(node.getTextContent()).toBe(specialText);
       });
     });
@@ -758,7 +775,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const delNode = paragraph.getChildAtIndex(2) as ReviewTextNode;
-        
+
         delNode.select(5, 5); // Middle of deletion
         const selection = $getSelection() as RangeSelection;
         $markTypingInsert(selection, "TEST");
@@ -767,7 +784,7 @@ describe("Lexical Review Mode tests", () => {
       editor.getEditorState().read(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
         const delNode = paragraph.getChildAtIndex(2) as ReviewTextNode;
-        
+
         // Should not have inserted into deletion node
         expect(delNode.getTextContent()).not.toContain("TEST");
       });
@@ -779,7 +796,7 @@ describe("Lexical Review Mode tests", () => {
       await update(() => {
         const original = $createReviewTextNode("test", "insertion");
         const cloned = ReviewTextNode.clone(original);
-        
+
         expect(cloned.getTextContent()).toBe("test");
         expect(cloned.hasReviewType("insertion")).toBe(true);
         expect(cloned.getKey()).not.toBe(original.getKey());

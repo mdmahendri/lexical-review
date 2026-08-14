@@ -122,7 +122,7 @@ const dataDummy = `
 `;
 
 export default function ReviewEditor() {
-  const  [editor] = useLexicalComposerContext();
+  const [editor] = useLexicalComposerContext();
   const stateJson = JSON.parse(dataDummy);
   editor.setEditorState(editor.parseEditorState(stateJson));
 

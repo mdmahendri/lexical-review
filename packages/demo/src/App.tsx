@@ -6,7 +6,7 @@ import ReviewEditor from "./ReviewEditor";
 
 function App() {
   const initialConfig = {
-    "namespace": "demo",
+    namespace: "demo",
     onError(error: Error) {
       throw error;
     },
@@ -22,7 +22,7 @@ function App() {
     ],
     theme: {
       ins: "bg-green-300 no-underline",
-      del: "bg-red-300 no-underline"
+      del: "bg-red-300 no-underline",
     },
   };
 

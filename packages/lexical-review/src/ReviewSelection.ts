@@ -151,7 +151,7 @@ export function $markForDelete(
   granularity: "word" | "character",
 ): void {
   if (selection.isCollapsed()) {
-   selection.modify("extend", isBackward, granularity);
+    selection.modify("extend", isBackward, granularity);
   }
 
   suggestDeletion(selection);

@@ -16,7 +16,11 @@ import {
 } from "lexical";
 import { copyToClipboard } from "@lexical/clipboard";
 import { mergeRegister, objectKlassEquals } from "@lexical/utils";
-import { $markForDelete, $markPasteInsert, $markTypingInsert } from "./ReviewSelection";
+import {
+  $markForDelete,
+  $markPasteInsert,
+  $markTypingInsert,
+} from "./ReviewSelection";
 import {
   $createReviewTextNode,
   $isReviewTextNode,
@@ -25,14 +29,14 @@ import {
 
 function $canReviewTextNodesBeMerged(
   node1: ReviewTextNode,
-  node2: ReviewTextNode
+  node2: ReviewTextNode,
 ): boolean {
   return node1.__review == node2.__review;
 }
 
 function $mergeReviewTextNodes(
   node1: ReviewTextNode,
-  node2: ReviewTextNode
+  node2: ReviewTextNode,
 ): ReviewTextNode {
   const writableNode1 = node1.mergeWithSibling(node2);
   return writableNode1 as ReviewTextNode;
@@ -94,7 +98,7 @@ function $normalizeTextNodeToReviewTextNode(node: TextNode): void {
 
 export function registerReviewText(
   editor: LexicalEditor,
-  granularity: "word" | "character" = "character"
+  granularity: "word" | "character" = "character",
 ): () => void {
   if (!editor.hasNode(ReviewTextNode)) {
     throw new Error(
@@ -184,7 +188,7 @@ export function registerReviewText(
         event.preventDefault();
         return editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true);
       },
-      COMMAND_PRIORITY_EDITOR
+      COMMAND_PRIORITY_EDITOR,
     ),
 
     editor.registerCommand(
@@ -198,7 +202,7 @@ export function registerReviewText(
         event.preventDefault();
         return editor.dispatchCommand(DELETE_CHARACTER_COMMAND, false);
       },
-      COMMAND_PRIORITY_EDITOR
+      COMMAND_PRIORITY_EDITOR,
     ),
 
     editor.registerCommand(
@@ -211,7 +215,7 @@ export function registerReviewText(
         selection.insertParagraph();
         return true;
       },
-      COMMAND_PRIORITY_EDITOR
+      COMMAND_PRIORITY_EDITOR,
     ),
 
     editor.registerCommand(
@@ -221,11 +225,11 @@ export function registerReviewText(
           editor,
           objectKlassEquals(event, ClipboardEvent)
             ? (event as ClipboardEvent)
-            : null
+            : null,
         );
         return true;
       },
-      COMMAND_PRIORITY_EDITOR
+      COMMAND_PRIORITY_EDITOR,
     ),
 
     editor.registerCommand(
@@ -246,8 +250,8 @@ export function registerReviewText(
 
         return false;
       },
-      COMMAND_PRIORITY_EDITOR
-    )
+      COMMAND_PRIORITY_EDITOR,
+    ),
   );
 
   return removeListener;
