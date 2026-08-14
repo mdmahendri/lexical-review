@@ -5,6 +5,7 @@ import {
   COMMAND_PRIORITY_LOW,
   COMMAND_PRIORITY_EDITOR,
   CONTROLLED_TEXT_INSERTION_COMMAND,
+  DELETE_CHARACTER_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
   COPY_COMMAND,
@@ -159,17 +160,29 @@ export function registerReviewText(
     ),
 
     editor.registerCommand(
-      KEY_BACKSPACE_COMMAND,
-      (event) => {
-        event.preventDefault();
-
+      DELETE_CHARACTER_COMMAND,
+      (isBackward) => {
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) {
           return false;
         }
-        $markForDelete(selection, true, granularity);
 
+        $markForDelete(selection, isBackward, granularity);
         return true;
+      },
+      COMMAND_PRIORITY_LOW,
+    ),
+
+    editor.registerCommand(
+      KEY_BACKSPACE_COMMAND,
+      (event) => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) {
+          return false;
+        }
+
+        event.preventDefault();
+        return editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true);
       },
       COMMAND_PRIORITY_EDITOR
     ),
@@ -177,15 +190,13 @@ export function registerReviewText(
     editor.registerCommand(
       KEY_DELETE_COMMAND,
       (event) => {
-        event.preventDefault();
-
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) {
           return false;
         }
-        $markForDelete(selection, false, granularity);
 
-        return true;
+        event.preventDefault();
+        return editor.dispatchCommand(DELETE_CHARACTER_COMMAND, false);
       },
       COMMAND_PRIORITY_EDITOR
     ),

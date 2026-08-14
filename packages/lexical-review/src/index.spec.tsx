@@ -5,7 +5,11 @@ import {
   $getRoot,
   $getSelection,
   BEFORE_INPUT_COMMAND,
+  COMMAND_PRIORITY_CRITICAL,
   CONTROLLED_TEXT_INSERTION_COMMAND,
+  DELETE_CHARACTER_COMMAND,
+  KEY_BACKSPACE_COMMAND,
+  KEY_DELETE_COMMAND,
   LexicalEditor,
   ParagraphNode,
   RangeSelection,
@@ -482,6 +486,108 @@ describe("Lexical Review Mode tests", () => {
   });
 
   describe("Text Deletion Operations", () => {
+    it("handles DELETE_CHARACTER_COMMAND as a review deletion", async () => {
+      await update(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
+
+        origNode.select(0, 4);
+        expect(
+          editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true),
+        ).toBe(true);
+      });
+
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const deletedNode = paragraph.getChildren().find(
+          (child) =>
+            $isReviewTextNode(child) &&
+            child.hasReviewType("deletion") &&
+            child.getTextContent() === "this",
+        );
+
+        expect(deletedNode).toBeTruthy();
+      });
+    });
+
+    it("routes KEY_BACKSPACE_COMMAND through DELETE_CHARACTER_COMMAND", async () => {
+      let receivedDirection: boolean | null = null;
+      const removeCommandListener = editor.registerCommand(
+        DELETE_CHARACTER_COMMAND,
+        (isBackward) => {
+          receivedDirection = isBackward;
+          return true;
+        },
+        COMMAND_PRIORITY_CRITICAL,
+      );
+
+      try {
+        await update(() => {
+          const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+          const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
+
+          origNode.select(0, 4);
+          editor.dispatchCommand(
+            KEY_BACKSPACE_COMMAND,
+            new KeyboardEvent("keydown", {
+              key: "Backspace",
+              cancelable: true,
+            }),
+          );
+        });
+      } finally {
+        removeCommandListener();
+      }
+
+      expect(receivedDirection).toBe(true);
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const firstNode = paragraph.getFirstChild() as ReviewTextNode;
+
+        expect(firstNode.getTextContent()).toBe("this is original.");
+        expect(firstNode.hasReviewType("original")).toBe(true);
+      });
+    });
+
+    it("routes KEY_DELETE_COMMAND through DELETE_CHARACTER_COMMAND", async () => {
+      let receivedDirection: boolean | null = null;
+      const removeCommandListener = editor.registerCommand(
+        DELETE_CHARACTER_COMMAND,
+        (isBackward) => {
+          receivedDirection = isBackward;
+          return true;
+        },
+        COMMAND_PRIORITY_CRITICAL,
+      );
+
+      try {
+        await update(() => {
+          const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+          const origNode = paragraph.getChildAtIndex(0) as ReviewTextNode;
+
+          origNode.select(0, 4);
+          editor.dispatchCommand(
+            KEY_DELETE_COMMAND,
+            new KeyboardEvent("keydown", {
+              key: "Delete",
+              cancelable: true,
+            }),
+          );
+        });
+      } finally {
+        removeCommandListener();
+      }
+
+      expect(receivedDirection).toBe(false);
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const firstNode = paragraph.getFirstChild() as ReviewTextNode;
+
+        expect(firstNode.getTextContent()).toBe("this is original.");
+        expect(firstNode.hasReviewType("original")).toBe(true);
+      });
+    });
+
     it("marks original text as deletion", async () => {
       await update(() => {
         const paragraph = $getRoot().getFirstChild() as ParagraphNode;
