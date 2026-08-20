@@ -1,9 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = "http://127.0.0.1:5173/lexical-review/";
+const baseURL = "http://127.0.0.1:5174/";
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./packages/demo/e2e",
   timeout: 30_000,
   expect: {
     timeout: 5_000,
@@ -28,9 +28,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm --filter demo dev --host 127.0.0.1",
+    cwd: "packages/demo",
+    command:
+      "pnpm exec vite --config e2e/vite.config.js --host 127.0.0.1 --port 5174 --strictPort",
     url: baseURL,
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
 });

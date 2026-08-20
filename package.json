@@ -19,7 +19,8 @@
     "lint": "eslint .",
     "prettier": "pnpm exec prettier . --write",
     "test": "vitest --disable-console-intercept",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "typecheck:e2e": "tsc --noEmit -p packages/demo/e2e/tsconfig.json"
   },
   "keywords": [
     "lexical",

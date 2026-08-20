@@ -1,0 +1,13 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../../..",
+    "jsx": "react-jsx",
+    "paths": {
+      "lexical-review": ["packages/lexical-review/src/index.ts"],
+      "lexical-review/client": ["packages/lexical-review/src/client.ts"]
+    },
+    "types": ["react", "react-dom"]
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}
