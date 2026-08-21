@@ -7,6 +7,7 @@ import {
   CONTROLLED_TEXT_INSERTION_COMMAND,
   DELETE_CHARACTER_COMMAND,
   DELETE_WORD_COMMAND,
+  INSERT_PARAGRAPH_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
   COPY_COMMAND,
@@ -95,6 +96,16 @@ function $normalizeTextNodeToReviewTextNode(node: TextNode): void {
   reviewNode.setMode(node.getMode());
   reviewNode.setStyle(node.getStyle());
   node.replace(reviewNode);
+}
+
+function $insertParagraph(): boolean {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) {
+    return false;
+  }
+
+  selection.insertParagraph();
+  return true;
 }
 
 export function registerReviewText(
@@ -221,15 +232,14 @@ export function registerReviewText(
     ),
 
     editor.registerCommand(
+      INSERT_PARAGRAPH_COMMAND,
+      $insertParagraph,
+      COMMAND_PRIORITY_EDITOR,
+    ),
+
+    editor.registerCommand(
       KEY_ENTER_COMMAND,
-      () => {
-        const selection = $getSelection();
-        if (!$isRangeSelection(selection)) {
-          return false;
-        }
-        selection.insertParagraph();
-        return true;
-      },
+      $insertParagraph,
       COMMAND_PRIORITY_EDITOR,
     ),
 
