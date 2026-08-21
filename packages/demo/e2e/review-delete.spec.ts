@@ -201,7 +201,7 @@ test("Delete removes one inserted character at an original-to-insertion boundary
   });
 });
 
-test("consecutive Delete presses mark consecutive original characters", async ({
+test("two Delete presses mark consecutive original characters as deleted", async ({
   page,
 }, testInfo) => {
   await openReviewEditorFixture(page);
@@ -226,10 +226,6 @@ test("consecutive Delete presses mark consecutive original characters", async ({
       segmentIndex: 0,
     });
 
-  test.fail(
-    testInfo.project.name === "firefox",
-    "Known Firefox selection-boundary issue: see #1.",
-  );
   await page.keyboard.press("Delete");
 
   const snapshots: Array<{

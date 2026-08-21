@@ -24,6 +24,12 @@ function nodeDeleteByReviewType(
   isBackward: boolean,
   moveSelection: boolean,
 ) {
+  // Firefox can report a deleted node at the selection boundary without any
+  // selected text. Do not restore or otherwise mutate that zero-length node.
+  if (del <= 0) {
+    return;
+  }
+
   if (node.hasReviewType("insertion")) {
     // delete only part of text in <ins> tag
     node.deleteInsertionText(offset, del);
@@ -138,7 +144,15 @@ function suggestDeletion(selection: RangeSelection) {
       }
 
       // handle for last node
-      nodeDeleteByReviewType(lastNode, 0, lastPoint.offset, isBackward, false);
+      // Move forward deletions to the end of the newly marked text so a
+      // consecutive Delete starts from the expected caret position.
+      nodeDeleteByReviewType(
+        lastNode,
+        0,
+        lastPoint.offset,
+        isBackward,
+        !isBackward,
+      );
     }
   }
 }
