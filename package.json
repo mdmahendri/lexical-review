@@ -37,10 +37,10 @@
     "globals": "^16.5.0",
     "jsdom": "^27.3.0",
     "nx": "^22.2.5",
-    "prettier": "^3.7.4",
+    "prettier": "^3.9.6",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
-    "vitest": "^4.0.15"
+    "vitest": "^4.1.11"
   }
 }
