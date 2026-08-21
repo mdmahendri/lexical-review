@@ -1,8 +1,6 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "baseUrl": ".",
-
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "noEmit": true
