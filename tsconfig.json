@@ -21,10 +21,9 @@
     "module": "Preserve",
     "outDir": "dist",
 
-    "baseUrl": ".",
     "types": ["vitest/globals"],
     "paths": {
-      "*": ["packages/*/src/index.ts"]
+      "*": ["./packages/*/src/index.ts"]
     }
   },
   "references": [{ "path": "packages/lexical-review/tsconfig.build.json" }],
