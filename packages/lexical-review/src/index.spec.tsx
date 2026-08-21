@@ -9,6 +9,7 @@ import {
   CONTROLLED_TEXT_INSERTION_COMMAND,
   DELETE_CHARACTER_COMMAND,
   DELETE_WORD_COMMAND,
+  INSERT_PARAGRAPH_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
   LexicalEditor,
@@ -493,6 +494,30 @@ describe("Lexical Review Mode tests", () => {
         const insNode = paragraph.getChildAtIndex(1) as ReviewTextNode;
 
         expect(insNode.getTextContent()).toBe("this is insertion. MORE");
+      });
+    });
+  });
+
+  describe("Paragraph Operations", () => {
+    it("handles INSERT_PARAGRAPH_COMMAND like Enter", async () => {
+      await update(() => {
+        const paragraph = $getRoot().getFirstChild() as ParagraphNode;
+        const originalNode = paragraph.getFirstChild() as ReviewTextNode;
+
+        originalNode.select(5, 5);
+        expect(
+          editor.dispatchCommand(INSERT_PARAGRAPH_COMMAND, undefined),
+        ).toBe(true);
+      });
+
+      editor.getEditorState().read(() => {
+        const paragraphs = $getRoot().getChildren() as ParagraphNode[];
+
+        expect(paragraphs).toHaveLength(2);
+        expect(paragraphs[0]?.getTextContent()).toBe("this ");
+        expect(paragraphs[1]?.getTextContent()).toBe(
+          "is original.this is insertion.this is deletion.",
+        );
       });
     });
   });
