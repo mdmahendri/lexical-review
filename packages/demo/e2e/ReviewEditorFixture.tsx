@@ -16,6 +16,7 @@ import type {
   ReviewEditorFixtureApi,
   ReviewEditorScenario,
   ReviewSegment,
+  ReviewTextRange,
 } from "./ReviewEditorFixture.types";
 
 const fixtureState = `
@@ -251,50 +252,65 @@ function ReviewEditor() {
       });
     };
 
-    const placeCaret = (scenario: ReviewEditorScenario): void => {
-      const { key, offset } = editor.getEditorState().read(() => {
-        const node = getScenarioNode(scenario);
+    const getScenarioTextDOM = (scenario: ReviewEditorScenario): Text => {
+      const nodeKey = editor
+        .getEditorState()
+        .read(() => getScenarioNode(scenario).getKey());
+      const textDOM = getReviewTextDOM(editor.getElementByKey(nodeKey));
 
-        return {
-          key: node.getKey(),
-          offset:
-            scenario === "insertion-boundary" || scenario === "composition"
-              ? node.getTextContentSize()
-              : 0,
-        };
-      });
-      const element = editor.getElementByKey(key);
-      const textNode = getReviewTextDOM(element);
-      const selection = element?.ownerDocument.getSelection();
-
-      if (element == null || !(textNode instanceof Text) || selection == null) {
-        throw new Error("Could not place the review fixture caret.");
+      if (textDOM == null) {
+        throw new Error("Could not find the review fixture text node.");
       }
 
-      const range = element.ownerDocument.createRange();
-      range.setStart(textNode, offset);
-      range.collapse(true);
+      return textDOM;
+    };
+
+    const setSelection = (
+      scenario: ReviewEditorScenario,
+      start: number,
+      end: number,
+    ): void => {
+      const textDOM = getScenarioTextDOM(scenario);
+      const selection = textDOM.ownerDocument.getSelection();
+
+      if (selection == null) {
+        throw new Error("Could not select the review fixture text.");
+      }
+
+      const range = textDOM.ownerDocument.createRange();
+      range.setStart(textDOM, start);
+      range.setEnd(textDOM, end);
       selection.removeAllRanges();
       selection.addRange(range);
       editor.getRootElement()?.focus();
     };
 
-    const compose = (scenario: ReviewEditorScenario, text: string): void => {
-      placeCaret(scenario);
+    const placeCaret = (scenario: ReviewEditorScenario): void => {
+      const offset = editor.getEditorState().read(() => {
+        const node = getScenarioNode(scenario);
 
-      const nodeKey = editor
-        .getEditorState()
-        .read(() => getScenarioNode(scenario).getKey());
-      const marker = editor.getElementByKey(nodeKey);
-      const textDOM = getReviewTextDOM(marker);
+        return scenario === "insertion-boundary" || scenario === "composition"
+          ? node.getTextContentSize()
+          : 0;
+      });
+      setSelection(scenario, offset, offset);
+    };
+
+    const compose = (
+      scenario: ReviewEditorScenario,
+      text: string,
+      selectedRange?: ReviewTextRange,
+    ): void => {
+      if (selectedRange == null) {
+        placeCaret(scenario);
+      } else {
+        setSelection(scenario, selectedRange.start, selectedRange.end);
+      }
+
       const rootElement = editor.getRootElement();
-      const selection = window.getSelection();
+      const selection = rootElement?.ownerDocument.getSelection();
 
-      if (
-        rootElement == null ||
-        !(textDOM instanceof Text) ||
-        selection == null
-      ) {
+      if (rootElement == null || selection == null) {
         throw new Error("Could not prepare the review composition.");
       }
 
@@ -304,6 +320,14 @@ function ReviewEditor() {
           data: "",
         }),
       );
+
+      // Lexical can replace the selected DOM text node while preparing a
+      // non-collapsed composition, so read the composition target afterwards.
+      const textDOM =
+        selection.anchorNode instanceof Text ? selection.anchorNode : null;
+      if (textDOM == null) {
+        throw new Error("Could not find the composition text node.");
+      }
 
       const currentText = textDOM.nodeValue ?? "";
       const suffix = currentText.endsWith("\u200b")

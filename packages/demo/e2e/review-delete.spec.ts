@@ -4,6 +4,7 @@ import type {
   ReviewMarkup,
   ReviewEditorScenario,
   ReviewSegment,
+  ReviewTextRange,
 } from "./ReviewEditorFixture.types";
 
 type DeleteTraceEntry = {
@@ -50,18 +51,19 @@ async function compose(
   page: Page,
   scenario: ReviewEditorScenario,
   text: string,
+  selection?: ReviewTextRange,
 ): Promise<void> {
   await page.evaluate(
-    ({ scenario, text }) => {
+    ({ scenario, text, selection }) => {
       const fixture = window.__lexicalReviewEditorFixture;
 
       if (fixture == null) {
         throw new Error("The review editor fixture is not ready.");
       }
 
-      fixture.compose(scenario, text);
+      fixture.compose(scenario, text, selection);
     },
-    { scenario, text },
+    { scenario, text, selection },
   );
 }
 
@@ -349,5 +351,37 @@ test("composition commits formatted review text once and keeps the caret", async
         text: "composedあ",
       },
       segments: [{ review: "insertion", text: "composedあ" }],
+    });
+});
+
+test("composition over selected original text creates an insertion review", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  await expect
+    .poll(() => getSegments(page, "composition-selection"))
+    .toEqual([{ review: "original", text: "abcdef" }]);
+
+  await compose(page, "composition-selection", "あ", {
+    start: 0,
+    end: "abcdef".length,
+  });
+
+  await expect
+    .poll(async () => ({
+      caret: await getCaret(page, "composition-selection"),
+      segments: await getSegments(page, "composition-selection"),
+    }))
+    .toEqual({
+      caret: {
+        anchorNodeType: "text",
+        offset: "あ".length,
+        review: "insertion",
+        segmentIndex: 1,
+      },
+      segments: [
+        { review: "deletion", text: "abcdef" },
+        { review: "insertion", text: "あ" },
+      ],
     });
 });

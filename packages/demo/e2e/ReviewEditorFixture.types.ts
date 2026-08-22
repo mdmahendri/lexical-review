@@ -1,11 +1,19 @@
 import type { TextReviewType } from "lexical-review";
 
 export type ReviewEditorScenario =
-  "insertion-boundary" | "consecutive-delete-start" | "composition";
+  | "insertion-boundary"
+  | "consecutive-delete-start"
+  | "composition"
+  | "composition-selection";
 
 export type ReviewSegment = {
   review: TextReviewType;
   text: string;
+};
+
+export type ReviewTextRange = {
+  start: number;
+  end: number;
 };
 
 export type NativeCaret = {
@@ -22,7 +30,11 @@ export type ReviewMarkup = {
 };
 
 export type ReviewEditorFixtureApi = {
-  compose: (scenario: ReviewEditorScenario, text: string) => void;
+  compose: (
+    scenario: ReviewEditorScenario,
+    text: string,
+    selection?: ReviewTextRange,
+  ) => void;
   getCaret: (scenario: ReviewEditorScenario) => NativeCaret | null;
   getMarkup: (scenario: ReviewEditorScenario) => ReviewMarkup;
   getSegments: (scenario: ReviewEditorScenario) => ReviewSegment[];
