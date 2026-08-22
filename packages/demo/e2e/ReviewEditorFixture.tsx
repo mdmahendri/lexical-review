@@ -16,6 +16,7 @@ import type {
   ReviewEditorFixtureApi,
   ReviewEditorScenario,
   ReviewSegment,
+  ReviewTextRange,
 } from "./ReviewEditorFixture.types";
 
 const fixtureState = `
@@ -83,6 +84,27 @@ const fixtureState = `
         "version": 1,
         "textFormat": 0,
         "textStyle": ""
+      },
+      {
+        "children": [
+          {
+            "detail": 0,
+            "format": 2,
+            "mode": "normal",
+            "style": "",
+            "text": "composed",
+            "type": "review",
+            "review": 2,
+            "version": 1
+          }
+        ],
+        "direction": "ltr",
+        "format": "",
+        "indent": 0,
+        "type": "paragraph",
+        "version": 1,
+        "textFormat": 0,
+        "textStyle": ""
       }
     ],
     "direction": "ltr",
@@ -124,14 +146,31 @@ function getReviewType(node: ReviewTextNode): TextReviewType {
   throw new Error("Could not determine the review type.");
 }
 
+function getReviewTextDOM(element: HTMLElement | null): Text | null {
+  let contentDOM = element;
+
+  while (contentDOM?.firstElementChild instanceof HTMLElement) {
+    contentDOM = contentDOM.firstElementChild;
+  }
+
+  return contentDOM?.firstChild instanceof Text ? contentDOM.firstChild : null;
+}
+
 function ReviewEditor() {
   const [editor] = useLexicalComposerContext();
 
   useEffect(() => {
     editor.setEditorState(editor.parseEditorState(JSON.parse(fixtureState)));
 
-    const getParagraphIndex = (scenario: ReviewEditorScenario): number =>
-      scenario === "insertion-boundary" ? 1 : 0;
+    const getParagraphIndex = (scenario: ReviewEditorScenario): number => {
+      if (scenario === "insertion-boundary") {
+        return 1;
+      }
+      if (scenario === "composition") {
+        return 2;
+      }
+      return 0;
+    };
 
     const getScenarioParagraph = (scenario: ReviewEditorScenario) => {
       const paragraph = $getRoot().getChildAtIndex(getParagraphIndex(scenario));
@@ -169,6 +208,20 @@ function ReviewEditor() {
           }),
       );
 
+    const getMarkup = (scenario: ReviewEditorScenario) => {
+      const nodeKey = editor
+        .getEditorState()
+        .read(() => getScenarioNode(scenario).getKey());
+      const marker = editor.getElementByKey(nodeKey);
+      const format = marker?.firstElementChild;
+
+      return {
+        format: format?.tagName ?? null,
+        marker: marker?.tagName ?? null,
+        text: marker?.textContent ?? "",
+      };
+    };
+
     const getCaret = (scenario: ReviewEditorScenario): NativeCaret | null => {
       const selection = window.getSelection();
 
@@ -199,34 +252,136 @@ function ReviewEditor() {
       });
     };
 
-    const placeCaret = (scenario: ReviewEditorScenario): void => {
-      const { key, offset } = editor.getEditorState().read(() => {
-        const node = getScenarioNode(scenario);
+    const getScenarioTextDOM = (scenario: ReviewEditorScenario): Text => {
+      const nodeKey = editor
+        .getEditorState()
+        .read(() => getScenarioNode(scenario).getKey());
+      const textDOM = getReviewTextDOM(editor.getElementByKey(nodeKey));
 
-        return {
-          key: node.getKey(),
-          offset:
-            scenario === "insertion-boundary" ? node.getTextContentSize() : 0,
-        };
-      });
-      const element = editor.getElementByKey(key);
-      const textNode = element?.firstChild;
-      const selection = element?.ownerDocument.getSelection();
-
-      if (element == null || !(textNode instanceof Text) || selection == null) {
-        throw new Error("Could not place the review fixture caret.");
+      if (textDOM == null) {
+        throw new Error("Could not find the review fixture text node.");
       }
 
-      const range = element.ownerDocument.createRange();
-      range.setStart(textNode, offset);
-      range.collapse(true);
+      return textDOM;
+    };
+
+    const setSelection = (
+      scenario: ReviewEditorScenario,
+      start: number,
+      end: number,
+    ): void => {
+      const textDOM = getScenarioTextDOM(scenario);
+      const selection = textDOM.ownerDocument.getSelection();
+
+      if (selection == null) {
+        throw new Error("Could not select the review fixture text.");
+      }
+
+      const range = textDOM.ownerDocument.createRange();
+      range.setStart(textDOM, start);
+      range.setEnd(textDOM, end);
       selection.removeAllRanges();
       selection.addRange(range);
       editor.getRootElement()?.focus();
     };
 
+    const placeCaret = (scenario: ReviewEditorScenario): void => {
+      const offset = editor.getEditorState().read(() => {
+        const node = getScenarioNode(scenario);
+
+        return scenario === "insertion-boundary" || scenario === "composition"
+          ? node.getTextContentSize()
+          : 0;
+      });
+      setSelection(scenario, offset, offset);
+    };
+
+    const compose = (
+      scenario: ReviewEditorScenario,
+      text: string,
+      selectedRange?: ReviewTextRange,
+    ): void => {
+      if (selectedRange == null) {
+        placeCaret(scenario);
+      } else {
+        setSelection(scenario, selectedRange.start, selectedRange.end);
+      }
+
+      const rootElement = editor.getRootElement();
+      const selection = rootElement?.ownerDocument.getSelection();
+
+      if (rootElement == null || selection == null) {
+        throw new Error("Could not prepare the review composition.");
+      }
+
+      rootElement.dispatchEvent(
+        new CompositionEvent("compositionstart", {
+          bubbles: true,
+          data: "",
+        }),
+      );
+
+      // Lexical can replace the selected DOM text node while preparing a
+      // non-collapsed composition, so read the composition target afterwards.
+      const textDOM =
+        selection.anchorNode instanceof Text ? selection.anchorNode : null;
+      if (textDOM == null) {
+        throw new Error("Could not find the composition text node.");
+      }
+
+      const currentText = textDOM.nodeValue ?? "";
+      const suffix = currentText.endsWith("\u200b")
+        ? "\u200b"
+        : currentText.endsWith("\u00a0")
+          ? "\u00a0"
+          : "";
+      const composingText =
+        suffix === "" ? currentText : currentText.slice(0, -suffix.length);
+      const composedText = `${composingText}${text}${suffix}`;
+      textDOM.nodeValue = composedText;
+      const range = document.createRange();
+      range.setStart(textDOM, composedText.length - 1);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      const inputEvent = new InputEvent("input", {
+        bubbles: true,
+        data: text,
+        inputType: "insertCompositionText",
+      });
+      Object.defineProperty(inputEvent, "isComposing", {
+        configurable: true,
+        value: true,
+      });
+
+      if (/firefox/i.test(navigator.userAgent)) {
+        rootElement.dispatchEvent(
+          new CompositionEvent("compositionend", {
+            bubbles: true,
+            data: text,
+          }),
+        );
+        Object.defineProperty(inputEvent, "isComposing", {
+          configurable: true,
+          value: false,
+        });
+        rootElement.dispatchEvent(inputEvent);
+      } else {
+        rootElement.dispatchEvent(inputEvent);
+        rootElement.dispatchEvent(
+          new CompositionEvent("compositionend", {
+            bubbles: true,
+            data: text,
+          }),
+        );
+      }
+    };
+
     const api: ReviewEditorFixtureApi = {
+      compose,
       getCaret,
+      getMarkup,
       getSegments,
       placeCaret,
     };

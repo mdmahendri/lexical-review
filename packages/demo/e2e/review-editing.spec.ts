@@ -1,8 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import type {
   NativeCaret,
+  ReviewMarkup,
   ReviewEditorScenario,
   ReviewSegment,
+  ReviewTextRange,
 } from "./ReviewEditorFixture.types";
 
 type DeleteTraceEntry = {
@@ -42,6 +44,41 @@ async function getSegments(
     }
 
     return fixture.getSegments(scenario);
+  }, scenario);
+}
+
+async function compose(
+  page: Page,
+  scenario: ReviewEditorScenario,
+  text: string,
+  selection?: ReviewTextRange,
+): Promise<void> {
+  await page.evaluate(
+    ({ scenario, text, selection }) => {
+      const fixture = window.__lexicalReviewEditorFixture;
+
+      if (fixture == null) {
+        throw new Error("The review editor fixture is not ready.");
+      }
+
+      fixture.compose(scenario, text, selection);
+    },
+    { scenario, text, selection },
+  );
+}
+
+async function getMarkup(
+  page: Page,
+  scenario: ReviewEditorScenario,
+): Promise<ReviewMarkup> {
+  return page.evaluate((scenario) => {
+    const fixture = window.__lexicalReviewEditorFixture;
+
+    if (fixture == null) {
+      throw new Error("The review editor fixture is not ready.");
+    }
+
+    return fixture.getMarkup(scenario);
   }, scenario);
 }
 
@@ -282,4 +319,69 @@ test("two Delete presses mark consecutive original characters as deleted", async
       contentType: "application/json",
     });
   }
+});
+
+test("composition commits formatted review text once and keeps the caret", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  await expect
+    .poll(() => getSegments(page, "composition"))
+    .toEqual([{ review: "insertion", text: "composed" }]);
+
+  await placeCaret(page, "composition");
+  await compose(page, "composition", "あ");
+
+  await expect
+    .poll(async () => ({
+      caret: await getCaret(page, "composition"),
+      markup: await getMarkup(page, "composition"),
+      segments: await getSegments(page, "composition"),
+    }))
+    .toEqual({
+      caret: {
+        anchorNodeType: "text",
+        offset: "composedあ".length,
+        review: "insertion",
+        segmentIndex: 0,
+      },
+      markup: {
+        format: "EM",
+        marker: "INS",
+        text: "composedあ",
+      },
+      segments: [{ review: "insertion", text: "composedあ" }],
+    });
+});
+
+test("composition over selected original text creates an insertion review", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  await expect
+    .poll(() => getSegments(page, "composition-selection"))
+    .toEqual([{ review: "original", text: "abcdef" }]);
+
+  await compose(page, "composition-selection", "あ", {
+    start: 0,
+    end: "abcdef".length,
+  });
+
+  await expect
+    .poll(async () => ({
+      caret: await getCaret(page, "composition-selection"),
+      segments: await getSegments(page, "composition-selection"),
+    }))
+    .toEqual({
+      caret: {
+        anchorNodeType: "text",
+        offset: "あ".length,
+        review: "insertion",
+        segmentIndex: 1,
+      },
+      segments: [
+        { review: "deletion", text: "abcdef" },
+        { review: "insertion", text: "あ" },
+      ],
+    });
 });
