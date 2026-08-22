@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type {
   NativeCaret,
+  ReviewMarkup,
   ReviewEditorScenario,
   ReviewSegment,
 } from "./ReviewEditorFixture.types";
@@ -42,6 +43,40 @@ async function getSegments(
     }
 
     return fixture.getSegments(scenario);
+  }, scenario);
+}
+
+async function compose(
+  page: Page,
+  scenario: ReviewEditorScenario,
+  text: string,
+): Promise<void> {
+  await page.evaluate(
+    ({ scenario, text }) => {
+      const fixture = window.__lexicalReviewEditorFixture;
+
+      if (fixture == null) {
+        throw new Error("The review editor fixture is not ready.");
+      }
+
+      fixture.compose(scenario, text);
+    },
+    { scenario, text },
+  );
+}
+
+async function getMarkup(
+  page: Page,
+  scenario: ReviewEditorScenario,
+): Promise<ReviewMarkup> {
+  return page.evaluate((scenario) => {
+    const fixture = window.__lexicalReviewEditorFixture;
+
+    if (fixture == null) {
+      throw new Error("The review editor fixture is not ready.");
+    }
+
+    return fixture.getMarkup(scenario);
   }, scenario);
 }
 
@@ -282,4 +317,37 @@ test("two Delete presses mark consecutive original characters as deleted", async
       contentType: "application/json",
     });
   }
+});
+
+test("composition commits formatted review text once and keeps the caret", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  await expect
+    .poll(() => getSegments(page, "composition"))
+    .toEqual([{ review: "insertion", text: "composed" }]);
+
+  await placeCaret(page, "composition");
+  await compose(page, "composition", "あ");
+
+  await expect
+    .poll(async () => ({
+      caret: await getCaret(page, "composition"),
+      markup: await getMarkup(page, "composition"),
+      segments: await getSegments(page, "composition"),
+    }))
+    .toEqual({
+      caret: {
+        anchorNodeType: "text",
+        offset: "composedあ".length,
+        review: "insertion",
+        segmentIndex: 0,
+      },
+      markup: {
+        format: "EM",
+        marker: "INS",
+        text: "composedあ",
+      },
+      segments: [{ review: "insertion", text: "composedあ" }],
+    });
 });

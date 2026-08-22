@@ -209,34 +209,34 @@ function setReviewTextContent(
   dom: HTMLElement,
   node: ReviewTextNode,
 ): void {
-  const firstChild = dom.firstChild;
+  const slot = node.getDOMSlot(dom);
+  const firstChild = slot.getFirstChild();
   const isComposing = node.isComposing();
   // Always add a suffix if we're composing a node
   const suffix = isComposing ? COMPOSITION_SUFFIX : "";
   const text: string = nextText + suffix;
 
-  if (firstChild == null) {
-    dom.textContent = text;
-  } else {
-    const nodeValue = firstChild.nodeValue;
-    if (nodeValue !== text) {
-      if (isComposing || IS_FIREFOX) {
-        // We also use the diff composed text for general text in FF to avoid
-        // We also use the diff composed text for general text in FF to avoid
-        // the spellcheck red line from flickering.
-        const [index, remove, insert] = diffComposedText(
-          nodeValue as string,
-          text,
-        );
-        if (remove !== 0) {
-          // @ts-expect-error - original directive from lexical
-          firstChild.deleteData(index, remove);
-        }
-        // @ts-expect-error - original directive from lexical
-        firstChild.insertData(index, insert);
-      } else {
-        firstChild.nodeValue = text;
+  if (firstChild === null || firstChild.nodeType !== Node.TEXT_NODE) {
+    slot.insertChild(dom.ownerDocument.createTextNode(text));
+    return;
+  }
+
+  const textChild = firstChild as Text;
+  const nodeValue = textChild.nodeValue;
+  if (nodeValue !== text) {
+    if (isComposing || IS_FIREFOX) {
+      // We also use the diff composed text for general text in FF to avoid
+      // the spellcheck red line from flickering.
+      const [index, remove, insert] = diffComposedText(
+        nodeValue as string,
+        text,
+      );
+      if (remove !== 0) {
+        textChild.deleteData(index, remove);
       }
+      textChild.insertData(index, insert);
+    } else {
+      textChild.nodeValue = text;
     }
   }
 }
@@ -371,10 +371,49 @@ export class ReviewTextNode extends TextNode {
     if (
       prevTag !== nextTag ||
       prevReviewTag !== nextReviewTag ||
-      prevFormatOuterTag !== nextFormatOuterTag ||
-      prevFormatInnerTag !== nextFormatInnerTag
+      prevFormatOuterTag !== nextFormatOuterTag
     ) {
       return true;
+    }
+
+    // A review marker is the stable DOM shell. Replace only its formatting
+    // element when the inner format tag changes so the browser's selection
+    // remains anchored to the same review node.
+    if (prevFormatInnerTag !== nextFormatInnerTag) {
+      if (nextReviewTag === null) {
+        return true;
+      }
+
+      const formatDOM = dom.firstElementChild as HTMLElement | null;
+      if (formatDOM === null) {
+        return true;
+      }
+
+      const nextFormatDOM = document.createElement(nextFormatInnerTag);
+      createReviewTextInnerDOM(
+        nextFormatDOM,
+        this,
+        nextFormat,
+        nextText,
+        config,
+      );
+      if (nextFormatOuterTag === null) {
+        dom.replaceChild(nextFormatDOM, formatDOM);
+      } else {
+        const previousFormatDOM = formatDOM.firstElementChild;
+        if (previousFormatDOM === null) {
+          return true;
+        }
+        formatDOM.replaceChild(nextFormatDOM, previousFormatDOM);
+      }
+
+      const prevStyle = prevNode.__style;
+      const nextStyle = this.__style;
+      if (prevStyle !== nextStyle) {
+        setDOMStyleFromCSS(dom.style, nextStyle, prevStyle);
+      }
+
+      return false;
     }
 
     const contentDOM = getReviewTextContentDOM(dom, nextReview, nextFormat);
