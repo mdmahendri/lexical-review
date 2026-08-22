@@ -147,8 +147,9 @@ export function registerReviewText(
     editor.registerCommand(
       COMPOSITION_START_COMMAND,
       () => {
-        // Lexical owns the browser/IME lifecycle. Record the review semantics
-        // here and let its default handler create and manage the composition target.
+        // Capture the pre-composition selection before Lexical's editor-priority
+        // handler can create the composition target or replace a selected range.
+        // Returning false still lets Lexical own the browser/IME lifecycle.
         composition = null;
         const selection = $getSelection();
         if ($isRangeSelection(selection)) {
