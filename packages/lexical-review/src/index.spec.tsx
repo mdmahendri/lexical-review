@@ -51,9 +51,18 @@ describe("Lexical Review Mode tests", () => {
           onError: onError || vitest.fn(),
           theme: {
             text: {
+              base: "editor-text-base",
               bold: "editor-text-bold",
+              capitalize: "editor-text-capitalize",
+              code: "editor-text-code",
+              highlight: "editor-text-highlight",
               italic: "editor-text-italic",
+              lowercase: "editor-text-lowercase",
+              strikethrough: "editor-text-strikethrough",
+              subscript: "editor-text-subscript",
+              superscript: "editor-text-superscript",
               underline: "editor-text-underline",
+              uppercase: "editor-text-uppercase",
             },
             ins: "review-insertion",
             del: "review-deletion",
@@ -253,6 +262,83 @@ describe("Lexical Review Mode tests", () => {
 
       expect(insTag?.classList.contains("review-insertion")).toBe(true);
       expect(delTag?.classList.contains("review-deletion")).toBe(true);
+    });
+
+    describe.each([
+      ["insertion", "INS"],
+      ["deletion", "DEL"],
+    ] as const)("%s markup", (reviewType, reviewTag) => {
+      it.each([
+        ["bold", "STRONG", null],
+        ["italic", "EM", null],
+        ["underline", "SPAN", null],
+        ["strikethrough", "SPAN", null],
+        ["highlight", "MARK", "SPAN"],
+        ["code", "CODE", "SPAN"],
+        ["subscript", "SUB", "SPAN"],
+        ["superscript", "SUP", "SPAN"],
+        ["lowercase", "SPAN", null],
+        ["uppercase", "SPAN", null],
+        ["capitalize", "SPAN", null],
+      ] as const)(
+        "renders %s formatting inside review markup",
+        async (format, outerTag, innerTag) => {
+          let reviewNode: ReviewTextNode;
+
+          await update(() => {
+            reviewNode = $createReviewTextNode("formatted", reviewType);
+            reviewNode.toggleFormat(format);
+            const paragraph = $createParagraphNode();
+            paragraph.append(reviewNode);
+            $getRoot().clear().append(paragraph);
+          });
+
+          const reviewDOM = editor.getElementByKey(reviewNode!.getKey());
+          const formattingDOM = reviewDOM?.firstElementChild as HTMLElement;
+          const contentDOM = (
+            innerTag === null ? formattingDOM : formattingDOM.firstElementChild
+          ) as HTMLElement;
+
+          expect(reviewDOM?.tagName).toBe(reviewTag);
+          expect(formattingDOM?.tagName).toBe(outerTag);
+          expect(contentDOM?.tagName).toBe(innerTag ?? outerTag);
+          expect(contentDOM?.textContent).toBe("formatted");
+          expect(contentDOM?.classList.contains(`editor-text-${format}`)).toBe(
+            true,
+          );
+          expect(reviewNode!.getDOMSlot(reviewDOM!).element).toBe(contentDOM);
+        },
+      );
+    });
+
+    it("reconciles inline styles and preserves formatting after text updates", async () => {
+      let reviewNode: ReviewTextNode;
+
+      await update(() => {
+        reviewNode = $createReviewTextNode("formatted", "insertion");
+        reviewNode.toggleFormat("italic");
+        reviewNode.setStyle("color: red; --custom: value;");
+        const paragraph = $createParagraphNode();
+        paragraph.append(reviewNode);
+        $getRoot().clear().append(paragraph);
+      });
+
+      const reviewDOM = editor.getElementByKey(reviewNode!.getKey());
+      expect(reviewDOM?.style.color).toBe("red");
+      expect(reviewDOM?.style.getPropertyValue("--custom")).toBe("value");
+
+      await update(() => {
+        reviewNode!.setStyle("padding: 1px;");
+        reviewNode!.setTextContent("updated");
+      });
+
+      const updatedReviewDOM = editor.getElementByKey(reviewNode!.getKey());
+      expect(updatedReviewDOM?.tagName).toBe("INS");
+      expect(updatedReviewDOM?.firstElementChild?.tagName).toBe("EM");
+      expect(updatedReviewDOM?.textContent).toBe("updated");
+      expect(updatedReviewDOM?.style.color).toBe("");
+      expect(updatedReviewDOM?.style.getPropertyValue("--custom")).toBe("");
+      expect(updatedReviewDOM?.style.padding).toBe("1px");
     });
 
     it("reconciles review text through the content slot", async () => {
