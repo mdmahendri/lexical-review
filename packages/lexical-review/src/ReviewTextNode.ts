@@ -2,16 +2,27 @@ import {
   addClassNamesToElement,
   IS_FIREFOX,
   IS_IOS,
+  removeClassNamesFromElement,
   IS_SAFARI,
 } from "@lexical/utils";
 import {
   $applyNodeReplacement,
   EditorConfig,
+  IS_BOLD,
+  IS_CODE,
+  IS_HIGHLIGHT,
+  IS_ITALIC,
+  IS_STRIKETHROUGH,
+  IS_SUBSCRIPT,
+  IS_SUPERSCRIPT,
+  IS_UNDERLINE,
   LexicalNode,
   NodeKey,
   SerializedTextNode,
   Spread,
+  TEXT_TYPE_TO_FORMAT,
   TextNode,
+  setDOMStyleFromCSS,
 } from "lexical";
 
 // all copied or modified from https://github.com/facebook/lexical/blob/8eae296ea39ff0dd707c901493553f1d889e9174/packages/lexical/src/nodes/LexicalTextNode.ts
@@ -41,11 +52,7 @@ type SerializedReviewTextNodeV1 = Spread<
   SerializedTextNode
 >;
 
-// copy of getElementOuterTag - no support for tag code, sub, sup
-function getReviewElementOuterTag(
-  _node: ReviewTextNode,
-  review: number,
-): string | null {
+function getReviewElementOuterTag(review: number): string | null {
   if (review & IS_ADD) {
     return "ins";
   }
@@ -55,10 +62,110 @@ function getReviewElementOuterTag(
   return null;
 }
 
-// at this time, we do not allow for bold and italic review mode
-// so it is fine
-function getReviewElementInnerTag(): string {
+function getFormatElementOuterTag(format: number): string | null {
+  if (format & IS_CODE) {
+    return "code";
+  }
+  if (format & IS_HIGHLIGHT) {
+    return "mark";
+  }
+  if (format & IS_SUBSCRIPT) {
+    return "sub";
+  }
+  if (format & IS_SUPERSCRIPT) {
+    return "sup";
+  }
+  return null;
+}
+
+function getFormatElementInnerTag(format: number): string {
+  if (format & IS_BOLD) {
+    return "strong";
+  }
+  if (format & IS_ITALIC) {
+    return "em";
+  }
   return "span";
+}
+
+type TextThemeClasses = NonNullable<EditorConfig["theme"]["text"]>;
+
+function setReviewTextThemeClassNames(
+  prevFormat: number,
+  nextFormat: number,
+  dom: HTMLElement,
+  textClassNames: TextThemeClasses,
+): void {
+  addClassNamesToElement(dom, textClassNames.base);
+
+  const underlineStrikethroughClassName = textClassNames.underlineStrikethrough;
+  const prevUnderlineStrikethrough =
+    (prevFormat & IS_UNDERLINE) !== 0 && (prevFormat & IS_STRIKETHROUGH) !== 0;
+  const nextUnderlineStrikethrough =
+    (nextFormat & IS_UNDERLINE) !== 0 && (nextFormat & IS_STRIKETHROUGH) !== 0;
+  let hasUnderlineStrikethrough = false;
+
+  if (underlineStrikethroughClassName !== undefined) {
+    if (nextUnderlineStrikethrough) {
+      hasUnderlineStrikethrough = true;
+      if (!prevUnderlineStrikethrough) {
+        addClassNamesToElement(dom, underlineStrikethroughClassName);
+      }
+    } else if (prevUnderlineStrikethrough) {
+      removeClassNamesFromElement(dom, underlineStrikethroughClassName);
+    }
+  }
+
+  for (const formatName in TEXT_TYPE_TO_FORMAT) {
+    const formatFlag = TEXT_TYPE_TO_FORMAT[formatName];
+    const className = textClassNames[formatName];
+
+    if (formatFlag === undefined) {
+      continue;
+    }
+
+    if (nextFormat & formatFlag) {
+      if (
+        hasUnderlineStrikethrough &&
+        (formatName === "underline" || formatName === "strikethrough")
+      ) {
+        if (prevFormat & formatFlag) {
+          removeClassNamesFromElement(dom, className);
+        }
+        continue;
+      }
+
+      if (
+        (prevFormat & formatFlag) === 0 ||
+        (prevUnderlineStrikethrough && formatName === "underline") ||
+        formatName === "strikethrough"
+      ) {
+        addClassNamesToElement(dom, className);
+      }
+    } else if (prevFormat & formatFlag) {
+      removeClassNamesFromElement(dom, className);
+    }
+  }
+}
+
+function getReviewTextContentDOM(
+  element: HTMLElement,
+  review: number,
+  format: number,
+): HTMLElement {
+  let contentDOM = element;
+
+  if (getReviewElementOuterTag(review) !== null) {
+    contentDOM =
+      (contentDOM.firstElementChild as HTMLElement | null) ?? contentDOM;
+  }
+
+  if (getFormatElementOuterTag(format) !== null) {
+    contentDOM =
+      (contentDOM.firstElementChild as HTMLElement | null) ?? contentDOM;
+  }
+
+  return contentDOM;
 }
 
 // Reconciliation
@@ -133,20 +240,16 @@ function setReviewTextContent(
 function createReviewTextInnerDOM(
   innerDOM: HTMLElement,
   node: ReviewTextNode,
-  // innerTag: string,
-  // format: number,
+  format: number,
   text: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _config: EditorConfig,
+  config: EditorConfig,
 ): void {
   setReviewTextContent(text, innerDOM, node);
-  // const theme = config.theme;
-  // Apply theme class names
-  // const textClassNames = theme.text;
 
-  // if (textClassNames !== undefined) {
-  //   setTextThemeClassNames(innerTag, 0, format, innerDOM, textClassNames);
-  // }
+  const textClassNames = config.theme.text;
+  if (textClassNames !== undefined) {
+    setReviewTextThemeClassNames(0, format, innerDOM, textClassNames);
+  }
 }
 
 export class ReviewTextNode extends TextNode {
@@ -182,26 +285,40 @@ export class ReviewTextNode extends TextNode {
     return node;
   }
 
-  // mimic createDOM but without applying format
   override createDOM(config: EditorConfig): HTMLElement {
     const review = this.__review;
-    const outerTag = getReviewElementOuterTag(this, review);
-    const innerTag = getReviewElementInnerTag();
-    const tag = outerTag == null ? innerTag : outerTag;
+    const format = this.__format;
+    const reviewOuterTag = getReviewElementOuterTag(review);
+    const formatOuterTag = getFormatElementOuterTag(format);
+    const formatInnerTag = getFormatElementInnerTag(format);
+    const tag = reviewOuterTag ?? formatOuterTag ?? formatInnerTag;
     const dom = document.createElement(tag);
-    let innerDOM = dom;
-    if (outerTag !== null) {
-      innerDOM = document.createElement(innerTag);
-      dom.appendChild(innerDOM);
-
-      // add class to outer tag of ins and del
-      addClassNamesToElement(dom, config.theme[outerTag]);
+    let formatDOM = dom;
+    if (reviewOuterTag !== null) {
+      formatDOM = document.createElement(formatOuterTag ?? formatInnerTag);
+      dom.appendChild(formatDOM);
     }
+
+    let innerDOM = formatDOM;
+    if (formatOuterTag !== null) {
+      innerDOM = document.createElement(formatInnerTag);
+      formatDOM.appendChild(innerDOM);
+    }
+
+    if (format & IS_CODE) {
+      formatDOM.setAttribute("spellcheck", "false");
+    }
+
+    if (reviewOuterTag !== null) {
+      // add class to outer tag of ins and del
+      addClassNamesToElement(dom, config.theme[reviewOuterTag]);
+    }
+
     const text = this.__text;
-    createReviewTextInnerDOM(innerDOM, this, text, config);
+    createReviewTextInnerDOM(innerDOM, this, format, text, config);
     const style = this.__style;
     if (style !== "") {
-      dom.style.cssText = style;
+      setDOMStyleFromCSS(dom.style, style);
     }
 
     return dom;
@@ -209,38 +326,63 @@ export class ReviewTextNode extends TextNode {
 
   override getDOMSlot(element: HTMLElement) {
     const slot = super.getDOMSlot(element);
+    const contentDOM = getReviewTextContentDOM(
+      element,
+      this.__review,
+      this.__format,
+    );
 
-    if (getReviewElementOuterTag(this, this.__review) === null) {
-      return slot;
-    }
-
-    const innerDOM = element.firstElementChild as HTMLElement | null;
-    return innerDOM === null ? slot : slot.withElement(innerDOM);
+    return contentDOM === element ? slot : slot.withElement(contentDOM);
   }
 
-  // modify updateDOM
   override updateDOM(
     prevNode: ReviewTextNode,
     dom: HTMLElement,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _config: EditorConfig,
+    config: EditorConfig,
   ): boolean {
     const nextText = this.__text;
     const prevReview = prevNode.__review;
     const nextReview = this.__review;
-    const prevOuterTag = getReviewElementOuterTag(this, prevReview);
-    const nextOuterTag = getReviewElementOuterTag(this, nextReview);
-    const prevInnerTag = getReviewElementInnerTag(); //only output 'span'
-    const nextInnerTag = getReviewElementInnerTag(); //only output 'span'
-    const prevTag = prevOuterTag === null ? prevInnerTag : prevOuterTag;
-    const nextTag = nextOuterTag === null ? nextInnerTag : nextOuterTag;
+    const prevFormat = prevNode.__format;
+    const nextFormat = this.__format;
+    const prevReviewOuterTag = getReviewElementOuterTag(prevReview);
+    const nextReviewOuterTag = getReviewElementOuterTag(nextReview);
+    const prevFormatOuterTag = getFormatElementOuterTag(prevFormat);
+    const nextFormatOuterTag = getFormatElementOuterTag(nextFormat);
+    const prevFormatInnerTag = getFormatElementInnerTag(prevFormat);
+    const nextFormatInnerTag = getFormatElementInnerTag(nextFormat);
+    const prevTag =
+      prevReviewOuterTag ?? prevFormatOuterTag ?? prevFormatInnerTag;
+    const nextTag =
+      nextReviewOuterTag ?? nextFormatOuterTag ?? nextFormatInnerTag;
 
-    if (prevTag !== nextTag) {
+    if (
+      prevTag !== nextTag ||
+      prevReviewOuterTag !== nextReviewOuterTag ||
+      prevFormatOuterTag !== nextFormatOuterTag ||
+      prevFormatInnerTag !== nextFormatInnerTag
+    ) {
       return true;
     }
 
-    const innerDOM = this.getDOMSlot(dom).element;
+    const innerDOM = getReviewTextContentDOM(dom, nextReview, nextFormat);
     setReviewTextContent(nextText, innerDOM, this);
+
+    const textClassNames = config.theme.text;
+    if (textClassNames !== undefined && prevFormat !== nextFormat) {
+      setReviewTextThemeClassNames(
+        prevFormat,
+        nextFormat,
+        innerDOM,
+        textClassNames,
+      );
+    }
+
+    const prevStyle = prevNode.__style;
+    const nextStyle = this.__style;
+    if (prevStyle !== nextStyle) {
+      setDOMStyleFromCSS(dom.style, nextStyle, prevStyle);
+    }
 
     return false;
   }
