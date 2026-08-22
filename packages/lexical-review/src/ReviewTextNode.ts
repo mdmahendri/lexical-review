@@ -202,8 +202,8 @@ function diffComposedText(a: string, b: string): [number, number, string] {
   return [left, aLength - left - right, b.slice(left, bLength - right)];
 }
 
-// exact copy
-// replacing TextNode - ReviewTextNode
+// Adapted from Lexical 0.49's $setTextContent. ReviewTextNode writes through
+// its nested DOM slot so review and formatting wrappers remain intact.
 function setReviewTextContent(
   nextText: string,
   dom: HTMLElement,
@@ -241,8 +241,7 @@ function setReviewTextContent(
   }
 }
 
-// exact copy
-// replacing TextNode - ReviewTextNode
+// Adapted from Lexical 0.49's $createTextInnerDOM with review-format classes.
 function createReviewTextInnerDOM(
   contentDOM: HTMLElement,
   node: ReviewTextNode,
