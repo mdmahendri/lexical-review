@@ -244,17 +244,17 @@ function setReviewTextContent(
 // exact copy
 // replacing TextNode - ReviewTextNode
 function createReviewTextInnerDOM(
-  innerDOM: HTMLElement,
+  contentDOM: HTMLElement,
   node: ReviewTextNode,
   format: number,
   text: string,
   config: EditorConfig,
 ): void {
-  setReviewTextContent(text, innerDOM, node);
+  setReviewTextContent(text, contentDOM, node);
 
   const textClassNames = config.theme.text;
   if (textClassNames !== undefined) {
-    setReviewTextThemeClassNames(0, format, innerDOM, textClassNames);
+    setReviewTextThemeClassNames(0, format, contentDOM, textClassNames);
   }
 }
 
@@ -299,6 +299,9 @@ export class ReviewTextNode extends TextNode {
     const formatInnerTag = getFormatElementInnerTag(format);
     const tag = reviewTag ?? formatOuterTag ?? formatInnerTag;
     const dom = document.createElement(tag);
+
+    // If there is no review marker, the root also serves as the format
+    // container.
     let formatDOM = dom;
     // Review markers must remain the outermost elements around Lexical
     // formatting, so inserted/deleted text renders as <ins>/<del> wrapping
@@ -308,10 +311,12 @@ export class ReviewTextNode extends TextNode {
       dom.appendChild(formatDOM);
     }
 
-    let innerDOM = formatDOM;
+    // If there is no outer format, the format container also serves as the
+    // deepest content element.
+    let contentDOM = formatDOM;
     if (formatOuterTag !== null) {
-      innerDOM = document.createElement(formatInnerTag);
-      formatDOM.appendChild(innerDOM);
+      contentDOM = document.createElement(formatInnerTag);
+      formatDOM.appendChild(contentDOM);
     }
 
     if (format & IS_CODE) {
@@ -324,7 +329,7 @@ export class ReviewTextNode extends TextNode {
     }
 
     const text = this.__text;
-    createReviewTextInnerDOM(innerDOM, this, format, text, config);
+    createReviewTextInnerDOM(contentDOM, this, format, text, config);
     const style = this.__style;
     if (style !== "") {
       setDOMStyleFromCSS(dom.style, style);
@@ -372,15 +377,15 @@ export class ReviewTextNode extends TextNode {
       return true;
     }
 
-    const innerDOM = getReviewTextContentDOM(dom, nextReview, nextFormat);
-    setReviewTextContent(nextText, innerDOM, this);
+    const contentDOM = getReviewTextContentDOM(dom, nextReview, nextFormat);
+    setReviewTextContent(nextText, contentDOM, this);
 
     const textClassNames = config.theme.text;
     if (textClassNames !== undefined && prevFormat !== nextFormat) {
       setReviewTextThemeClassNames(
         prevFormat,
         nextFormat,
-        innerDOM,
+        contentDOM,
         textClassNames,
       );
     }
