@@ -9,7 +9,7 @@
 
 ## Lexical Source and Version Reference
 
-- The sibling checkout at `../lexical-0.49` is the required local reference for Lexical work during this migration. It must match the exact Lexical version resolved by this repository's `package.json` files and `pnpm-lock.yaml` (currently `0.49.0`).
+- The sibling checkout at `../lexical-0.49` is the required local reference for Lexical work. It must match the exact Lexical version resolved by this repository's `package.json` files and `pnpm-lock.yaml` (currently `0.49.0`).
 - For Lexical inspection, API questions, implementation, debugging, or compatibility work, first read this repository's usage/tests and the matching source/tests in `../lexical-0.49`. Treat those local files as the primary version-specific reference.
 - For any Lexical-dependent task, verify that `../lexical-0.49` exists and matches the repository's resolved version before proceeding. If it is missing or mismatched, pause and ask the developer for the correct checkout or version.
 - Use online documentation or search only for information unavailable in the matching local checkout, such as release history or behavior introduced in another version.
