@@ -98,24 +98,28 @@ function setReviewTextThemeClassNames(
 ): void {
   addClassNamesToElement(dom, textClassNames.base);
 
-  const underlineStrikethroughClassName = textClassNames.underlineStrikethrough;
-  const prevUnderlineStrikethrough =
+  // Underline and strikethrough share the text-decoration CSS property. When
+  // a combined theme class is available, use it instead of competing
+  // individual classes.
+  const combinedDecorationClassName = textClassNames.underlineStrikethrough;
+  const previousHasCombinedDecoration =
     (prevFormat & IS_UNDERLINE) !== 0 && (prevFormat & IS_STRIKETHROUGH) !== 0;
-  const nextUnderlineStrikethrough =
+  const nextHasCombinedDecoration =
     (nextFormat & IS_UNDERLINE) !== 0 && (nextFormat & IS_STRIKETHROUGH) !== 0;
-  let hasUnderlineStrikethrough = false;
+  let usesCombinedDecorationClass = false;
 
-  if (underlineStrikethroughClassName !== undefined) {
-    if (nextUnderlineStrikethrough) {
-      hasUnderlineStrikethrough = true;
-      if (!prevUnderlineStrikethrough) {
-        addClassNamesToElement(dom, underlineStrikethroughClassName);
+  if (combinedDecorationClassName !== undefined) {
+    if (nextHasCombinedDecoration) {
+      usesCombinedDecorationClass = true;
+      if (!previousHasCombinedDecoration) {
+        addClassNamesToElement(dom, combinedDecorationClassName);
       }
-    } else if (prevUnderlineStrikethrough) {
-      removeClassNamesFromElement(dom, underlineStrikethroughClassName);
+    } else if (previousHasCombinedDecoration) {
+      removeClassNamesFromElement(dom, combinedDecorationClassName);
     }
   }
 
+  // Synchronize individual format classes after handling combined decoration.
   for (const formatName in TEXT_TYPE_TO_FORMAT) {
     const formatFlag = TEXT_TYPE_TO_FORMAT[formatName];
     const className = textClassNames[formatName];
@@ -124,25 +128,27 @@ function setReviewTextThemeClassNames(
       continue;
     }
 
-    if (nextFormat & formatFlag) {
-      if (
-        hasUnderlineStrikethrough &&
-        (formatName === "underline" || formatName === "strikethrough")
-      ) {
-        if (prevFormat & formatFlag) {
+    const wasActive = (prevFormat & formatFlag) !== 0;
+    const isActive = (nextFormat & formatFlag) !== 0;
+    const isTextDecorationFormat =
+      formatName === "underline" || formatName === "strikethrough";
+
+    if (isActive) {
+      if (usesCombinedDecorationClass && isTextDecorationFormat) {
+        if (wasActive) {
           removeClassNamesFromElement(dom, className);
         }
         continue;
       }
 
       if (
-        (prevFormat & formatFlag) === 0 ||
-        (prevUnderlineStrikethrough && formatName === "underline") ||
+        !wasActive ||
+        (previousHasCombinedDecoration && formatName === "underline") ||
         formatName === "strikethrough"
       ) {
         addClassNamesToElement(dom, className);
       }
-    } else if (prevFormat & formatFlag) {
+    } else if (wasActive) {
       removeClassNamesFromElement(dom, className);
     }
   }
