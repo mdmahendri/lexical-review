@@ -254,6 +254,58 @@ describe("Lexical Review Mode tests", () => {
       expect(insTag?.classList.contains("review-insertion")).toBe(true);
       expect(delTag?.classList.contains("review-deletion")).toBe(true);
     });
+
+    it("reconciles review text through the content slot", async () => {
+      let originalNode: ReviewTextNode;
+      let insertionNode: ReviewTextNode;
+      let deletionNode: ReviewTextNode;
+
+      await update(() => {
+        originalNode = $createReviewTextNode("original", "original");
+        insertionNode = $createReviewTextNode("inserted", "insertion");
+        deletionNode = $createReviewTextNode("deleted", "deletion");
+
+        const paragraph = $createParagraphNode();
+        paragraph.append(originalNode, insertionNode, deletionNode);
+        $getRoot().clear().append(paragraph);
+      });
+
+      const originalDOM = editor.getElementByKey(originalNode!.getKey());
+      const insertionDOM = editor.getElementByKey(insertionNode!.getKey());
+      const deletionDOM = editor.getElementByKey(deletionNode!.getKey());
+
+      expect(originalDOM?.tagName).toBe("SPAN");
+      expect(insertionDOM?.tagName).toBe("INS");
+      expect(insertionDOM?.classList.contains("review-insertion")).toBe(true);
+      expect(insertionDOM?.firstElementChild?.tagName).toBe("SPAN");
+      expect(insertionDOM?.textContent).toBe("inserted");
+      expect(deletionDOM?.tagName).toBe("DEL");
+      expect(deletionDOM?.classList.contains("review-deletion")).toBe(true);
+      expect(deletionDOM?.firstElementChild?.tagName).toBe("SPAN");
+      expect(deletionDOM?.textContent).toBe("deleted");
+
+      expect(originalNode!.getDOMSlot(originalDOM!).element).toBe(originalDOM);
+      expect(insertionNode!.getDOMSlot(insertionDOM!).element).toBe(
+        insertionDOM!.firstElementChild,
+      );
+      expect(deletionNode!.getDOMSlot(deletionDOM!).element).toBe(
+        deletionDOM!.firstElementChild,
+      );
+
+      await update(() => {
+        originalNode!.setTextContent("updated original");
+        insertionNode!.setTextContent("updated insertion");
+        deletionNode!.setTextContent("updated deletion");
+      });
+
+      expect(originalDOM?.textContent).toBe("updated original");
+      expect(insertionDOM?.firstElementChild?.textContent).toBe(
+        "updated insertion",
+      );
+      expect(deletionDOM?.firstElementChild?.textContent).toBe(
+        "updated deletion",
+      );
+    });
   });
 
   describe("Text Insertion Operations", () => {

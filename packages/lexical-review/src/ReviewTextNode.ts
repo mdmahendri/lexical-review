@@ -207,6 +207,17 @@ export class ReviewTextNode extends TextNode {
     return dom;
   }
 
+  override getDOMSlot(element: HTMLElement) {
+    const slot = super.getDOMSlot(element);
+
+    if (getReviewElementOuterTag(this, this.__review) === null) {
+      return slot;
+    }
+
+    const innerDOM = element.firstElementChild as HTMLElement | null;
+    return innerDOM === null ? slot : slot.withElement(innerDOM);
+  }
+
   // modify updateDOM
   override updateDOM(
     prevNode: ReviewTextNode,
@@ -228,10 +239,7 @@ export class ReviewTextNode extends TextNode {
       return true;
     }
 
-    let innerDOM = dom;
-    if (nextOuterTag !== null && prevOuterTag !== null) {
-      innerDOM = dom.firstChild as HTMLElement;
-    }
+    const innerDOM = this.getDOMSlot(dom).element;
     setReviewTextContent(nextText, innerDOM, this);
 
     return false;
