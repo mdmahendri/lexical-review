@@ -26,6 +26,13 @@ Run `pnpm install` for local setup; CI uses `pnpm install --frozen-lockfile`. Th
 - `pnpm prettier` — format repository files with Prettier.
 - `pnpm preview:demo` — preview the production demo build locally.
 
+## Codex Sandbox and pnpm
+
+- If a `pnpm` command returns `unable to open database file`, treat it as a pnpm store write-permission failure when the configured store is outside the workspace (commonly `$PNPM_HOME/store`), not as a repository or lockfile failure.
+- Retry the same command once with the tool's escalated filesystem-access mode (`require_escalated`) so the user can approve it, and explain that pnpm needs to update its local SQLite store outside the workspace.
+- After escalation succeeds, continue pnpm-dependent validation with that access mode. If escalation is unavailable or denied, stop and ask the user to approve it or run the command in a normal terminal.
+- Preserve the existing pnpm store and database; do not delete it or change its ownership with `sudo`.
+
 ## Coding Style & Naming Conventions
 
 Use TypeScript/TSX, two-space indentation, and existing component/module conventions. Components and Lexical nodes use PascalCase (for example, `ReviewTextNode`); functions, hooks, and utilities use camelCase. Keep browser/editor-only code in the client entrypoint. Run `pnpm lint` and `pnpm prettier` before submitting changes.
