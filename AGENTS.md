@@ -41,3 +41,17 @@ Prefer Conventional Commit-style subjects in lowercase, such as `fix(test): prev
 ## Security & Configuration Tips
 
 Do not commit secrets or local `.env` files. Keep generated `dist/`, coverage, Nx cache, and dependency directories untracked. Preserve the lockfile and the declared Node/pnpm engine requirements so local and CI builds remain reproducible.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues for `mahendrimd/lexical-review`; use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default canonical triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository with root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
