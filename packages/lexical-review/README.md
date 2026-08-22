@@ -31,3 +31,9 @@ const initialConfig = {
 `ReviewTextPlugin` also normalizes ordinary text nodes created after registration to original review text. It throws during registration when `ReviewTextNode` is not registered.
 
 Please visit the [homepage](https://github.com/mahendrimd/lexical-review).
+
+## Rendering contract
+
+For inserted and deleted text, the review marker is always the outermost DOM
+element. Lexical formatting and inline styles are nested inside the marker,
+for example: `<ins><strong>inserted text</strong></ins>`.

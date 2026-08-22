@@ -30,6 +30,8 @@ Run `pnpm install` for local setup; CI uses `pnpm install --frozen-lockfile`. Th
 
 Use TypeScript/TSX, two-space indentation, and existing component/module conventions. Components and Lexical nodes use PascalCase (for example, `ReviewTextNode`); functions, hooks, and utilities use camelCase. Keep browser/editor-only code in the client entrypoint. Run `pnpm lint` and `pnpm prettier` before submitting changes.
 
+Review DOM invariant: insertion and deletion markers (`<ins>` and `<del>`) are the outermost wrappers; Lexical formatting and inline styles are nested inside them. Preserve this with real editor reconciliation tests.
+
 ## Testing Guidelines
 
 Add focused tests beside the implementation in `packages/lexical-review/src/`, using `*.spec.tsx` and descriptive `describe`/`it` blocks. Tests run with Vitest and jsdom. There is no configured coverage threshold; changes to node behavior, serialization, selection, or DOM rendering should include regression coverage.

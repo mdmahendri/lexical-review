@@ -52,7 +52,7 @@ type SerializedReviewTextNodeV1 = Spread<
   SerializedTextNode
 >;
 
-function getReviewElementOuterTag(review: number): string | null {
+function getReviewElementTag(review: number): string | null {
   if (review & IS_ADD) {
     return "ins";
   }
@@ -155,7 +155,7 @@ function getReviewTextContentDOM(
 ): HTMLElement {
   let contentDOM = element;
 
-  if (getReviewElementOuterTag(review) !== null) {
+  if (getReviewElementTag(review) !== null) {
     contentDOM =
       (contentDOM.firstElementChild as HTMLElement | null) ?? contentDOM;
   }
@@ -288,13 +288,16 @@ export class ReviewTextNode extends TextNode {
   override createDOM(config: EditorConfig): HTMLElement {
     const review = this.__review;
     const format = this.__format;
-    const reviewOuterTag = getReviewElementOuterTag(review);
+    const reviewTag = getReviewElementTag(review);
     const formatOuterTag = getFormatElementOuterTag(format);
     const formatInnerTag = getFormatElementInnerTag(format);
-    const tag = reviewOuterTag ?? formatOuterTag ?? formatInnerTag;
+    const tag = reviewTag ?? formatOuterTag ?? formatInnerTag;
     const dom = document.createElement(tag);
     let formatDOM = dom;
-    if (reviewOuterTag !== null) {
+    // Review markers must remain the outermost elements around Lexical
+    // formatting, so inserted/deleted text renders as <ins>/<del> wrapping
+    // the format elements.
+    if (reviewTag !== null) {
       formatDOM = document.createElement(formatOuterTag ?? formatInnerTag);
       dom.appendChild(formatDOM);
     }
@@ -309,9 +312,9 @@ export class ReviewTextNode extends TextNode {
       formatDOM.setAttribute("spellcheck", "false");
     }
 
-    if (reviewOuterTag !== null) {
+    if (reviewTag !== null) {
       // add class to outer tag of ins and del
-      addClassNamesToElement(dom, config.theme[reviewOuterTag]);
+      addClassNamesToElement(dom, config.theme[reviewTag]);
     }
 
     const text = this.__text;
@@ -345,20 +348,18 @@ export class ReviewTextNode extends TextNode {
     const nextReview = this.__review;
     const prevFormat = prevNode.__format;
     const nextFormat = this.__format;
-    const prevReviewOuterTag = getReviewElementOuterTag(prevReview);
-    const nextReviewOuterTag = getReviewElementOuterTag(nextReview);
+    const prevReviewTag = getReviewElementTag(prevReview);
+    const nextReviewTag = getReviewElementTag(nextReview);
     const prevFormatOuterTag = getFormatElementOuterTag(prevFormat);
     const nextFormatOuterTag = getFormatElementOuterTag(nextFormat);
     const prevFormatInnerTag = getFormatElementInnerTag(prevFormat);
     const nextFormatInnerTag = getFormatElementInnerTag(nextFormat);
-    const prevTag =
-      prevReviewOuterTag ?? prevFormatOuterTag ?? prevFormatInnerTag;
-    const nextTag =
-      nextReviewOuterTag ?? nextFormatOuterTag ?? nextFormatInnerTag;
+    const prevTag = prevReviewTag ?? prevFormatOuterTag ?? prevFormatInnerTag;
+    const nextTag = nextReviewTag ?? nextFormatOuterTag ?? nextFormatInnerTag;
 
     if (
       prevTag !== nextTag ||
-      prevReviewOuterTag !== nextReviewOuterTag ||
+      prevReviewTag !== nextReviewTag ||
       prevFormatOuterTag !== nextFormatOuterTag ||
       prevFormatInnerTag !== nextFormatInnerTag
     ) {
