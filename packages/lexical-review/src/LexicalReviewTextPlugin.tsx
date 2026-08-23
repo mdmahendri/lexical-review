@@ -1,6 +1,6 @@
 import { JSX, useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { registerReviewText } from "./registerReviewText.js";
+import { registerReviewText } from "./registerReviewText";
 
 export function ReviewTextPlugin({
   contentEditable,

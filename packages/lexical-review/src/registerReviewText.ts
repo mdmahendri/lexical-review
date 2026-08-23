@@ -26,13 +26,13 @@ import {
   $markForDelete,
   $markPasteInsert,
   $markTypingInsert,
-} from "./ReviewSelection.js";
+} from "./ReviewSelection";
 import {
   $createReviewTextNode,
   $isReviewTextNode,
   ReviewTextNode,
   type TextReviewType,
-} from "./ReviewTextNode.js";
+} from "./ReviewTextNode";
 
 function $getReviewType(node: ReviewTextNode): TextReviewType {
   for (const reviewType of ["original", "insertion", "deletion"] as const) {

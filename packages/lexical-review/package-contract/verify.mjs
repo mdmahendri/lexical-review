@@ -157,13 +157,14 @@ try {
   );
   await copyFixtures(
     clientConsumer,
-    ["client.ts", "runtime-client.mjs"],
-    ["client.ts"],
+    ["client.ts", "cjs.cts", "runtime-client.mjs", "runtime-cjs.cjs"],
+    ["client.ts", "cjs.cts"],
   );
   await runTypecheck(serverConsumer);
   await runTypecheck(clientConsumer);
   await runRuntimeFixture(serverConsumer, "runtime-root.mjs");
   await runRuntimeFixture(clientConsumer, "runtime-client.mjs");
+  await runRuntimeFixture(clientConsumer, "runtime-cjs.cjs");
   console.log("package contract passed");
 } finally {
   await rm(temporaryDirectory, { force: true, recursive: true });
