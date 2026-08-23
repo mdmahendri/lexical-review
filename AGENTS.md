@@ -7,12 +7,12 @@
 - `packages/lexical-review/README.md` documents the package entrypoints; the default entrypoint is React-free and suitable for server-side model/serialization imports, while React/editor registration is exposed from `lexical-review/client`.
 - Root configuration includes Nx (`nx.json`), TypeScript (`tsconfig.json`), Vitest (`vitest.config.ts`), ESLint (`eslint.config.js`), and the pnpm workspace definition. Deployment and npm publishing workflows are under `.github/workflows/`.
 
-## Lexical Source and Version Reference
+## Lexical work
 
-- The sibling checkout at `../lexical-0.49` is the required local reference for Lexical work. It must match the exact Lexical version resolved by this repository's `package.json` files and `pnpm-lock.yaml` (currently `0.49.0`).
-- For Lexical inspection, API questions, implementation, debugging, or compatibility work, first read this repository's usage/tests and the matching source/tests in `../lexical-0.49`. Treat those local files as the primary version-specific reference.
-- For any Lexical-dependent task, verify that `../lexical-0.49` exists and matches the repository's resolved version before proceeding. If it is missing or mismatched, pause and ask the developer for the correct checkout or version.
-- Use online documentation or search only for information unavailable in the matching local checkout, such as release history or behavior introduced in another version.
+For Lexical source inspection, API questions, implementation, debugging, upgrades, peer-range changes, compatibility baselines, or package semver decisions, use `.agents/skills/lexical-compatibility/SKILL.md`.
+
+- Resolve exact versions from every relevant package manifest and `pnpm-lock.yaml`; prose and examples never define the current supported version.
+- The skill has read-only reference and compatibility-decision modes. It never creates a GitHub issue without explicit user authorization.
 
 ## Build, Test, and Development Commands
 
