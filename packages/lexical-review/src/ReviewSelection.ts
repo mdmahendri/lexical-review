@@ -14,7 +14,7 @@ import {
   $createReviewTextNode,
   $isReviewTextNode,
   ReviewTextNode,
-} from "./ReviewTextNode";
+} from "./ReviewTextNode.js";
 
 // perform delete according to node type
 function nodeDeleteByReviewType(

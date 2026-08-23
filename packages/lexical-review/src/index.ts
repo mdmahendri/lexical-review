@@ -3,4 +3,4 @@ export {
   $createReviewTextNode,
   $isReviewTextNode,
   type TextReviewType,
-} from "./ReviewTextNode";
+} from "./ReviewTextNode.js";
