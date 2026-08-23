@@ -15,9 +15,7 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
-    "paths": {
-      "lexical-review": ["../lexical-review/src/index.ts"]
-    }
+    "paths": {}
   },
   "references": [{ "path": "../lexical-review/tsconfig.build.json" }],
   "include": ["src"],
