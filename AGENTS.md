@@ -6,6 +6,7 @@
 - `packages/demo/src/` contains the React/Vite demonstration application and styling entrypoint.
 - `packages/lexical-review/README.md` documents the package entrypoints; the default entrypoint is React-free and suitable for server-side model/serialization imports, while React/editor registration is exposed from `lexical-review/client`.
 - Root configuration includes Nx (`nx.json`), TypeScript (`tsconfig.json`), Vitest (`vitest.config.ts`), ESLint (`eslint.config.js`), and the pnpm workspace definition. Deployment and npm publishing workflows are under `.github/workflows/`.
+- The published package architecture is recorded in [ADR 0001](docs/adr/0001-dual-module-package-build.md). Read it when reviewing package exports, module format, declaration emission, or build tooling; those changes are one architectural seam.
 
 ## Lexical work
 
