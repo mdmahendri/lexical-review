@@ -15,6 +15,11 @@
   "scripts": {
     "dev": "pnpm nx dev demo",
     "build:demo": "pnpm nx build demo",
+    "compatibility": "node scripts/compatibility/runner.mjs run",
+    "compatibility:matrix": "node scripts/compatibility/runner.mjs matrix",
+    "compatibility:validate": "node scripts/compatibility/runner.mjs validate",
+    "compatibility:verify": "node scripts/compatibility/runner.mjs verify",
+    "prettier:check": "pnpm exec prettier . --check",
     "preview:demo": "pnpm nx preview demo",
     "lint": "eslint .",
     "prettier": "pnpm exec prettier . --write",

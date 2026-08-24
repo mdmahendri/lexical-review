@@ -97,7 +97,16 @@ pnpm test:e2e                    # run Playwright tests
 pnpm build:demo                  # build the demo
 pnpm --filter lexical-review build
 pnpm lint
+pnpm compatibility               # frozen current-version build and unit checks
 ```
+
+The compatibility runner reads the exact build/unit versions and E2E boundary
+selections from `scripts/compatibility/lexical.json`. To investigate another exact
+Lexical release locally, run `pnpm compatibility -- --version 0.48.0`. The
+current version uses the committed frozen lockfile; another version uses an
+ephemeral no-lockfile install. Both paths verify that every resolved `lexical`
+and `@lexical/*` package is aligned and leave tracked dependency files
+unchanged.
 
 The library lives in `packages/lexical-review`, the demo lives in `packages/demo`, and focused tests are co-located with the library source.
 
