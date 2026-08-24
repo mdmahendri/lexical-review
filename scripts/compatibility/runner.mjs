@@ -13,8 +13,15 @@ const currentPackagePath = path.join(
   repositoryDirectory,
   "packages/lexical-review/package.json",
 );
+const lexicalPackageNames = [
+  "@lexical/clipboard",
+  "@lexical/react",
+  "@lexical/utils",
+  "lexical",
+];
 const exactVersionPattern =
   /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const lexicalPeerIntervalPattern = /^>=(\d+\.\d+\.\d+)\s+<(\d+\.\d+\.\d+)$/;
 function isExactVersion(version) {
   return typeof version === "string" && exactVersionPattern.test(version);
 }
@@ -31,17 +38,109 @@ export function loadCompatibilityConfig() {
   return readJson(compatibilityConfigPath);
 }
 
-export function getCurrentLexicalVersion() {
-  const packageJson = readJson(currentPackagePath);
-  const version = packageJson.devDependencies?.lexical;
+function parseNumericVersion(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (match == null) {
+    throw new Error(`Expected a numeric Lexical version, received ${version}.`);
+  }
 
-  if (!isExactVersion(version)) {
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+  };
+}
+
+function compareNumericVersions(left, right) {
+  return (
+    left.major - right.major ||
+    left.minor - right.minor ||
+    left.patch - right.patch
+  );
+}
+
+function getLexicalVersions(packageJson, field) {
+  const dependencies = packageJson[field] ?? {};
+  const missingPackages = lexicalPackageNames.filter(
+    (name) => dependencies[name] == null,
+  );
+
+  if (missingPackages.length > 0) {
     throw new Error(
-      `packages/lexical-review/package.json must declare an exact development lexical version, received ${String(version)}.`,
+      `${field} must declare all aligned Lexical packages: ${missingPackages.join(", ")}.`,
     );
   }
 
-  return version;
+  return lexicalPackageNames.map((name) => ({
+    name,
+    version: dependencies[name],
+  }));
+}
+
+function getAlignedLexicalDevelopmentVersion(packageJson) {
+  const versions = getLexicalVersions(packageJson, "devDependencies");
+  const invalidVersions = versions.filter(
+    ({ version }) => !isExactVersion(version),
+  );
+
+  if (invalidVersions.length > 0) {
+    throw new Error(
+      `development Lexical packages must use exact versions: ${invalidVersions
+        .map(({ name, version }) => `${name}@${String(version)}`)
+        .join(", ")}.`,
+    );
+  }
+
+  const uniqueVersions = new Set(versions.map(({ version }) => version));
+  if (uniqueVersions.size !== 1) {
+    throw new Error(
+      `development Lexical packages must use one exact version: ${versions
+        .map(({ name, version }) => `${name}@${version}`)
+        .join(", ")}.`,
+    );
+  }
+
+  return versions[0].version;
+}
+
+function getLexicalPeerInterval(packageJson) {
+  const ranges = getLexicalVersions(packageJson, "peerDependencies");
+  const uniqueRanges = new Set(ranges.map(({ version }) => version));
+
+  if (uniqueRanges.size !== 1) {
+    throw new Error(
+      `Lexical peerDependencies must use one shared range: ${ranges
+        .map(({ name, version }) => `${name}@${String(version)}`)
+        .join(", ")}.`,
+    );
+  }
+
+  const range = ranges[0].version;
+  const match = lexicalPeerIntervalPattern.exec(range);
+  if (match == null) {
+    throw new Error(
+      `Lexical peerDependencies must use one shared range in the form >=X.Y.Z <X.Y.Z, received ${range}.`,
+    );
+  }
+
+  const lower = parseNumericVersion(match[1]);
+  const upper = parseNumericVersion(match[2]);
+  if (
+    lower.major !== upper.major ||
+    compareNumericVersions(lower, upper) >= 0
+  ) {
+    throw new Error(
+      `Lexical peerDependencies must use one shared range within one major, received ${range}.`,
+    );
+  }
+
+  return { range, lower, lowerVersion: match[1], upper };
+}
+
+export function getCurrentLexicalVersion(
+  packageJson = readJson(currentPackagePath),
+) {
+  return getAlignedLexicalDevelopmentVersion(packageJson);
 }
 
 function validateVersionList(name, versions) {
@@ -66,9 +165,39 @@ function validateVersionList(name, versions) {
 export function validateCompatibilityConfig(
   config = loadCompatibilityConfig(),
   currentVersion = getCurrentLexicalVersion(),
+  packageJson = readJson(currentPackagePath),
 ) {
   validateVersionList("unitVersions", config.unitVersions);
   validateVersionList("e2eVersions", config.e2eVersions);
+
+  const developmentVersion = getCurrentLexicalVersion(packageJson);
+  if (developmentVersion !== currentVersion) {
+    throw new Error(
+      `The current Lexical version ${currentVersion} does not match the aligned development version ${developmentVersion}.`,
+    );
+  }
+
+  const peerInterval = getLexicalPeerInterval(packageJson);
+  const currentNumericVersion = parseNumericVersion(currentVersion);
+  if (
+    compareNumericVersions(currentNumericVersion, peerInterval.lower) < 0 ||
+    compareNumericVersions(currentNumericVersion, peerInterval.upper) >= 0
+  ) {
+    throw new Error(
+      `The current Lexical version ${currentVersion} is outside the shared peer range ${peerInterval.range}.`,
+    );
+  }
+
+  const expectedUpper = {
+    major: currentNumericVersion.major,
+    minor: currentNumericVersion.minor + 1,
+    patch: 0,
+  };
+  if (compareNumericVersions(peerInterval.upper, expectedUpper) !== 0) {
+    throw new Error(
+      `The shared peer range ${peerInterval.range} must end at the exclusive next minor ${expectedUpper.major}.${expectedUpper.minor}.0 after the current development version.`,
+    );
+  }
 
   if (!config.unitVersions.includes(currentVersion)) {
     throw new Error(
@@ -85,6 +214,61 @@ export function validateCompatibilityConfig(
     );
   }
 
+  if (!config.unitVersions.includes(peerInterval.lowerVersion)) {
+    throw new Error(
+      `unitVersions must include the exact lower-bound version ${peerInterval.lowerVersion}.`,
+    );
+  }
+
+  const missingMinorVersions = [];
+  for (
+    let minor = peerInterval.lower.minor;
+    minor < peerInterval.upper.minor;
+    minor += 1
+  ) {
+    const hasMinor = config.unitVersions.some((version) => {
+      const numericVersion = parseNumericVersion(version);
+      return (
+        numericVersion.major === peerInterval.lower.major &&
+        numericVersion.minor === minor
+      );
+    });
+    if (!hasMinor) {
+      missingMinorVersions.push(`${peerInterval.lower.major}.${minor}`);
+    }
+  }
+
+  if (missingMinorVersions.length > 0) {
+    throw new Error(
+      `unitVersions must include every Lexical minor in the shared peer range; missing: ${missingMinorVersions.join(", ")}.`,
+    );
+  }
+
+  const unsupportedUnitVersions = config.unitVersions.filter((version) => {
+    const numericVersion = parseNumericVersion(version);
+    return (
+      compareNumericVersions(numericVersion, peerInterval.lower) < 0 ||
+      compareNumericVersions(numericVersion, peerInterval.upper) >= 0
+    );
+  });
+  if (unsupportedUnitVersions.length > 0) {
+    throw new Error(
+      `unitVersions contains versions outside the shared peer range ${peerInterval.range}: ${unsupportedUnitVersions.join(", ")}.`,
+    );
+  }
+
+  if (!config.e2eVersions.includes(peerInterval.lowerVersion)) {
+    throw new Error(
+      `e2eVersions must include the exact lower-bound version ${peerInterval.lowerVersion}.`,
+    );
+  }
+
+  if (!config.e2eVersions.includes(currentVersion)) {
+    throw new Error(
+      `e2eVersions must include the exact current development version ${currentVersion}.`,
+    );
+  }
+
   return config;
 }
 
@@ -96,8 +280,9 @@ export function createCompatibilityMatrix(
   config = loadCompatibilityConfig(),
   currentVersion = getCurrentLexicalVersion(),
   requestedVersion = getRequestedVersion(),
+  packageJson = readJson(currentPackagePath),
 ) {
-  validateCompatibilityConfig(config, currentVersion);
+  validateCompatibilityConfig(config, currentVersion, packageJson);
 
   const versions =
     requestedVersion == null ? config.unitVersions : [requestedVersion];

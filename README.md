@@ -18,10 +18,17 @@ The review model tracks text changes. Formatting-only changes remain regular Lex
 
 ## Installation
 
-The current package targets Lexical `0.49.0` and `@lexical/react` `0.49.0`:
+The current compatibility baseline supports Lexical `0.45.0` through `0.49.x`.
+The `lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils`
+packages must use the same version:
 
 ```bash
-npm install lexical-review lexical@0.49.0 @lexical/react@0.49.0 react react-dom
+npm install lexical-review \
+  'lexical@>=0.45.0 <0.50.0' \
+  '@lexical/react@>=0.45.0 <0.50.0' \
+  '@lexical/clipboard@>=0.45.0 <0.50.0' \
+  '@lexical/utils@>=0.45.0 <0.50.0' \
+  react react-dom
 ```
 
 ## Public entrypoints

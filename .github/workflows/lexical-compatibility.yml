@@ -10,6 +10,7 @@ on:
       - ".prettierrc"
       - "eslint.config.js"
       - "package.json"
+      - "packages/demo/package.json"
       - "packages/lexical-review/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
