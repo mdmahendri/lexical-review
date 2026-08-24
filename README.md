@@ -92,6 +92,7 @@ The repository requires Node `>=22.12.0` and pnpm `11`.
 pnpm install
 pnpm dev                         # start the demo
 pnpm test --run                  # run unit tests
+pnpm test:package                # build and verify the published package entrypoints
 pnpm test:e2e                    # run Playwright tests
 pnpm build:demo                  # build the demo
 pnpm --filter lexical-review build

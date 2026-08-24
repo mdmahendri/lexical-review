@@ -19,6 +19,7 @@
     "lint": "eslint .",
     "prettier": "pnpm exec prettier . --write",
     "test": "vitest --disable-console-intercept",
+    "test:package": "pnpm --filter lexical-review build && node packages/lexical-review/package-contract/verify.mjs",
     "test:e2e": "playwright test",
     "typecheck:e2e": "tsc --noEmit -p packages/demo/e2e/tsconfig.json"
   },
