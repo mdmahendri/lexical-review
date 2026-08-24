@@ -1,5 +1,11 @@
 # lexical-review
 
+## Compatibility
+
+The v3 compatibility baseline supports Lexical `0.45.0` through `0.49.x`.
+`lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils` must
+be installed at the same version within that range.
+
 ## Entrypoints
 
 - React-free core entrypoint: `import { ReviewTextNode } from "lexical-review"`.
