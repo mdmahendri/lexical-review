@@ -3,15 +3,14 @@
 
 const assert = require("node:assert/strict");
 
-const root = require("lexical-review");
 const client = require("lexical-review/client");
 
-assert.equal(typeof root.ReviewTextNode, "function");
-assert.equal(typeof root.$createReviewTextNode, "function");
-assert.equal(typeof root.$isReviewTextNode, "function");
 assert.equal(typeof client.ReviewTextPlugin, "function");
 assert.equal(typeof client.registerReviewText, "function");
 assert.equal("ReviewTextNode" in client, false);
-assert.equal("ReviewTextPlugin" in root, false);
+assert.equal("$createReviewTextNode" in client, false);
+assert.equal("$isReviewTextNode" in client, false);
 
-console.log("commonjs entrypoints resolved with their expected exports");
+console.log(
+  "client entrypoint resolved with its CommonJS editor runtime exports",
+);

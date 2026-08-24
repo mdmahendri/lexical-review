@@ -139,9 +139,9 @@ const temporaryDirectory = await mkdtemp(
 );
 
 try {
-  const serverConsumer = await createConsumer(
+  const coreConsumer = await createConsumer(
     temporaryDirectory,
-    "server",
+    "core",
     coreDependencies,
   );
   const clientConsumer = await createConsumer(
@@ -151,20 +151,21 @@ try {
   );
 
   await copyFixtures(
-    serverConsumer,
-    ["root.ts", "runtime-root.mjs"],
-    ["root.ts"],
+    coreConsumer,
+    ["root.ts", "cjs-root.cts", "runtime-root.mjs", "runtime-root.cjs"],
+    ["root.ts", "cjs-root.cts"],
   );
   await copyFixtures(
     clientConsumer,
-    ["client.ts", "cjs.cts", "runtime-client.mjs", "runtime-cjs.cjs"],
-    ["client.ts", "cjs.cts"],
+    ["client.ts", "cjs-client.cts", "runtime-client.mjs", "runtime-client.cjs"],
+    ["client.ts", "cjs-client.cts"],
   );
-  await runTypecheck(serverConsumer);
+  await runTypecheck(coreConsumer);
   await runTypecheck(clientConsumer);
-  await runRuntimeFixture(serverConsumer, "runtime-root.mjs");
+  await runRuntimeFixture(coreConsumer, "runtime-root.mjs");
+  await runRuntimeFixture(coreConsumer, "runtime-root.cjs");
   await runRuntimeFixture(clientConsumer, "runtime-client.mjs");
-  await runRuntimeFixture(clientConsumer, "runtime-cjs.cjs");
+  await runRuntimeFixture(clientConsumer, "runtime-client.cjs");
   console.log("package contract passed");
 } finally {
   await rm(temporaryDirectory, { force: true, recursive: true });
