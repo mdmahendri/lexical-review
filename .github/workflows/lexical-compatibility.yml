@@ -11,7 +11,9 @@ on:
       - "eslint.config.js"
       - "package.json"
       - "packages/demo/package.json"
+      - "packages/demo/e2e/**"
       - "packages/lexical-review/**"
+      - "playwright.config.ts"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig.json"
@@ -75,3 +77,47 @@ jobs:
 
       - name: Run compatibility checks
         run: pnpm compatibility -- --version "${{ matrix.version }}"
+
+  e2e:
+    name: E2E Lexical ${{ matrix.lexicalVersion }} React ${{ matrix.reactVersion }} (${{ matrix.project }})
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.e2e) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Run browser compatibility checks
+        env:
+          PLAYWRIGHT_INSTALL_BROWSERS: "true"
+        run: >-
+          pnpm compatibility:e2e --
+          --version "${{ matrix.lexicalVersion }}"
+          --react-version "${{ matrix.reactVersion }}"
+          --project "${{ matrix.project }}"
+
+      - name: Upload Playwright diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.lexicalVersion }}-${{ matrix.reactVersion }}-${{ matrix.project }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore

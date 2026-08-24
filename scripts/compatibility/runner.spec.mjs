@@ -1,40 +1,52 @@
 import { describe, expect, it } from "vitest";
 import {
   assertLexicalGraphAligned,
+  assertReactGraphAligned,
   createCompatibilityMatrix,
+  createE2ECompatibilityMatrix,
+  getCurrentReactVersion,
   validateCompatibilityConfig,
 } from "./runner.mjs";
 
 const LEXICAL_PEER_RANGE = ">=0.45.0 <0.50.0";
 const LEXICAL_VERSIONS = ["0.45.0", "0.46.0", "0.47.0", "0.48.0", "0.49.0"];
+const E2E_REACT_VERSIONS = ["18.3.1"];
 const lexicalPackageManifest = {
   peerDependencies: {
     "@lexical/clipboard": LEXICAL_PEER_RANGE,
     "@lexical/react": LEXICAL_PEER_RANGE,
     "@lexical/utils": LEXICAL_PEER_RANGE,
     lexical: LEXICAL_PEER_RANGE,
+    react: "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
   },
   devDependencies: {
     "@lexical/clipboard": "0.49.0",
     "@lexical/react": "0.49.0",
     "@lexical/utils": "0.49.0",
     lexical: "0.49.0",
+    react: "^19.2.3",
+    "react-dom": "^19.2.3",
   },
+};
+const compatibilityConfig = {
+  unitVersions: LEXICAL_VERSIONS,
+  e2eVersions: ["0.45.0", "0.49.0"],
+  e2eReactVersions: E2E_REACT_VERSIONS,
 };
 
 describe("Lexical compatibility configuration", () => {
   it("keeps the current lane and E2E boundaries in the unit matrix", () => {
-    const config = {
-      unitVersions: LEXICAL_VERSIONS,
-      e2eVersions: ["0.45.0", "0.49.0"],
-    };
-
     expect(
-      validateCompatibilityConfig(config, "0.49.0", lexicalPackageManifest),
-    ).toBe(config);
+      validateCompatibilityConfig(
+        compatibilityConfig,
+        "0.49.0",
+        lexicalPackageManifest,
+      ),
+    ).toBe(compatibilityConfig);
     expect(
       createCompatibilityMatrix(
-        config,
+        compatibilityConfig,
         "0.49.0",
         undefined,
         lexicalPackageManifest,
@@ -48,12 +60,71 @@ describe("Lexical compatibility configuration", () => {
     ]);
   });
 
+  it("creates browser lanes without a full React-by-Lexical matrix", () => {
+    expect(
+      createE2ECompatibilityMatrix(
+        compatibilityConfig,
+        "0.49.0",
+        undefined,
+        lexicalPackageManifest,
+      ),
+    ).toEqual([
+      {
+        lexicalVersion: "0.45.0",
+        reactVersion: "19.2.3",
+        project: "all",
+      },
+      {
+        lexicalVersion: "0.49.0",
+        reactVersion: "19.2.3",
+        project: "all",
+      },
+      {
+        lexicalVersion: "0.45.0",
+        reactVersion: "18.3.1",
+        project: "chromium",
+      },
+      {
+        lexicalVersion: "0.49.0",
+        reactVersion: "18.3.1",
+        project: "chromium",
+      },
+    ]);
+  });
+
+  it("derives one current React version from aligned development dependencies", () => {
+    expect(getCurrentReactVersion(lexicalPackageManifest)).toBe("19.2.3");
+  });
+
+  it("uses a requested exact version as a temporary E2E lane", () => {
+    expect(
+      createE2ECompatibilityMatrix(
+        compatibilityConfig,
+        "0.49.0",
+        "0.48.1",
+        lexicalPackageManifest,
+      ),
+    ).toEqual([
+      {
+        lexicalVersion: "0.48.1",
+        reactVersion: "19.2.3",
+        project: "all",
+      },
+      {
+        lexicalVersion: "0.48.1",
+        reactVersion: "18.3.1",
+        project: "chromium",
+      },
+    ]);
+  });
+
   it("rejects a gap between supported Lexical minors", () => {
     expect(() =>
       validateCompatibilityConfig(
         {
           unitVersions: ["0.45.0", "0.46.0", "0.48.0", "0.49.0"],
           e2eVersions: ["0.45.0", "0.49.0"],
+          e2eReactVersions: E2E_REACT_VERSIONS,
         },
         "0.49.0",
         lexicalPackageManifest,
@@ -67,6 +138,7 @@ describe("Lexical compatibility configuration", () => {
         {
           unitVersions: LEXICAL_VERSIONS,
           e2eVersions: ["0.45.0", "0.49.0"],
+          e2eReactVersions: E2E_REACT_VERSIONS,
         },
         "0.49.0",
         {
@@ -86,6 +158,7 @@ describe("Lexical compatibility configuration", () => {
         {
           unitVersions: LEXICAL_VERSIONS,
           e2eVersions: ["0.45.0", "0.49.0"],
+          e2eReactVersions: E2E_REACT_VERSIONS,
         },
         "0.49.0",
         {
@@ -107,6 +180,7 @@ describe("Lexical compatibility configuration", () => {
         {
           unitVersions: LEXICAL_VERSIONS,
           e2eVersions: ["0.46.0", "0.48.0"],
+          e2eReactVersions: E2E_REACT_VERSIONS,
         },
         "0.49.0",
         lexicalPackageManifest,
@@ -120,6 +194,7 @@ describe("Lexical compatibility configuration", () => {
         {
           unitVersions: LEXICAL_VERSIONS,
           e2eVersions: ["0.45.0", "0.49.0"],
+          e2eReactVersions: E2E_REACT_VERSIONS,
         },
         "0.49.0",
         {
@@ -139,6 +214,7 @@ describe("Lexical compatibility configuration", () => {
         {
           unitVersions: LEXICAL_VERSIONS,
           e2eVersions: ["0.44.0"],
+          e2eReactVersions: E2E_REACT_VERSIONS,
         },
         "0.49.0",
         lexicalPackageManifest,
@@ -205,5 +281,44 @@ describe("Lexical package graph verification", () => {
       { name: "@lexical/utils", version: "0.49.0" },
       { name: "lexical", version: "0.49.0" },
     ]);
+  });
+});
+
+describe("React package graph verification", () => {
+  it("accepts one exact React and ReactDOM version", () => {
+    expect(
+      assertReactGraphAligned(
+        {
+          dependencies: {
+            react: { from: "react", version: "18.3.1" },
+            "react-dom": {
+              from: "react-dom",
+              version: "18.3.1",
+              dependencies: {
+                react: { from: "react", version: "18.3.1" },
+              },
+            },
+          },
+        },
+        "18.3.1",
+      ),
+    ).toEqual([
+      { name: "react-dom", version: "18.3.1" },
+      { name: "react", version: "18.3.1" },
+    ]);
+  });
+
+  it("rejects React and ReactDOM version drift", () => {
+    expect(() =>
+      assertReactGraphAligned(
+        {
+          dependencies: {
+            react: { from: "react", version: "18.3.1" },
+            "react-dom": { from: "react-dom", version: "19.2.3" },
+          },
+        },
+        "18.3.1",
+      ),
+    ).toThrow("react-dom@19.2.3");
   });
 });

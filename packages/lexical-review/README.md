@@ -6,6 +6,11 @@ The v3 compatibility baseline supports Lexical `0.45.0` through `0.49.x`.
 `lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils` must
 be installed at the same version within that range.
 
+The tested React peer range is React 18 and React 19. `react` and `react-dom`
+must use the same version. Browser compatibility checks cover Chromium,
+Firefox, and Playwright WebKit; Playwright WebKit results do not certify native
+Safari or iOS Safari.
+
 ## Entrypoints
 
 - React-free core entrypoint: `import { ReviewTextNode } from "lexical-review"`.

@@ -31,6 +31,11 @@ npm install lexical-review \
   react react-dom
 ```
 
+The tested React peer range is React 18 and React 19, with `react` and
+`react-dom` kept on the same version. Browser compatibility checks run the
+focused editor scenarios in Chromium, Firefox, and Playwright WebKit. WebKit
+coverage is not native Safari or iOS Safari certification.
+
 ## Public entrypoints
 
 | Import                  | Exports                                                                              |
@@ -101,12 +106,21 @@ pnpm dev                         # start the demo
 pnpm test --run                  # run unit tests
 pnpm test:package                # build and verify the published package entrypoints
 pnpm test:e2e                    # run Playwright tests
+pnpm test:e2e:install            # install Chromium, Firefox, and Playwright WebKit on Linux
+pnpm test:e2e:webkit             # run only the Playwright WebKit project
+pnpm test:e2e:install:webkit     # install only Playwright WebKit on Linux
 pnpm build:demo                  # build the demo
 pnpm --filter lexical-review build
 pnpm lint
 pnpm compatibility               # run configured Lexical compatibility checks
 pnpm compatibility -- --version 0.48.0 # run a focused exact-version lane
+pnpm compatibility:e2e -- --version 0.45.0 --react-version 19.2.3
+pnpm compatibility:e2e -- --version 0.45.0 --react-version 18.3.1 --project chromium
 ```
+
+The Lexical compatibility workflow can also be dispatched with an exact
+`version` input for a temporary browser-risk lane; it reuses the same boundary
+workflow without adding a permanent matrix entry.
 
 The library lives in `packages/lexical-review`, the demo lives in `packages/demo`, and focused tests are co-located with the library source.
 
