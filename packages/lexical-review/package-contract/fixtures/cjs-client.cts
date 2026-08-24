@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-
 import client = require("lexical-review/client");
 import type { JSX } from "react";
 import type { LexicalEditor } from "lexical";

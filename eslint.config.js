@@ -12,6 +12,20 @@ export default [
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    files: ["packages/lexical-review/package-contract/fixtures/*.{cts,cjs}"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    files: ["packages/lexical-review/package-contract/fixtures/*.cjs"],
+    languageOptions: {
+      globals: {
+        require: "readonly",
+      },
+    },
+  },
+  {
     files: ["packages/*/*.{ts,tsx}"],
     rules: {
       ...pluginReact.configs.flat.recommended,

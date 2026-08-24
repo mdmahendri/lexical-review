@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-/* global require */
-
 const assert = require("node:assert/strict");
 
 const client = require("lexical-review/client");

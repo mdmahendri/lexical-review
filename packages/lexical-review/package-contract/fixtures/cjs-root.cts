@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-
 import review = require("lexical-review");
 
 const reviewType: review.TextReviewType = "original";
