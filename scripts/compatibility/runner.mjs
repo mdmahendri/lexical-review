@@ -66,40 +66,30 @@ function compareNumericVersions(left, right) {
   );
 }
 
-function getLexicalVersions(packageJson, field) {
+function getPackageVersions(packageJson, field, packageNames, label) {
   const dependencies = packageJson[field] ?? {};
-  const missingPackages = lexicalPackageNames.filter(
+  const missingPackages = packageNames.filter(
     (name) => dependencies[name] == null,
   );
 
   if (missingPackages.length > 0) {
     throw new Error(
-      `${field} must declare all aligned Lexical packages: ${missingPackages.join(", ")}.`,
+      `${field} must declare all aligned ${label} packages: ${missingPackages.join(", ")}.`,
     );
   }
 
-  return lexicalPackageNames.map((name) => ({
+  return packageNames.map((name) => ({
     name,
     version: dependencies[name],
   }));
 }
 
+function getLexicalVersions(packageJson, field) {
+  return getPackageVersions(packageJson, field, lexicalPackageNames, "Lexical");
+}
+
 function getReactVersions(packageJson, field) {
-  const dependencies = packageJson[field] ?? {};
-  const missingPackages = reactPackageNames.filter(
-    (name) => dependencies[name] == null,
-  );
-
-  if (missingPackages.length > 0) {
-    throw new Error(
-      `${field} must declare aligned React packages: ${missingPackages.join(", ")}.`,
-    );
-  }
-
-  return reactPackageNames.map((name) => ({
-    name,
-    version: dependencies[name],
-  }));
+  return getPackageVersions(packageJson, field, reactPackageNames, "React");
 }
 
 function getDevelopmentVersion(version, field, packageName) {
