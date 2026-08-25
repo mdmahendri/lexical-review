@@ -935,8 +935,8 @@ function printMatrix(githubOutput) {
   ];
 
   if (githubOutput) {
-    console.log(`include=${JSON.stringify(matrix.include)}`);
-    console.log(`e2e=${JSON.stringify(e2eLanes)}`);
+    console.log(`unitMatrix=${JSON.stringify(matrix.include)}`);
+    console.log(`e2eMatrix=${JSON.stringify(e2eLanes)}`);
     return;
   }
 
