@@ -351,7 +351,7 @@ export function validateCompatibilityConfig(
 
   if (unsupportedReactVersions.length > 0) {
     throw new Error(
-      `React peerDependencies ${reactPeerRange} do not include tested versions: ${unsupportedReactVersions.join(", ")}.`,
+      `React peer range "${reactPeerRange}" does not cover the React major version(s) configured for compatibility: ${unsupportedReactVersions.join(", ")}.`,
     );
   }
 
