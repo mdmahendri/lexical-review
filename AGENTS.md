@@ -15,6 +15,13 @@ For Lexical source inspection, API questions, implementation, debugging, upgrade
 - Resolve exact versions from every relevant package manifest and `pnpm-lock.yaml`; prose and examples never define the current supported version.
 - The skill has read-only reference and compatibility-decision modes. It never creates a GitHub issue without explicit user authorization.
 
+## Web Editor Revisions source inspection
+
+- Use the sibling checkout at `../web-editor-revisions` first when it exists.
+- Resolve pinned versions from its local Git history with `git show <commit>:<path>` instead of assuming the checked-out branch is authoritative.
+- Use GitHub or other network access only when the required ref is unavailable locally or current remote state is itself the subject of the investigation.
+- Treat changes in the sibling working tree as user-owned; do not modify, stash, discard, or commit them without explicit authorization.
+
 ## Build, Test, and Development Commands
 
 Run `pnpm install` for local setup; CI uses `pnpm install --frozen-lockfile`. The repository requires Node `^22.13.0` or `>=24` and pnpm 11.
