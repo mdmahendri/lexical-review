@@ -4,6 +4,7 @@ import {
   assertReactGraphAligned,
   createCompatibilityMatrix,
   createE2ECompatibilityMatrix,
+  getCurrentLexicalVersion,
   getCurrentReactVersion,
   validateCompatibilityConfig,
 } from "./runner.mjs";
@@ -94,6 +95,76 @@ describe("Lexical compatibility configuration", () => {
 
   it("derives one current React version from aligned development dependencies", () => {
     expect(getCurrentReactVersion(lexicalPackageManifest)).toBe("19.2.3");
+  });
+
+  it("accepts semantically equivalent React peer ranges", () => {
+    expect(
+      validateCompatibilityConfig(compatibilityConfig, "0.49.0", {
+        ...lexicalPackageManifest,
+        peerDependencies: {
+          ...lexicalPackageManifest.peerDependencies,
+          react: ">=18.0.0 <20.0.0",
+          "react-dom": ">=18.0.0 <20.0.0",
+        },
+      }),
+    ).toBe(compatibilityConfig);
+  });
+
+  it("rejects empty React peer ranges", () => {
+    expect(() =>
+      validateCompatibilityConfig(compatibilityConfig, "0.49.0", {
+        ...lexicalPackageManifest,
+        peerDependencies: {
+          ...lexicalPackageManifest.peerDependencies,
+          react: "",
+          "react-dom": "",
+        },
+      }),
+    ).toThrow("React peerDependencies must use a valid semver range");
+  });
+
+  it("rejects development versions that are not valid SemVer", () => {
+    expect(() =>
+      getCurrentLexicalVersion({
+        ...lexicalPackageManifest,
+        devDependencies: {
+          ...lexicalPackageManifest.devDependencies,
+          "@lexical/clipboard": "0.49.00",
+          "@lexical/react": "0.49.00",
+          "@lexical/utils": "0.49.00",
+          lexical: "0.49.00",
+        },
+      }),
+    ).toThrow("development Lexical packages must use exact versions");
+
+    expect(() =>
+      getCurrentReactVersion({
+        ...lexicalPackageManifest,
+        devDependencies: {
+          ...lexicalPackageManifest.devDependencies,
+          react: "^019.2.3",
+          "react-dom": "^019.2.3",
+        },
+      }),
+    ).toThrow("must use an exact or caret version");
+  });
+
+  it("keeps the Lexical peer range policy explicit", () => {
+    expect(() =>
+      validateCompatibilityConfig(compatibilityConfig, "0.49.0", {
+        ...lexicalPackageManifest,
+        peerDependencies: Object.fromEntries(
+          Object.entries(lexicalPackageManifest.peerDependencies).map(
+            ([name, version]) => [
+              name,
+              name.startsWith("@lexical/") || name === "lexical"
+                ? "^0.45.0"
+                : version,
+            ],
+          ),
+        ),
+      }),
+    ).toThrow("Lexical peerDependencies must use one shared range");
   });
 
   it("uses a requested exact version as a temporary E2E lane", () => {

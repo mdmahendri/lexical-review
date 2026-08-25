@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import semver from "semver";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryDirectory = path.resolve(scriptDirectory, "../..");
@@ -21,12 +22,36 @@ const lexicalPackageNames = [
 ];
 const reactPackageNames = ["react", "react-dom"];
 const playwrightProjects = ["chromium", "firefox", "webkit"];
-const exactVersionPattern =
-  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const developmentVersionPattern = /^\^?(\d+\.\d+\.\d+)$/;
-const lexicalPeerIntervalPattern = /^>=(\d+\.\d+\.\d+)\s+<(\d+\.\d+\.\d+)$/;
+function parseExactVersion(version) {
+  if (typeof version !== "string") {
+    return undefined;
+  }
+
+  const parsed = semver.parse(version);
+  if (parsed == null) {
+    return undefined;
+  }
+
+  const buildSuffix =
+    parsed.build.length > 0 ? `+${parsed.build.join(".")}` : "";
+  return `${parsed.version}${buildSuffix}` === version ? parsed : undefined;
+}
+
 function isExactVersion(version) {
-  return typeof version === "string" && exactVersionPattern.test(version);
+  return parseExactVersion(version) != null;
+}
+
+function parseStableVersion(version) {
+  const parsed = parseExactVersion(version);
+  if (
+    parsed == null ||
+    parsed.prerelease.length > 0 ||
+    parsed.build.length > 0
+  ) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 function isLexicalPackage(name) {
@@ -45,25 +70,13 @@ export function loadCompatibilityConfig() {
   return readJson(compatibilityConfigPath);
 }
 
-function parseNumericVersion(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
-  if (match == null) {
-    throw new Error(`Expected a numeric Lexical version, received ${version}.`);
+function parseVersion(version) {
+  const parsed = parseExactVersion(version);
+  if (parsed == null) {
+    throw new Error(`Expected an exact version, received ${version}.`);
   }
 
-  return {
-    major: Number(match[1]),
-    minor: Number(match[2]),
-    patch: Number(match[3]),
-  };
-}
-
-function compareNumericVersions(left, right) {
-  return (
-    left.major - right.major ||
-    left.minor - right.minor ||
-    left.patch - right.patch
-  );
+  return parsed;
 }
 
 function getPackageVersions(packageJson, field, packageNames, label) {
@@ -99,14 +112,15 @@ function getDevelopmentVersion(version, field, packageName) {
     );
   }
 
-  const match = developmentVersionPattern.exec(version);
-  if (match == null) {
+  const candidateVersion = version.startsWith("^") ? version.slice(1) : version;
+  const parsed = parseStableVersion(candidateVersion);
+  if (parsed == null) {
     throw new Error(
       `${field} ${packageName} must use an exact or caret version, received ${version}.`,
     );
   }
 
-  return match[1];
+  return parsed.version;
 }
 
 function getAlignedLexicalDevelopmentVersion(packageJson) {
@@ -148,25 +162,36 @@ function getLexicalPeerInterval(packageJson) {
   }
 
   const range = ranges[0].version;
-  const match = lexicalPeerIntervalPattern.exec(range);
-  if (match == null) {
+  const rangeParts = typeof range === "string" ? range.trim().split(/\s+/) : [];
+  const lowerToken = rangeParts[0];
+  const upperToken = rangeParts[1];
+  const hasExpectedShape =
+    rangeParts.length === 2 &&
+    lowerToken?.startsWith(">=") === true &&
+    upperToken?.startsWith("<") === true &&
+    upperToken?.startsWith("<=") !== true;
+
+  if (!hasExpectedShape || semver.validRange(range) == null) {
     throw new Error(
       `Lexical peerDependencies must use one shared range in the form >=X.Y.Z <X.Y.Z, received ${range}.`,
     );
   }
 
-  const lower = parseNumericVersion(match[1]);
-  const upper = parseNumericVersion(match[2]);
-  if (
-    lower.major !== upper.major ||
-    compareNumericVersions(lower, upper) >= 0
-  ) {
+  const lower = parseStableVersion(lowerToken.slice(2));
+  const upper = parseStableVersion(upperToken.slice(1));
+  if (lower == null || upper == null) {
+    throw new Error(
+      `Lexical peerDependencies must use one shared range in the form >=X.Y.Z <X.Y.Z, received ${range}.`,
+    );
+  }
+
+  if (lower.major !== upper.major || semver.compare(lower, upper) >= 0) {
     throw new Error(
       `Lexical peerDependencies must use one shared range within one major, received ${range}.`,
     );
   }
 
-  return { range, lower, lowerVersion: match[1], upper };
+  return { range, lower, lowerVersion: lower.version, upper };
 }
 
 export function getCurrentLexicalVersion(
@@ -248,10 +273,10 @@ export function validateCompatibilityConfig(
   }
 
   const peerInterval = getLexicalPeerInterval(packageJson);
-  const currentNumericVersion = parseNumericVersion(currentVersion);
+  const currentVersionInfo = parseVersion(currentVersion);
   if (
-    compareNumericVersions(currentNumericVersion, peerInterval.lower) < 0 ||
-    compareNumericVersions(currentNumericVersion, peerInterval.upper) >= 0
+    semver.compare(currentVersionInfo, peerInterval.lower) < 0 ||
+    semver.compare(currentVersionInfo, peerInterval.upper) >= 0
   ) {
     throw new Error(
       `The current Lexical version ${currentVersion} is outside the shared peer range ${peerInterval.range}.`,
@@ -259,11 +284,12 @@ export function validateCompatibilityConfig(
   }
 
   const expectedUpper = {
-    major: currentNumericVersion.major,
-    minor: currentNumericVersion.minor + 1,
+    major: currentVersionInfo.major,
+    minor: currentVersionInfo.minor + 1,
     patch: 0,
   };
-  if (compareNumericVersions(peerInterval.upper, expectedUpper) !== 0) {
+  const expectedUpperVersion = `${expectedUpper.major}.${expectedUpper.minor}.${expectedUpper.patch}`;
+  if (semver.compare(peerInterval.upper, expectedUpperVersion) !== 0) {
     throw new Error(
       `The shared peer range ${peerInterval.range} must end at the exclusive next minor ${expectedUpper.major}.${expectedUpper.minor}.0 after the current development version.`,
     );
@@ -297,10 +323,10 @@ export function validateCompatibilityConfig(
     minor += 1
   ) {
     const hasMinor = config.unitVersions.some((version) => {
-      const numericVersion = parseNumericVersion(version);
+      const versionInfo = parseVersion(version);
       return (
-        numericVersion.major === peerInterval.lower.major &&
-        numericVersion.minor === minor
+        versionInfo.major === peerInterval.lower.major &&
+        versionInfo.minor === minor
       );
     });
     if (!hasMinor) {
@@ -315,10 +341,10 @@ export function validateCompatibilityConfig(
   }
 
   const unsupportedUnitVersions = config.unitVersions.filter((version) => {
-    const numericVersion = parseNumericVersion(version);
+    const versionInfo = parseVersion(version);
     return (
-      compareNumericVersions(numericVersion, peerInterval.lower) < 0 ||
-      compareNumericVersions(numericVersion, peerInterval.upper) >= 0
+      semver.compare(versionInfo, peerInterval.lower) < 0 ||
+      semver.compare(versionInfo, peerInterval.upper) >= 0
     );
   });
   if (unsupportedUnitVersions.length > 0) {
@@ -341,13 +367,20 @@ export function validateCompatibilityConfig(
 
   const currentReactVersion = getCurrentReactVersion(packageJson);
   const reactPeerRange = getReactPeerRange(packageJson);
+  if (
+    typeof reactPeerRange !== "string" ||
+    reactPeerRange.trim() === "" ||
+    semver.validRange(reactPeerRange) == null
+  ) {
+    throw new Error(
+      `React peerDependencies must use a valid semver range, received ${reactPeerRange}.`,
+    );
+  }
+
   const unsupportedReactVersions = [
     currentReactVersion,
     ...config.e2eReactVersions,
-  ].filter((version) => {
-    const major = parseNumericVersion(version).major;
-    return !reactPeerRange.includes(`^${major}.0.0`);
-  });
+  ].filter((version) => !semver.satisfies(version, reactPeerRange));
 
   if (unsupportedReactVersions.length > 0) {
     throw new Error(
