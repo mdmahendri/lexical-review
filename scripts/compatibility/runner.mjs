@@ -275,15 +275,13 @@ function validateVersionList(name, versions) {
   }
 }
 
-export function validateCompatibilityConfig(
-  config = loadCompatibilityConfig(),
-  currentVersion = getCurrentLexicalVersion(),
-  packageJson = readJson(currentPackagePath),
-) {
+function validateVersionLists(config) {
   validateVersionList("unitVersions", config.unitVersions);
   validateVersionList("e2eVersions", config.e2eVersions);
   validateVersionList("e2eReactVersions", config.e2eReactVersions);
+}
 
+function validateLexicalCompatibility(config, currentVersion, packageJson) {
   const developmentVersion = getCurrentLexicalVersion(packageJson);
   if (developmentVersion !== currentVersion) {
     throw new Error(
@@ -383,7 +381,9 @@ export function validateCompatibilityConfig(
       `e2eVersions must include the exact current development version ${currentVersion}.`,
     );
   }
+}
 
+function validateReactCompatibility(config, packageJson) {
   const currentReactVersion = getCurrentReactVersion(packageJson);
   const reactPeerRange = getReactPeerRange(packageJson);
   if (
@@ -406,7 +406,16 @@ export function validateCompatibilityConfig(
       `React peer range "${reactPeerRange}" does not cover the React major version(s) configured for compatibility: ${unsupportedReactVersions.join(", ")}.`,
     );
   }
+}
 
+export function validateCompatibilityConfig(
+  config = loadCompatibilityConfig(),
+  currentVersion = getCurrentLexicalVersion(),
+  packageJson = readJson(currentPackagePath),
+) {
+  validateVersionLists(config);
+  validateLexicalCompatibility(config, currentVersion, packageJson);
+  validateReactCompatibility(config, packageJson);
   return config;
 }
 
