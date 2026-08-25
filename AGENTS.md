@@ -17,7 +17,7 @@ For Lexical source inspection, API questions, implementation, debugging, upgrade
 
 ## Build, Test, and Development Commands
 
-Run `pnpm install` for local setup; CI uses `pnpm install --frozen-lockfile`. The repository requires Node `>=22.12.0` and pnpm 11.
+Run `pnpm install` for local setup; CI uses `pnpm install --frozen-lockfile`. The repository requires Node `^22.13.0` or `>=24` and pnpm 11.
 
 - `pnpm dev` — start the demo through Nx.
 - `pnpm build:demo` — type-check and build the Vite demo.

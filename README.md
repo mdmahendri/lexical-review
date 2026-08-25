@@ -80,7 +80,7 @@ export function ReviewEditor() {
 
 ## Development
 
-The repository requires Node `>=22.12.0` and pnpm `11`.
+The repository requires Node `^22.13.0` or `>=24` and pnpm `11`.
 
 ```bash
 pnpm install

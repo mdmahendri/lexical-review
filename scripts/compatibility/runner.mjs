@@ -668,6 +668,7 @@ function readPnpmJson(args, env = process.env) {
   } catch (error) {
     throw new Error(
       `pnpm ${args.join(" ")} did not return valid JSON: ${error instanceof Error ? error.message : String(error)}.`,
+      { cause: error },
     );
   }
 }
