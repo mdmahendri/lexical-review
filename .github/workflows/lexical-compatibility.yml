@@ -37,18 +37,14 @@ jobs:
       e2eMatrix: ${{ steps.resolve.outputs.e2eMatrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@v2
         with:
-          run_install: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
+          runtime: node@24
+          cache: true
+          install: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -71,18 +67,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@v2
         with:
-          run_install: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
+          runtime: node@24
+          cache: true
+          install: false
 
       - name: Run compatibility checks
         run: pnpm compatibility -- --version "${{ matrix.version }}"
@@ -99,18 +91,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@v2
         with:
-          run_install: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
+          runtime: node@24
+          cache: true
+          install: false
 
       - name: Run browser compatibility checks
         env:
@@ -123,7 +111,7 @@ jobs:
 
       - name: Upload Playwright diagnostics
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-${{ matrix.lexicalVersion }}-${{ matrix.reactVersion }}-${{ matrix.project }}
           path: |

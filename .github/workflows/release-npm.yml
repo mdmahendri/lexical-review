@@ -12,19 +12,14 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@v2
         with:
-          run_install: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-          registry-url: https://registry.npmjs.org
+          runtime: node@24
+          cache: true
+          install: false
 
       - name: Install dependencies Frozen
         run: pnpm --filter lexical-review install --frozen-lockfile
@@ -33,4 +28,6 @@ jobs:
         run: pnpm --filter lexical-review build
 
       - name: Publish to NPM registry
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
         run: pnpm publish packages/lexical-review --access public --no-git-checks --provenance
