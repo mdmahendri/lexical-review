@@ -90,7 +90,7 @@ function $normalizeReviewTextNode(textNode: ReviewTextNode): void {
     if (nextNode.__text === "") {
       nextNode.remove();
     } else if ($canReviewTextNodesBeMerged(node, nextNode)) {
-      node = $mergeReviewTextNodes(node, nextNode);
+      $mergeReviewTextNodes(node, nextNode);
       break;
     } else {
       break;
