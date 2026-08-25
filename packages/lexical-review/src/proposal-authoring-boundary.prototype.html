@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Proposal authoring boundary prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        color: #172126;
+        background: #edf3f1;
+        --accent: #0d796a;
+        --accent-soft: #d9f1eb;
+        --line: #cad8d4;
+        --muted: #5d6b70;
+        --danger: #a13e36;
+        --panel: #ffffff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 36px auto 72px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: clamp(2rem, 4vw, 3.2rem);
+        letter-spacing: -0.045em;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: 1.15rem;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+      }
+
+      .lede {
+        max-width: 820px;
+        color: var(--muted);
+        font-size: 1.04rem;
+        line-height: 1.6;
+      }
+
+      .hypothesis {
+        margin: 22px 0;
+        padding: 18px 20px;
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        background: var(--accent-soft);
+        line-height: 1.55;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(290px, 0.8fr);
+        gap: 18px;
+      }
+
+      .panel {
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel);
+        box-shadow: 0 10px 30px rgb(33 66 59 / 6%);
+      }
+
+      .document {
+        min-height: 88px;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fbfa;
+        font-family: Georgia, serif;
+        font-size: 1.45rem;
+        line-height: 1.6;
+      }
+
+      .draft-text {
+        border-bottom: 2px dotted var(--accent);
+        background: #e3f5f0;
+      }
+
+      .proposal-text {
+        border-bottom: 2px solid #7254a3;
+        background: #eee8f7;
+      }
+
+      .legend,
+      .status-row,
+      .button-row,
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+      }
+
+      .legend {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .legend span::before {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin-right: 6px;
+        border-radius: 2px;
+        content: "";
+      }
+
+      .legend .draft-key::before {
+        background: #77c4b4;
+      }
+
+      .legend .proposal-key::before {
+        background: #8a71b1;
+      }
+
+      dl {
+        display: grid;
+        grid-template-columns: 145px 1fr;
+        gap: 10px 14px;
+        margin: 0;
+        font-size: 0.92rem;
+      }
+
+      dt {
+        color: var(--muted);
+      }
+
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 25px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: #edf2f1;
+        font-size: 0.8rem;
+      }
+
+      .badge.open {
+        color: #075e52;
+        background: var(--accent-soft);
+      }
+
+      .badge.refused {
+        color: #7c2d28;
+        background: #f9e2df;
+      }
+
+      .controls,
+      .walkthroughs,
+      .event-panel {
+        margin-top: 18px;
+      }
+
+      .control-group + .control-group {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #e4ecea;
+      }
+
+      button {
+        min-height: 38px;
+        padding: 8px 12px;
+        border: 1px solid #b7c9c4;
+        border-radius: 8px;
+        color: #1b3430;
+        background: #fff;
+        font: inherit;
+        font-size: 0.88rem;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      button.primary,
+      button.step.active {
+        border-color: var(--accent);
+        color: #fff;
+        background: var(--accent);
+      }
+
+      button.danger {
+        color: var(--danger);
+      }
+
+      button:disabled {
+        cursor: default;
+        opacity: 0.46;
+      }
+
+      .tabs {
+        margin-bottom: 14px;
+      }
+
+      .tab[aria-selected="true"] {
+        border-color: #263c37;
+        color: #fff;
+        background: #263c37;
+      }
+
+      .scenario-copy {
+        min-height: 48px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .walkthrough-steps {
+        display: grid;
+        gap: 8px;
+      }
+
+      .step {
+        width: 100%;
+        text-align: left;
+      }
+
+      .step.done::after {
+        float: right;
+        content: "Done";
+        opacity: 0.75;
+      }
+
+      .notice {
+        margin: 14px 0 0;
+        padding: 12px 14px;
+        border-radius: 8px;
+        color: #7c2d28;
+        background: #f9e2df;
+        line-height: 1.45;
+      }
+
+      .empty {
+        color: var(--muted);
+        font-style: italic;
+      }
+
+      .proposal-list,
+      .events {
+        display: grid;
+        gap: 9px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .proposal-card,
+      .events li {
+        padding: 11px 12px;
+        border: 1px solid #e1e9e7;
+        border-radius: 8px;
+        background: #fafcfb;
+        font-size: 0.88rem;
+        line-height: 1.45;
+      }
+
+      .proposal-card strong {
+        display: block;
+        margin-bottom: 3px;
+      }
+
+      .events {
+        max-height: 210px;
+        overflow: auto;
+      }
+
+      .events li:first-child {
+        border-color: #b9d3cd;
+        background: #f0f8f6;
+      }
+
+      .prototype-mark {
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      @media (max-width: 800px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        dl {
+          grid-template-columns: 120px 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>When does typing become a proposal?</h1>
+      <p class="lede">
+        This throwaway model explores how a mutable local proposal draft becomes
+        an immutable, independently resolvable Web Editor Revisions proposal at
+        export. Press the buttons in any order or follow a guided walkthrough.
+      </p>
+      <div class="hypothesis">
+        <strong>Revised hypothesis under test:</strong> caret movement, focus
+        changes, commands, and IME do not finalize a proposal draft. Contiguous
+        inserted content remains one mutable local change. Export mints its
+        immutable portable identity. Editing after export requires explicit
+        replacement under a new identity; preparing that replacement does not
+        resolve the original proposal.
+      </div>
+
+      <div class="grid">
+        <section class="panel" aria-labelledby="current-state-title">
+          <h2 id="current-state-title">Current state</h2>
+          <div id="document" class="document"></div>
+          <div class="legend">
+            <span class="draft-key">Mutable local proposal draft</span>
+            <span class="proposal-key">Exported revision proposal</span>
+          </div>
+
+          <div class="status-row" id="status-row"></div>
+          <dl id="state-fields"></dl>
+          <p id="refusal" class="notice" hidden></p>
+
+          <div class="control-group">
+            <h3>Current portable proposal ledger</h3>
+            <div id="proposal-list"></div>
+          </div>
+        </section>
+
+        <section class="panel controls" aria-labelledby="free-play-title">
+          <h2 id="free-play-title">Free play</h2>
+
+          <div class="control-group">
+            <h3>Author locally</h3>
+            <div class="button-row">
+              <button data-action="type" data-text="a">Type “a”</button>
+              <button data-action="type" data-text="bc">Type “bc”</button>
+              <button data-action="backspace">Backspace proposal draft</button>
+              <button data-action="compose">Compose “語”</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <h3>Navigate and format</h3>
+            <div class="button-row">
+              <button data-action="move">Move caret away</button>
+              <button data-action="return">Return to insertion edge</button>
+              <button data-action="command">Run bold command</button>
+              <button data-action="blur">Briefly lose focus</button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <h3>Export and revise</h3>
+            <div class="button-row">
+              <button data-action="export">Export portable state</button>
+              <button data-action="edit-exported" class="danger">
+                Correct exported insertion
+              </button>
+              <button data-action="begin-replacement">
+                Start replacement draft
+              </button>
+              <button data-action="commit-replacement" class="danger">
+                Confirm replacement export
+              </button>
+              <button data-action="cancel-replacement">
+                Cancel replacement draft
+              </button>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <button data-action="reset" class="primary">Reset model</button>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel walkthroughs" aria-labelledby="walkthrough-title">
+        <h2 id="walkthrough-title">Guided walkthroughs</h2>
+        <div class="tabs" id="tabs" role="tablist"></div>
+        <p class="scenario-copy" id="scenario-copy"></p>
+        <div class="walkthrough-steps" id="walkthrough-steps"></div>
+      </section>
+
+      <section class="panel event-panel" aria-labelledby="events-title">
+        <h2 id="events-title">What just happened</h2>
+        <ol id="events" class="events"></ol>
+      </section>
+
+      <p class="prototype-mark">
+        PROTOTYPE — disposable decision aid, not production behavior or public
+        API.
+      </p>
+    </main>
+
+    <script>
+      // Pure authoring-boundary model. The DOM shell below only dispatches
+      // actions and renders the returned state.
+      const AuthoringBoundary = (() => {
+        const initialState = () => ({
+          acceptedText: "The fox.",
+          acceptedOffset: 4,
+          selection: "at accepted-text insertion point",
+          draft: null,
+          proposals: [],
+          resolutionHistory: [],
+          nextProposal: 1,
+          lastRefusal: null,
+          events: [
+            "Ready. The caret is between “The ” and “fox.” in accepted text.",
+          ],
+        });
+
+        const addEvent = (state, message) => ({
+          ...state,
+          events: [message, ...state.events].slice(0, 12),
+        });
+
+        const clearRefusal = (state) => ({ ...state, lastRefusal: null });
+
+        const exportDraft = (state) => {
+          if (!state.draft || state.draft.text.length === 0) return state;
+
+          const proposal = {
+            id: `proposal-${state.nextProposal}`,
+            kind: "insert",
+            text: state.draft.text,
+            acceptedOffset: state.draft.acceptedOffset,
+            formatting: { bold: state.draft.bold },
+            reviewState: "pending",
+          };
+
+          return addEvent(
+            {
+              ...state,
+              draft: null,
+              proposals: [proposal],
+              nextProposal: state.nextProposal + 1,
+              selection: "at exported insertion edge",
+            },
+            `Export minted ${proposal.id} for “${proposal.text}”. Its portable identity and payload are now immutable.`,
+          );
+        };
+
+        const ensureDraft = (state) => {
+          if (state.draft) return state;
+
+          return addEvent(
+            {
+              ...state,
+              draft: {
+                text: "",
+                acceptedOffset: state.acceptedOffset,
+                bold: false,
+                compositionCount: 0,
+                replacementOf: null,
+              },
+              selection: "at proposal-draft edge",
+            },
+            "Opened a mutable local proposal draft. It is pending review locally, but it is not yet a Web Editor Revisions proposal and has no portable identity.",
+          );
+        };
+
+        const refuse = (state, message) =>
+          addEvent({ ...state, lastRefusal: message }, `Refused: ${message}`);
+
+        const reduce = (inputState, action) => {
+          let state = clearRefusal(inputState);
+
+          switch (action.type) {
+            case "reset":
+              return initialState();
+
+            case "type": {
+              if (state.selection === "away from authoring point") {
+                return refuse(
+                  state,
+                  "Return to the proposal-draft or accepted-text insertion point before typing in this focused model.",
+                );
+              }
+              if (state.selection === "at exported insertion edge") {
+                return refuse(
+                  state,
+                  "The exported proposal is immutable. Extending it would amend its payload; start an explicit replacement proposal draft first.",
+                );
+              }
+              state = ensureDraft(state);
+              return addEvent(
+                {
+                  ...state,
+                  draft: { ...state.draft, text: state.draft.text + action.text },
+                },
+                `Extended the mutable proposal draft with “${action.text}”; portable identity is still unminted.`,
+              );
+            }
+
+            case "backspace": {
+              if (!state.draft || state.draft.text.length === 0) {
+                return refuse(
+                  state,
+                  "Backspace would leave the proposal draft and target accepted or exported pending content; that is a different semantic operation.",
+                );
+              }
+              const nextText = state.draft.text.slice(0, -1);
+              if (nextText.length === 0) {
+                return addEvent(
+                  {
+                    ...state,
+                    draft: null,
+                    selection: "at accepted-text insertion point",
+                  },
+                  "Deleted the whole proposal draft. Nothing was exported, withdrawn, or resolved.",
+                );
+              }
+              return addEvent(
+                { ...state, draft: { ...state.draft, text: nextText } },
+                "Corrected the mutable proposal draft in place; no portable identity exists yet.",
+              );
+            }
+
+            case "compose": {
+              if (state.selection === "away from authoring point") {
+                return refuse(
+                  state,
+                  "Return to the accepted-text insertion point before composing text.",
+                );
+              }
+              if (state.selection === "at exported insertion edge") {
+                return refuse(
+                  state,
+                  "The exported proposal is immutable. Start an explicit replacement proposal draft before extending it through IME.",
+                );
+              }
+              state = ensureDraft(state);
+              return addEvent(
+                {
+                  ...state,
+                  draft: {
+                    ...state.draft,
+                    text: state.draft.text + "語",
+                    compositionCount: state.draft.compositionCount + 1,
+                  },
+                },
+                "Committed one IME composition into the proposal draft. Composition updates did not mint intermediate portable proposals.",
+              );
+            }
+
+            case "move":
+              return addEvent(
+                { ...state, selection: "away from authoring point" },
+                "The caret moved away. The proposal draft remains mutable and keeps all contiguous inserted content.",
+              );
+
+            case "command": {
+              if (!state.draft) {
+                return addEvent(
+                  state,
+                  "No proposal draft is open. Formatting accepted text would be a separate proposal kind outside this focused insertion model.",
+                );
+              }
+              return addEvent(
+                {
+                  ...state,
+                  draft: { ...state.draft, bold: !state.draft.bold },
+                },
+                "The bold command changed formatting inside the inserted content fragment. It did not export or split the proposal draft.",
+              );
+            }
+
+            case "blur":
+              return addEvent(
+                state,
+                "Brief focus loss did not export the proposal draft. Focus routing alone does not change proposal identity.",
+              );
+
+            case "export": {
+              if (!state.draft) {
+                const pending = state.proposals.find(
+                  (item) => item.reviewState === "pending",
+                );
+                return addEvent(
+                  state,
+                  pending
+                    ? `Re-export preserved ${pending.id}; no semantic field changed.`
+                    : "Export contained no proposal because no proposal draft exists.",
+                );
+              }
+              if (state.draft.replacementOf) {
+                return refuse(
+                  state,
+                  `Export requires explicit acknowledgement that ${state.draft.replacementOf} will be rejected and replaced by a new immutable proposal.`,
+                );
+              }
+              state = exportDraft(state);
+              return addEvent(
+                state,
+                "The portable schema now contains one immutable proposal. The local proposal draft no longer exists.",
+              );
+            }
+
+            case "return": {
+              if (state.draft) {
+                return addEvent(
+                  { ...state, selection: "at proposal-draft edge" },
+                  "Returned to the proposal-draft edge. Contiguous typing will extend the same local pending change.",
+                );
+              }
+              const latestPending = [...state.proposals]
+                .reverse()
+                .find((item) => item.reviewState === "pending");
+              if (!latestPending) {
+                return addEvent(
+                  {
+                    ...state,
+                    selection: "at accepted-text insertion point",
+                  },
+                  "Returned to the accepted-state insertion point.",
+                );
+              }
+              return addEvent(
+                {
+                  ...state,
+                  acceptedOffset: latestPending.acceptedOffset,
+                  selection: "at exported insertion edge",
+                },
+                `Returned visually to the edge of ${latestPending.id}. It remains immutable after export.`,
+              );
+            }
+
+            case "edit-exported": {
+              const latestPending = [...state.proposals]
+                .reverse()
+                .find((item) => item.reviewState === "pending");
+              if (!latestPending) {
+                return refuse(state, "There is no exported pending insertion to edit.");
+              }
+              return refuse(
+                state,
+                `${latestPending.id} is immutable. Editing its payload would be an amendment, and selecting its inserted text would create a pending-on-pending target. Start a replacement proposal draft instead.`,
+              );
+            }
+
+            case "begin-replacement": {
+              const index = state.proposals.findLastIndex(
+                (item) => item.reviewState === "pending",
+              );
+              if (index < 0) {
+                return refuse(state, "There is no exported pending proposal to replace.");
+              }
+              if (state.draft) {
+                return refuse(state, "A proposal draft is already open.");
+              }
+              const original = state.proposals[index];
+              return addEvent(
+                {
+                  ...state,
+                  draft: {
+                    text: original.text,
+                    acceptedOffset: original.acceptedOffset,
+                    bold: original.formatting.bold,
+                    compositionCount: 0,
+                    replacementOf: original.id,
+                  },
+                  selection: "at proposal-draft edge",
+                },
+                `Opened a replacement proposal draft copied from ${original.id}. The original remains pending and unchanged until replacement export is explicitly confirmed.`,
+              );
+            }
+
+            case "cancel-replacement": {
+              if (!state.draft?.replacementOf) {
+                return refuse(state, "There is no replacement proposal draft to cancel.");
+              }
+              const originalId = state.draft.replacementOf;
+              return addEvent(
+                {
+                  ...state,
+                  draft: null,
+                  selection: "at exported insertion edge",
+                },
+                `Cancelled the replacement draft. ${originalId} remains pending and unchanged.`,
+              );
+            }
+
+            case "commit-replacement": {
+              if (!state.draft?.replacementOf || state.draft.text.length === 0) {
+                return refuse(
+                  state,
+                  "There is no non-empty replacement proposal draft to confirm.",
+                );
+              }
+              const original = state.proposals.find(
+                (item) => item.id === state.draft.replacementOf,
+              );
+              if (!original) {
+                return refuse(state, "The original proposal is no longer pending.");
+              }
+              const replacement = {
+                id: `proposal-${state.nextProposal}`,
+                kind: "insert",
+                text: state.draft.text,
+                acceptedOffset: state.draft.acceptedOffset,
+                formatting: { bold: state.draft.bold },
+                reviewState: "pending",
+              };
+              return addEvent(
+                {
+                  ...state,
+                  draft: null,
+                  proposals: [replacement],
+                  resolutionHistory: [
+                    ...state.resolutionHistory,
+                    { id: original.id, outcome: "rejected" },
+                  ],
+                  nextProposal: state.nextProposal + 1,
+                  selection: "at exported insertion edge",
+                },
+                `Confirmed replacement: ${original.id} was rejected and ${replacement.id} was exported atomically. The current schema contains only the new pending proposal.`,
+              );
+            }
+
+            default:
+              return state;
+          }
+        };
+
+        return { initialState, reduce };
+      })();
+
+      const scenarios = [
+        {
+          name: "Move, return, export",
+          description:
+            "Caret movement does not finalize anything. Returning to the same contiguous insertion extends one mutable proposal draft; only export mints its identity.",
+          steps: [
+            ["type", "Type “a”", { text: "a" }],
+            ["move", "Move the caret away", {}],
+            ["return", "Return to the proposal-draft edge", {}],
+            ["type", "Type “bc”", { text: "bc" }],
+            ["backspace", "Backspace the proposal draft", {}],
+            ["type", "Type “c” again", { text: "c" }],
+            ["export", "Export one “abc” proposal", {}],
+          ],
+        },
+        {
+          name: "Extend after export",
+          description:
+            "Export made the first identity immutable. A replacement draft can be prepared without changing it; explicit confirmation then rejects the old identity and exports one combined proposal under a new identity.",
+          steps: [
+            ["type", "Type “a”", { text: "a" }],
+            ["export", "Export as proposal-1", {}],
+            ["return", "Return to the exported edge", {}],
+            ["type", "Try to type “bc”", { text: "bc" }],
+            ["begin-replacement", "Start a replacement draft", {}],
+            ["type", "Type “bc”", { text: "bc" }],
+            ["export", "Try ordinary export", {}],
+            [
+              "commit-replacement",
+              "Acknowledge and export proposal-2",
+              {},
+            ],
+          ],
+        },
+        {
+          name: "Correction after export",
+          description:
+            "Direct correction is refused because v1 has neither amendment nor pending-on-pending targets. A replacement draft can be cancelled safely or explicitly committed as a reject-and-create transaction.",
+          steps: [
+            ["type", "Type “abc”", { text: "abc" }],
+            ["export", "Export as proposal-1", {}],
+            ["edit-exported", "Try to correct exported text", {}],
+            ["begin-replacement", "Start a replacement draft", {}],
+            ["backspace", "Remove “c” from the proposal draft", {}],
+            ["type", "Type “d”", { text: "d" }],
+            ["cancel-replacement", "Cancel and preserve proposal-1", {}],
+            ["begin-replacement", "Start replacement again", {}],
+            ["backspace", "Remove “c” again", {}],
+            ["type", "Type “d” again", { text: "d" }],
+            [
+              "commit-replacement",
+              "Acknowledge and export proposal-2",
+              {},
+            ],
+          ],
+        },
+        {
+          name: "IME, focus, and format",
+          description:
+            "IME, transient focus loss, and formatting of inserted content all update the same local proposal draft. None creates a portable identity before export.",
+          steps: [
+            ["compose", "Compose “語”", {}],
+            ["blur", "Briefly lose focus", {}],
+            ["type", "Type “a”", { text: "a" }],
+            ["command", "Toggle bold in the inserted fragment", {}],
+            ["move", "Move the caret away", {}],
+            ["return", "Return to the proposal-draft edge", {}],
+            ["export", "Export one formatted proposal", {}],
+          ],
+        },
+      ];
+
+      let state = AuthoringBoundary.initialState();
+      let activeScenario = 0;
+      let activeStep = 0;
+
+      const escapeHtml = (value) =>
+        value
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+
+      const projectedInsertions = () => {
+        const pending = state.proposals.filter(
+          (proposal) => proposal.reviewState === "pending",
+        );
+        const before = escapeHtml(
+          state.acceptedText.slice(0, state.acceptedOffset),
+        );
+        const after = escapeHtml(
+          state.acceptedText.slice(state.acceptedOffset),
+        );
+        const exported = state.draft?.replacementOf
+          ? ""
+          : pending
+              .map(
+                (proposal) =>
+                  `<span class="proposal-text" title="${proposal.id}">${escapeHtml(proposal.text)}</span>`,
+              )
+              .join("");
+        const draft = state.draft
+          ? `<span class="draft-text" title="local proposal draft">${escapeHtml(state.draft.text || "▏")}</span>`
+          : "";
+        return `${before}${exported}${draft}${after}`;
+      };
+
+      const render = () => {
+        document.querySelector("#document").innerHTML = projectedInsertions();
+
+        const statuses = [
+          `<span class="badge ${state.draft ? "open" : ""}">Proposal draft: ${state.draft ? "open" : "none"}</span>`,
+          `<span class="badge">Exported pending: ${state.proposals.filter((item) => item.reviewState === "pending").length}</span>`,
+          `<span class="badge">Resolved locally: ${state.resolutionHistory.length}</span>`,
+        ];
+        if (state.lastRefusal) {
+          statuses.push('<span class="badge refused">No mutation</span>');
+        }
+        document.querySelector("#status-row").innerHTML = statuses.join("");
+
+        const draftValue = state.draft
+          ? `“${escapeHtml(state.draft.text)}” — mutable, no portable proposal ID`
+          : "None";
+        document.querySelector("#state-fields").innerHTML = `
+          <dt>Accepted state</dt><dd>“${escapeHtml(state.acceptedText)}”</dd>
+          <dt>Selection</dt><dd>${escapeHtml(state.selection)}</dd>
+          <dt>Proposal draft</dt><dd>${draftValue}</dd>
+          <dt>Draft target</dt><dd>${state.draft ? `Accepted-state offset ${state.draft.acceptedOffset}` : "—"}</dd>
+          <dt>Replacement source</dt><dd>${state.draft?.replacementOf || "None"}</dd>
+          <dt>Draft formatting</dt><dd>${state.draft ? `bold: ${state.draft.bold}` : "—"}</dd>
+          <dt>IME commits</dt><dd>${state.draft ? state.draft.compositionCount : "—"}</dd>
+          <dt>Resolution history</dt><dd>${
+            state.resolutionHistory.length
+              ? state.resolutionHistory
+                  .map((item) => `${item.id}: ${item.outcome} (terminal record omitted from next schema)`)
+                  .join("; ")
+              : "None"
+          }</dd>
+        `;
+
+        const refusal = document.querySelector("#refusal");
+        refusal.hidden = !state.lastRefusal;
+        refusal.textContent = state.lastRefusal || "";
+
+        const proposalList = document.querySelector("#proposal-list");
+        proposalList.innerHTML = state.proposals.length
+          ? `<ol class="proposal-list">${state.proposals
+              .map(
+                (proposal) => `
+                  <li class="proposal-card">
+                    <strong>${proposal.id}: insert “${escapeHtml(proposal.text)}”</strong>
+                    ${proposal.reviewState}; accepted offset ${proposal.acceptedOffset};
+                    bold: ${proposal.formatting.bold}; immutable portable identity
+                  </li>`,
+              )
+              .join("")}</ol>`
+          : '<p class="empty">No proposal identity has been minted.</p>';
+
+        document.querySelector("#events").innerHTML = state.events
+          .map((event) => `<li>${escapeHtml(event)}</li>`)
+          .join("");
+
+        renderWalkthrough();
+      };
+
+      const dispatch = (type, detail = {}) => {
+        state = AuthoringBoundary.reduce(state, { type, ...detail });
+        render();
+      };
+
+      const startScenario = (index) => {
+        activeScenario = index;
+        activeStep = 0;
+        state = AuthoringBoundary.initialState();
+        render();
+      };
+
+      const renderWalkthrough = () => {
+        const scenario = scenarios[activeScenario];
+        document.querySelector("#tabs").innerHTML = scenarios
+          .map(
+            (item, index) => `
+              <button class="tab" role="tab" aria-selected="${index === activeScenario}" data-scenario="${index}">
+                ${escapeHtml(item.name)}
+              </button>`,
+          )
+          .join("");
+        document.querySelector("#scenario-copy").textContent =
+          scenario.description;
+        document.querySelector("#walkthrough-steps").innerHTML = scenario.steps
+          .map(
+            ([, label], index) => `
+              <button class="step ${index === activeStep ? "active" : ""} ${index < activeStep ? "done" : ""}"
+                data-step="${index}" ${index > activeStep ? "disabled" : ""}>
+                ${index + 1}. ${escapeHtml(label)}
+              </button>`,
+          )
+          .join("");
+
+        document.querySelectorAll("[data-scenario]").forEach((button) => {
+          button.addEventListener("click", () =>
+            startScenario(Number(button.dataset.scenario)),
+          );
+        });
+        document.querySelectorAll("[data-step]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const index = Number(button.dataset.step);
+            if (index !== activeStep) return;
+            const [type, , detail] = scenario.steps[index];
+            state = AuthoringBoundary.reduce(state, { type, ...detail });
+            activeStep += 1;
+            render();
+          });
+        });
+      };
+
+      document.querySelectorAll("[data-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          activeStep = 0;
+          dispatch(button.dataset.action, {
+            text: button.dataset.text,
+          });
+        });
+      });
+
+      render();
+    </script>
+  </body>
+</html>
