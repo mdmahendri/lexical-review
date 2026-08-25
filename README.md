@@ -18,7 +18,7 @@ The review model tracks text changes. Formatting-only changes remain regular Lex
 
 ## Installation
 
-The current compatibility baseline supports Lexical `0.45.0` through `0.49.x`.
+The package declares Lexical peer compatibility `>=0.45.0 <0.50.0`.
 The `lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils`
 packages must use the same version:
 
@@ -31,14 +31,11 @@ npm install lexical-review \
   react react-dom
 ```
 
-## Public entrypoints
-
-| Import                  | Exports                                                                              |
-| ----------------------- | ------------------------------------------------------------------------------------ |
-| `lexical-review`        | `ReviewTextNode`, `$createReviewTextNode`, `$isReviewTextNode`, and `TextReviewType` |
-| `lexical-review/client` | `ReviewTextPlugin` and `registerReviewText`                                          |
-
-The root entrypoint is React-free, so it can be used for editor-state models and serialization. Use the client entrypoint for editor registration and the React plugin.
+The package declares React peer compatibility for React 18 and React 19, and
+`react` and `react-dom` must use the same version. CI exercises the supported
+Lexical minors and browser boundary scenarios in Chromium, Firefox, and
+Playwright WebKit. Playwright WebKit results do not certify native Safari or
+iOS Safari.
 
 ## Quick start
 
@@ -81,16 +78,6 @@ export function ReviewEditor() {
 
 `ReviewTextPlugin` registers the review commands and normalizes text nodes created after registration. For a non-React integration, call `registerReviewText(editor, "word")` directly and keep the returned cleanup function.
 
-## Rendering and serialization
-
-Inserted and deleted text uses `<ins>` and `<del>` as the outermost wrappers. Lexical formatting is nested inside them, for example:
-
-```html
-<ins><strong>inserted text</strong></ins>
-```
-
-Review nodes serialize as Lexical text nodes with `type: "review"` and review metadata for `original`, `insertion`, or `deletion` text.
-
 ## Development
 
 The repository requires Node `>=22.12.0` and pnpm `11`.
@@ -101,12 +88,21 @@ pnpm dev                         # start the demo
 pnpm test --run                  # run unit tests
 pnpm test:package                # build and verify the published package entrypoints
 pnpm test:e2e                    # run Playwright tests
+pnpm test:e2e:install            # install Chromium, Firefox, and Playwright WebKit on Linux
+pnpm test:e2e:webkit             # run only the Playwright WebKit project
+pnpm test:e2e:install:webkit     # install only Playwright WebKit on Linux
 pnpm build:demo                  # build the demo
 pnpm --filter lexical-review build
 pnpm lint
 pnpm compatibility               # run configured Lexical compatibility checks
 pnpm compatibility -- --version 0.48.0 # run a focused exact-version lane
+pnpm compatibility:e2e -- --version 0.45.0 --react-version 19.2.3
+pnpm compatibility:e2e -- --version 0.45.0 --react-version 18.3.1 --project chromium
 ```
+
+The Lexical compatibility workflow can also be dispatched with an exact
+`version` input for a temporary browser-risk lane; it reuses the same boundary
+workflow without adding a permanent matrix entry.
 
 The library lives in `packages/lexical-review`, the demo lives in `packages/demo`, and focused tests are co-located with the library source.
 

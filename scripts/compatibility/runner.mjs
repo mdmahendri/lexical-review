@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import semver from "semver";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryDirectory = path.resolve(scriptDirectory, "../..");
@@ -19,15 +20,46 @@ const lexicalPackageNames = [
   "@lexical/utils",
   "lexical",
 ];
-const exactVersionPattern =
-  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const lexicalPeerIntervalPattern = /^>=(\d+\.\d+\.\d+)\s+<(\d+\.\d+\.\d+)$/;
+const reactPackageNames = ["react", "react-dom"];
+const playwrightProjects = ["chromium", "firefox", "webkit"];
+function parseExactVersion(version) {
+  if (typeof version !== "string") {
+    return undefined;
+  }
+
+  const parsed = semver.parse(version);
+  if (parsed == null) {
+    return undefined;
+  }
+
+  const buildSuffix =
+    parsed.build.length > 0 ? `+${parsed.build.join(".")}` : "";
+  return `${parsed.version}${buildSuffix}` === version ? parsed : undefined;
+}
+
 function isExactVersion(version) {
-  return typeof version === "string" && exactVersionPattern.test(version);
+  return parseExactVersion(version) != null;
+}
+
+function parseStableVersion(version) {
+  const parsed = parseExactVersion(version);
+  if (
+    parsed == null ||
+    parsed.prerelease.length > 0 ||
+    parsed.build.length > 0
+  ) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 function isLexicalPackage(name) {
   return name === "lexical" || name.startsWith("@lexical/");
+}
+
+function isReactPackage(name) {
+  return reactPackageNames.includes(name);
 }
 
 function readJson(filePath) {
@@ -38,43 +70,57 @@ export function loadCompatibilityConfig() {
   return readJson(compatibilityConfigPath);
 }
 
-function parseNumericVersion(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
-  if (match == null) {
-    throw new Error(`Expected a numeric Lexical version, received ${version}.`);
+function parseVersion(version) {
+  const parsed = parseExactVersion(version);
+  if (parsed == null) {
+    throw new Error(`Expected an exact version, received ${version}.`);
   }
 
-  return {
-    major: Number(match[1]),
-    minor: Number(match[2]),
-    patch: Number(match[3]),
-  };
+  return parsed;
 }
 
-function compareNumericVersions(left, right) {
-  return (
-    left.major - right.major ||
-    left.minor - right.minor ||
-    left.patch - right.patch
-  );
-}
-
-function getLexicalVersions(packageJson, field) {
+function getPackageVersions(packageJson, field, packageNames, label) {
   const dependencies = packageJson[field] ?? {};
-  const missingPackages = lexicalPackageNames.filter(
+  const missingPackages = packageNames.filter(
     (name) => dependencies[name] == null,
   );
 
   if (missingPackages.length > 0) {
     throw new Error(
-      `${field} must declare all aligned Lexical packages: ${missingPackages.join(", ")}.`,
+      `${field} must declare all aligned ${label} packages: ${missingPackages.join(", ")}.`,
     );
   }
 
-  return lexicalPackageNames.map((name) => ({
+  return packageNames.map((name) => ({
     name,
     version: dependencies[name],
   }));
+}
+
+function getLexicalVersions(packageJson, field) {
+  return getPackageVersions(packageJson, field, lexicalPackageNames, "Lexical");
+}
+
+function getReactVersions(packageJson, field) {
+  return getPackageVersions(packageJson, field, reactPackageNames, "React");
+}
+
+function getDevelopmentVersion(version, field, packageName) {
+  if (typeof version !== "string") {
+    throw new Error(
+      `${field} ${packageName} must use an exact or caret version, received ${String(version)}.`,
+    );
+  }
+
+  const candidateVersion = version.startsWith("^") ? version.slice(1) : version;
+  const parsed = parseStableVersion(candidateVersion);
+  if (parsed == null) {
+    throw new Error(
+      `${field} ${packageName} must use an exact or caret version, received ${version}.`,
+    );
+  }
+
+  return parsed.version;
 }
 
 function getAlignedLexicalDevelopmentVersion(packageJson) {
@@ -116,31 +162,98 @@ function getLexicalPeerInterval(packageJson) {
   }
 
   const range = ranges[0].version;
-  const match = lexicalPeerIntervalPattern.exec(range);
-  if (match == null) {
+  const rangeParts = typeof range === "string" ? range.trim().split(/\s+/) : [];
+  const lowerToken = rangeParts[0];
+  const upperToken = rangeParts[1];
+  const hasExpectedShape =
+    rangeParts.length === 2 &&
+    lowerToken?.startsWith(">=") === true &&
+    upperToken?.startsWith("<") === true &&
+    upperToken?.startsWith("<=") !== true;
+
+  if (!hasExpectedShape || semver.validRange(range) == null) {
     throw new Error(
       `Lexical peerDependencies must use one shared range in the form >=X.Y.Z <X.Y.Z, received ${range}.`,
     );
   }
 
-  const lower = parseNumericVersion(match[1]);
-  const upper = parseNumericVersion(match[2]);
-  if (
-    lower.major !== upper.major ||
-    compareNumericVersions(lower, upper) >= 0
-  ) {
+  const lower = parseStableVersion(lowerToken.slice(2));
+  const upper = parseStableVersion(upperToken.slice(1));
+  if (lower == null || upper == null) {
+    throw new Error(
+      `Lexical peerDependencies must use one shared range in the form >=X.Y.Z <X.Y.Z, received ${range}.`,
+    );
+  }
+
+  if (lower.major !== upper.major || semver.compare(lower, upper) >= 0) {
     throw new Error(
       `Lexical peerDependencies must use one shared range within one major, received ${range}.`,
     );
   }
 
-  return { range, lower, lowerVersion: match[1], upper };
+  return { range, lower, lowerVersion: lower.version, upper };
 }
 
 export function getCurrentLexicalVersion(
   packageJson = readJson(currentPackagePath),
 ) {
   return getAlignedLexicalDevelopmentVersion(packageJson);
+}
+
+export function getCurrentReactVersion(
+  packageJson = readJson(currentPackagePath),
+) {
+  const versions = getReactVersions(packageJson, "devDependencies").map(
+    ({ name, version }) => ({
+      name,
+      version: getDevelopmentVersion(version, "devDependencies", name),
+    }),
+  );
+  const uniqueVersions = new Set(versions.map(({ version }) => version));
+
+  if (uniqueVersions.size !== 1) {
+    throw new Error(
+      `development React packages must use one aligned version: ${versions
+        .map(({ name, version }) => `${name}@${version}`)
+        .join(", ")}.`,
+    );
+  }
+
+  return versions[0].version;
+}
+
+export function assertE2EReactVersionAllowed(
+  reactVersion,
+  config = loadCompatibilityConfig(),
+  packageJson = readJson(currentPackagePath),
+) {
+  const allowedReactVersions = [
+    ...new Set([
+      getCurrentReactVersion(packageJson),
+      ...config.e2eReactVersions,
+    ]),
+  ];
+
+  if (!allowedReactVersions.includes(reactVersion)) {
+    throw new Error(
+      `The E2E React compatibility version must be one of the configured lanes: ${allowedReactVersions.join(", ")}, received ${String(reactVersion)}.`,
+    );
+  }
+}
+
+function getReactPeerRange(packageJson) {
+  const ranges = getReactVersions(packageJson, "peerDependencies");
+  const uniqueRanges = new Set(ranges.map(({ version }) => version));
+
+  if (uniqueRanges.size !== 1) {
+    throw new Error(
+      `React peerDependencies must use one shared range: ${ranges
+        .map(({ name, version }) => `${name}@${String(version)}`)
+        .join(", ")}.`,
+    );
+  }
+
+  return ranges[0].version;
 }
 
 function validateVersionList(name, versions) {
@@ -162,14 +275,13 @@ function validateVersionList(name, versions) {
   }
 }
 
-export function validateCompatibilityConfig(
-  config = loadCompatibilityConfig(),
-  currentVersion = getCurrentLexicalVersion(),
-  packageJson = readJson(currentPackagePath),
-) {
+function validateVersionLists(config) {
   validateVersionList("unitVersions", config.unitVersions);
   validateVersionList("e2eVersions", config.e2eVersions);
+  validateVersionList("e2eReactVersions", config.e2eReactVersions);
+}
 
+function validateLexicalCompatibility(config, currentVersion, packageJson) {
   const developmentVersion = getCurrentLexicalVersion(packageJson);
   if (developmentVersion !== currentVersion) {
     throw new Error(
@@ -178,10 +290,10 @@ export function validateCompatibilityConfig(
   }
 
   const peerInterval = getLexicalPeerInterval(packageJson);
-  const currentNumericVersion = parseNumericVersion(currentVersion);
+  const currentVersionInfo = parseVersion(currentVersion);
   if (
-    compareNumericVersions(currentNumericVersion, peerInterval.lower) < 0 ||
-    compareNumericVersions(currentNumericVersion, peerInterval.upper) >= 0
+    semver.compare(currentVersionInfo, peerInterval.lower) < 0 ||
+    semver.compare(currentVersionInfo, peerInterval.upper) >= 0
   ) {
     throw new Error(
       `The current Lexical version ${currentVersion} is outside the shared peer range ${peerInterval.range}.`,
@@ -189,11 +301,12 @@ export function validateCompatibilityConfig(
   }
 
   const expectedUpper = {
-    major: currentNumericVersion.major,
-    minor: currentNumericVersion.minor + 1,
+    major: currentVersionInfo.major,
+    minor: currentVersionInfo.minor + 1,
     patch: 0,
   };
-  if (compareNumericVersions(peerInterval.upper, expectedUpper) !== 0) {
+  const expectedUpperVersion = `${expectedUpper.major}.${expectedUpper.minor}.${expectedUpper.patch}`;
+  if (semver.compare(peerInterval.upper, expectedUpperVersion) !== 0) {
     throw new Error(
       `The shared peer range ${peerInterval.range} must end at the exclusive next minor ${expectedUpper.major}.${expectedUpper.minor}.0 after the current development version.`,
     );
@@ -227,10 +340,10 @@ export function validateCompatibilityConfig(
     minor += 1
   ) {
     const hasMinor = config.unitVersions.some((version) => {
-      const numericVersion = parseNumericVersion(version);
+      const versionInfo = parseVersion(version);
       return (
-        numericVersion.major === peerInterval.lower.major &&
-        numericVersion.minor === minor
+        versionInfo.major === peerInterval.lower.major &&
+        versionInfo.minor === minor
       );
     });
     if (!hasMinor) {
@@ -245,10 +358,10 @@ export function validateCompatibilityConfig(
   }
 
   const unsupportedUnitVersions = config.unitVersions.filter((version) => {
-    const numericVersion = parseNumericVersion(version);
+    const versionInfo = parseVersion(version);
     return (
-      compareNumericVersions(numericVersion, peerInterval.lower) < 0 ||
-      compareNumericVersions(numericVersion, peerInterval.upper) >= 0
+      semver.compare(versionInfo, peerInterval.lower) < 0 ||
+      semver.compare(versionInfo, peerInterval.upper) >= 0
     );
   });
   if (unsupportedUnitVersions.length > 0) {
@@ -268,7 +381,41 @@ export function validateCompatibilityConfig(
       `e2eVersions must include the exact current development version ${currentVersion}.`,
     );
   }
+}
 
+function validateReactCompatibility(config, packageJson) {
+  const currentReactVersion = getCurrentReactVersion(packageJson);
+  const reactPeerRange = getReactPeerRange(packageJson);
+  if (
+    typeof reactPeerRange !== "string" ||
+    reactPeerRange.trim() === "" ||
+    semver.validRange(reactPeerRange) == null
+  ) {
+    throw new Error(
+      `React peerDependencies must use a valid semver range, received ${reactPeerRange}.`,
+    );
+  }
+
+  const unsupportedReactVersions = [
+    currentReactVersion,
+    ...config.e2eReactVersions,
+  ].filter((version) => !semver.satisfies(version, reactPeerRange));
+
+  if (unsupportedReactVersions.length > 0) {
+    throw new Error(
+      `React peer range "${reactPeerRange}" does not cover the React major version(s) configured for compatibility: ${unsupportedReactVersions.join(", ")}.`,
+    );
+  }
+}
+
+export function validateCompatibilityConfig(
+  config = loadCompatibilityConfig(),
+  currentVersion = getCurrentLexicalVersion(),
+  packageJson = readJson(currentPackagePath),
+) {
+  validateVersionLists(config);
+  validateLexicalCompatibility(config, currentVersion, packageJson);
+  validateReactCompatibility(config, packageJson);
   return config;
 }
 
@@ -299,8 +446,50 @@ export function createCompatibilityMatrix(
   }));
 }
 
-export function collectResolvedLexicalPackages(
+export function createE2ECompatibilityMatrix(
+  config = loadCompatibilityConfig(),
+  currentVersion = getCurrentLexicalVersion(),
+  requestedVersion = getRequestedVersion(),
+  packageJson = readJson(currentPackagePath),
+) {
+  validateCompatibilityConfig(config, currentVersion, packageJson);
+
+  const lexicalVersions =
+    requestedVersion == null ? config.e2eVersions : [requestedVersion];
+  if (lexicalVersions.some((version) => !isExactVersion(version))) {
+    throw new Error(
+      `The requested E2E compatibility version must be exact, received ${String(requestedVersion)}.`,
+    );
+  }
+
+  const currentReactVersion = getCurrentReactVersion(packageJson);
+  const baselineLanes = lexicalVersions.map((lexicalVersion) => ({
+    lexicalVersion,
+    reactVersion: currentReactVersion,
+    project: "all",
+  }));
+  const focusedReactLanes = config.e2eReactVersions.flatMap((reactVersion) =>
+    lexicalVersions.map((lexicalVersion) => ({
+      lexicalVersion,
+      reactVersion,
+      project: "chromium",
+    })),
+  );
+
+  return [...baselineLanes, ...focusedReactLanes].filter(
+    (lane, index, lanes) =>
+      lanes.findIndex(
+        (candidate) =>
+          candidate.lexicalVersion === lane.lexicalVersion &&
+          candidate.reactVersion === lane.reactVersion &&
+          candidate.project === lane.project,
+      ) === index,
+  );
+}
+
+function collectResolvedPackages(
   value,
+  isTargetPackage,
   packages = new Map(),
   hintedName,
 ) {
@@ -318,7 +507,7 @@ export function collectResolvedLexicalPackages(
     const version =
       typeof value.version === "string" ? value.version : undefined;
 
-    if (name != null && version != null && isLexicalPackage(name)) {
+    if (name != null && version != null && isTargetPackage(name)) {
       const versions = packages.get(name) ?? new Set();
       versions.add(version);
       packages.set(name, versions);
@@ -326,14 +515,31 @@ export function collectResolvedLexicalPackages(
   }
 
   for (const [key, child] of Object.entries(value)) {
-    collectResolvedLexicalPackages(
+    collectResolvedPackages(
       child,
+      isTargetPackage,
       packages,
-      isLexicalPackage(key) ? key : undefined,
+      isTargetPackage(key) ? key : undefined,
     );
   }
 
   return packages;
+}
+
+export function collectResolvedLexicalPackages(
+  value,
+  packages = new Map(),
+  hintedName,
+) {
+  return collectResolvedPackages(value, isLexicalPackage, packages, hintedName);
+}
+
+export function collectResolvedReactPackages(
+  value,
+  packages = new Map(),
+  hintedName,
+) {
+  return collectResolvedPackages(value, isReactPackage, packages, hintedName);
 }
 
 export function assertLexicalGraphAligned(graph, expectedVersion) {
@@ -371,6 +577,44 @@ export function assertLexicalGraphAligned(graph, expectedVersion) {
       .join(", ");
     throw new Error(
       `The resolved Lexical package graph is not aligned to ${expectedVersion}: ${details}.`,
+    );
+  }
+
+  return resolvedPackages.sort((left, right) =>
+    `${left.name}@${left.version}`.localeCompare(
+      `${right.name}@${right.version}`,
+    ),
+  );
+}
+
+export function assertReactGraphAligned(graph, expectedVersion) {
+  if (!isExactVersion(expectedVersion)) {
+    throw new Error(
+      `The expected React version must be exact, received ${String(expectedVersion)}.`,
+    );
+  }
+
+  const packages = collectResolvedReactPackages(graph);
+  const resolvedPackages = [...packages.entries()].flatMap(([name, versions]) =>
+    [...versions].map((version) => ({ name, version })),
+  );
+
+  if (!packages.has("react") || !packages.has("react-dom")) {
+    throw new Error(
+      "The resolved package graph must contain both react and react-dom.",
+    );
+  }
+
+  const mismatches = resolvedPackages.filter(
+    ({ version }) => version !== expectedVersion,
+  );
+  if (mismatches.length > 0) {
+    const details = mismatches
+      .map(({ name, version }) => `${name}@${version}`)
+      .sort()
+      .join(", ");
+    throw new Error(
+      `The resolved React package graph is not aligned to ${expectedVersion}: ${details}.`,
     );
   }
 
@@ -444,6 +688,19 @@ export function verifyInstalledLexicalGraph(
   return resolvedPackages;
 }
 
+export function verifyInstalledReactGraph(expectedVersion, env = process.env) {
+  const graph = readPnpmJson(
+    ["list", "--recursive", "--depth", "Infinity", "--json"],
+    env,
+  );
+  const resolvedPackages = assertReactGraphAligned(graph, expectedVersion);
+
+  console.log(
+    `Verified ${resolvedPackages.length} React packages at ${expectedVersion}.`,
+  );
+  return resolvedPackages;
+}
+
 function getDependencyManifestPaths() {
   const result = spawnSync("git", ["ls-files", "-z"], {
     cwd: repositoryDirectory,
@@ -499,22 +756,50 @@ function assertFilesUnchanged(snapshot) {
 }
 
 function parseVersionArgument(args) {
-  const versionIndex = args.indexOf("--version");
+  return parseArgument(args, "--version");
+}
+
+function parseReactVersionArgument(args) {
+  return parseArgument(args, "--react-version");
+}
+
+function parseArgument(args, option) {
+  const versionIndex = args.indexOf(option);
   if (versionIndex === -1) {
     return undefined;
   }
 
   const version = args[versionIndex + 1];
   if (version == null || version.startsWith("--")) {
-    throw new Error("--version requires an exact Lexical version.");
+    throw new Error(`${option} requires a value.`);
   }
 
   return version;
 }
 
+function parsePlaywrightProjects(args) {
+  const projectArgument = parseArgument(args, "--project");
+  const requestedProjects =
+    projectArgument == null || projectArgument === "all"
+      ? playwrightProjects
+      : projectArgument.split(",");
+  const invalidProjects = requestedProjects.filter(
+    (project) => !playwrightProjects.includes(project),
+  );
+
+  if (invalidProjects.length > 0) {
+    throw new Error(
+      `Unknown Playwright project(s): ${invalidProjects.join(", ")}. Expected one of ${playwrightProjects.join(", ")}.`,
+    );
+  }
+
+  return requestedProjects;
+}
+
 function runCompatibility(version) {
   const config = loadCompatibilityConfig();
   const currentVersion = getCurrentLexicalVersion();
+  const currentReactVersion = getCurrentReactVersion();
   validateCompatibilityConfig(config, currentVersion);
 
   if (!isExactVersion(version)) {
@@ -527,8 +812,10 @@ function runCompatibility(version) {
   const environment = { ...process.env };
   if (isCurrentVersion) {
     delete environment.LEXICAL_COMPATIBILITY_VERSION;
+    delete environment.REACT_COMPATIBILITY_VERSION;
   } else {
     environment.LEXICAL_COMPATIBILITY_VERSION = version;
+    environment.REACT_COMPATIBILITY_VERSION = currentReactVersion;
   }
 
   const trackedDependencyFiles = snapshotFiles(getDependencyManifestPaths());
@@ -545,6 +832,7 @@ function runCompatibility(version) {
       environment,
     );
     verifyInstalledLexicalGraph(version, environment);
+    verifyInstalledReactGraph(currentReactVersion, environment);
     runPnpm(["--filter", "lexical-review", "build"], environment);
     runPnpm(["test", "--run"], environment);
 
@@ -561,21 +849,98 @@ function runCompatibility(version) {
   );
 }
 
+function runCompatibilityE2E(version, reactVersion, projects) {
+  const config = loadCompatibilityConfig();
+  const currentLexicalVersion = getCurrentLexicalVersion();
+  const currentReactVersion = getCurrentReactVersion();
+  validateCompatibilityConfig(config, currentLexicalVersion);
+
+  if (!isExactVersion(version)) {
+    throw new Error(
+      `The E2E compatibility version must be exact, received ${String(version)}.`,
+    );
+  }
+  if (!isExactVersion(reactVersion)) {
+    throw new Error(
+      `The E2E React compatibility version must be exact, received ${String(reactVersion)}.`,
+    );
+  }
+  assertE2EReactVersionAllowed(reactVersion, config);
+
+  const isCurrentLexicalVersion = version === currentLexicalVersion;
+  const isCurrentReactVersion = reactVersion === currentReactVersion;
+  const isCurrentLane = isCurrentLexicalVersion && isCurrentReactVersion;
+  const environment = { ...process.env };
+
+  if (isCurrentLexicalVersion) {
+    delete environment.LEXICAL_COMPATIBILITY_VERSION;
+  } else {
+    environment.LEXICAL_COMPATIBILITY_VERSION = version;
+  }
+  if (isCurrentReactVersion) {
+    if (isCurrentLexicalVersion) {
+      delete environment.REACT_COMPATIBILITY_VERSION;
+    } else {
+      environment.REACT_COMPATIBILITY_VERSION = currentReactVersion;
+    }
+  } else {
+    environment.REACT_COMPATIBILITY_VERSION = reactVersion;
+  }
+
+  const trackedDependencyFiles = snapshotFiles(getDependencyManifestPaths());
+
+  try {
+    runPnpm(
+      [
+        "install",
+        ...(isCurrentLane
+          ? ["--frozen-lockfile"]
+          : ["--no-lockfile", "--force"]),
+        "--config.optimistic-repeat-install=false",
+      ],
+      environment,
+    );
+    verifyInstalledLexicalGraph(version, environment);
+    verifyInstalledReactGraph(reactVersion, environment);
+    runPnpm(["typecheck:e2e"], environment);
+
+    if (process.env.PLAYWRIGHT_INSTALL_BROWSERS === "true") {
+      runPnpm(
+        ["exec", "playwright", "install", "--with-deps", ...projects],
+        environment,
+      );
+    }
+
+    const projectArguments =
+      projects.length === playwrightProjects.length
+        ? []
+        : projects.flatMap((project) => ["--project", project]);
+    runPnpm(["test:e2e", ...projectArguments], environment);
+  } finally {
+    assertFilesUnchanged(trackedDependencyFiles);
+  }
+
+  console.log(
+    `Lexical/React E2E checks passed for Lexical ${version} and React ${reactVersion}${isCurrentLane ? " (current frozen lane)" : " (ephemeral lane)"}.`,
+  );
+}
+
 function printMatrix(githubOutput) {
   const matrix = {
     include: createCompatibilityMatrix(),
   };
-  const e2eVersions = matrix.include
-    .filter(({ e2e }) => e2e)
-    .map(({ version }) => version);
+  const e2eLanes = createE2ECompatibilityMatrix();
+  const e2eVersions = [
+    ...new Set(e2eLanes.map(({ lexicalVersion }) => lexicalVersion)),
+  ];
 
   if (githubOutput) {
-    console.log(`include=${JSON.stringify(matrix.include)}`);
-    console.log(`e2e=${JSON.stringify(e2eVersions)}`);
+    console.log(`unitMatrix=${JSON.stringify(matrix.include)}`);
+    console.log(`e2eMatrix=${JSON.stringify(e2eLanes)}`);
     return;
   }
 
-  console.log(JSON.stringify({ ...matrix, e2eVersions }, null, 2));
+  console.log(JSON.stringify({ ...matrix, e2eVersions, e2eLanes }, null, 2));
 }
 
 function printHelp() {
@@ -584,11 +949,14 @@ function printHelp() {
   pnpm compatibility -- --version <exact-version>
   pnpm compatibility:matrix
   pnpm compatibility:validate
-  pnpm compatibility:verify -- --version <exact-version>`);
+  pnpm compatibility:verify -- --version <exact-version>
+  pnpm compatibility:e2e -- --version <exact-version> --react-version <exact-version> --project <name|all>`);
 }
 
 function main(args) {
-  const command = ["validate", "matrix", "verify", "run"].includes(args[0])
+  const command = ["validate", "matrix", "verify", "run", "e2e"].includes(
+    args[0],
+  )
     ? args[0]
     : "run";
   const commandArgs = command === args[0] ? args.slice(1) : args;
@@ -620,6 +988,18 @@ function main(args) {
       const version =
         parseVersionArgument(commandArgs) ?? getCurrentLexicalVersion();
       runCompatibility(version);
+      break;
+    }
+    case "e2e": {
+      const version =
+        parseVersionArgument(commandArgs) ?? getCurrentLexicalVersion();
+      const reactVersion =
+        parseReactVersionArgument(commandArgs) ?? getCurrentReactVersion();
+      runCompatibilityE2E(
+        version,
+        reactVersion,
+        parsePlaywrightProjects(commandArgs),
+      );
       break;
     }
   }

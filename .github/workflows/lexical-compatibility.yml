@@ -11,7 +11,9 @@ on:
       - "eslint.config.js"
       - "package.json"
       - "packages/demo/package.json"
+      - "packages/demo/e2e/**"
       - "packages/lexical-review/**"
+      - "playwright.config.ts"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig.json"
@@ -27,36 +29,45 @@ permissions:
   contents: read
 
 jobs:
-  matrix:
+  resolve:
     name: Resolve compatibility matrix
     runs-on: ubuntu-latest
     outputs:
-      include: ${{ steps.matrix.outputs.include }}
-      e2e: ${{ steps.matrix.outputs.e2e }}
+      unitMatrix: ${{ steps.resolve.outputs.unitMatrix }}
+      e2eMatrix: ${{ steps.resolve.outputs.e2eMatrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
 
       - name: Install Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Resolve matrix
-        id: matrix
+        id: resolve
         env:
           LEXICAL_COMPATIBILITY_MATRIX_VERSION: ${{ inputs.version }}
         run: node scripts/compatibility/runner.mjs matrix --github-output >> "$GITHUB_OUTPUT"
 
   compatibility:
     name: Lexical ${{ matrix.version }}
-    needs: matrix
+    needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+        include: ${{ fromJSON(needs.resolve.outputs.unitMatrix) }}
 
     steps:
       - name: Checkout
@@ -75,3 +86,47 @@ jobs:
 
       - name: Run compatibility checks
         run: pnpm compatibility -- --version "${{ matrix.version }}"
+
+  e2e:
+    name: E2E Lexical ${{ matrix.lexicalVersion }} React ${{ matrix.reactVersion }} (${{ matrix.project }})
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.e2eMatrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Run browser compatibility checks
+        env:
+          PLAYWRIGHT_INSTALL_BROWSERS: "true"
+        run: >-
+          pnpm compatibility:e2e --
+          --version "${{ matrix.lexicalVersion }}"
+          --react-version "${{ matrix.reactVersion }}"
+          --project "${{ matrix.project }}"
+
+      - name: Upload Playwright diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.lexicalVersion }}-${{ matrix.reactVersion }}-${{ matrix.project }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore

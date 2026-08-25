@@ -26,6 +26,10 @@
     "test": "vitest --disable-console-intercept",
     "test:package": "pnpm --filter lexical-review build && node packages/lexical-review/package-contract/verify.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:webkit": "playwright test --project=webkit",
+    "test:e2e:install": "playwright install --with-deps chromium firefox webkit",
+    "test:e2e:install:webkit": "playwright install --with-deps webkit",
+    "compatibility:e2e": "node scripts/compatibility/runner.mjs e2e",
     "typecheck:e2e": "tsc --noEmit -p packages/demo/e2e/tsconfig.json"
   },
   "keywords": [
@@ -44,6 +48,7 @@
     "jsdom": "^27.3.0",
     "nx": "^22.2.5",
     "prettier": "^3.9.6",
+    "semver": "^7.8.5",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
