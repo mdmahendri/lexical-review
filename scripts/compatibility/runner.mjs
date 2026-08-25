@@ -222,6 +222,25 @@ export function getCurrentReactVersion(
   return versions[0].version;
 }
 
+export function assertE2EReactVersionAllowed(
+  reactVersion,
+  config = loadCompatibilityConfig(),
+  packageJson = readJson(currentPackagePath),
+) {
+  const allowedReactVersions = [
+    ...new Set([
+      getCurrentReactVersion(packageJson),
+      ...config.e2eReactVersions,
+    ]),
+  ];
+
+  if (!allowedReactVersions.includes(reactVersion)) {
+    throw new Error(
+      `The E2E React compatibility version must be one of the configured lanes: ${allowedReactVersions.join(", ")}, received ${String(reactVersion)}.`,
+    );
+  }
+}
+
 function getReactPeerRange(packageJson) {
   const ranges = getReactVersions(packageJson, "peerDependencies");
   const uniqueRanges = new Set(ranges.map(({ version }) => version));
@@ -841,6 +860,7 @@ function runCompatibilityE2E(version, reactVersion, projects) {
       `The E2E React compatibility version must be exact, received ${String(reactVersion)}.`,
     );
   }
+  assertE2EReactVersionAllowed(reactVersion, config);
 
   const isCurrentLexicalVersion = version === currentLexicalVersion;
   const isCurrentReactVersion = reactVersion === currentReactVersion;

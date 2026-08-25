@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertE2EReactVersionAllowed,
   assertLexicalGraphAligned,
   assertReactGraphAligned,
   createCompatibilityMatrix,
@@ -95,6 +96,37 @@ describe("Lexical compatibility configuration", () => {
 
   it("derives one current React version from aligned development dependencies", () => {
     expect(getCurrentReactVersion(lexicalPackageManifest)).toBe("19.2.3");
+  });
+
+  it("restricts E2E React versions to configured lanes", () => {
+    expect(() =>
+      assertE2EReactVersionAllowed(
+        "19.2.3",
+        compatibilityConfig,
+        lexicalPackageManifest,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertE2EReactVersionAllowed(
+        "18.3.1",
+        compatibilityConfig,
+        lexicalPackageManifest,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertE2EReactVersionAllowed(
+        "17.0.2",
+        compatibilityConfig,
+        lexicalPackageManifest,
+      ),
+    ).toThrow("19.2.3, 18.3.1");
+    expect(() =>
+      assertE2EReactVersionAllowed(
+        "19.2.4",
+        compatibilityConfig,
+        lexicalPackageManifest,
+      ),
+    ).toThrow("19.2.3, 18.3.1");
   });
 
   it("accepts semantically equivalent React peer ranges", () => {
