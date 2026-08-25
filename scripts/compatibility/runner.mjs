@@ -747,14 +747,14 @@ function assertFilesUnchanged(snapshot) {
 }
 
 function parseVersionArgument(args) {
-  return parseArgument(args, "--version", "Lexical");
+  return parseArgument(args, "--version");
 }
 
 function parseReactVersionArgument(args) {
-  return parseArgument(args, "--react-version", "React");
+  return parseArgument(args, "--react-version");
 }
 
-function parseArgument(args, option, name) {
+function parseArgument(args, option) {
   const versionIndex = args.indexOf(option);
   if (versionIndex === -1) {
     return undefined;
@@ -762,18 +762,14 @@ function parseArgument(args, option, name) {
 
   const version = args[versionIndex + 1];
   if (version == null || version.startsWith("--")) {
-    throw new Error(`${option} requires an exact ${name} version.`);
+    throw new Error(`${option} requires a value.`);
   }
 
   return version;
 }
 
 function parsePlaywrightProjects(args) {
-  const projectArgument = parseArgument(
-    args,
-    "--project",
-    "Playwright project",
-  );
+  const projectArgument = parseArgument(args, "--project");
   const requestedProjects =
     projectArgument == null || projectArgument === "all"
       ? playwrightProjects
