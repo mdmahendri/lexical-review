@@ -3,7 +3,12 @@ import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
-import { $getRoot, $isElementNode, TextNode } from "lexical";
+import {
+  $getRoot,
+  $isElementNode,
+  COMPOSITION_END_COMMAND,
+  TextNode,
+} from "lexical";
 import {
   $createReviewTextNode,
   $isReviewTextNode,
@@ -355,27 +360,19 @@ function ReviewEditor() {
         value: true,
       });
 
-      if (/firefox/i.test(navigator.userAgent)) {
-        rootElement.dispatchEvent(
-          new CompositionEvent("compositionend", {
-            bubbles: true,
-            data: text,
-          }),
-        );
-        Object.defineProperty(inputEvent, "isComposing", {
-          configurable: true,
-          value: false,
-        });
-        rootElement.dispatchEvent(inputEvent);
-      } else {
-        rootElement.dispatchEvent(inputEvent);
-        rootElement.dispatchEvent(
-          new CompositionEvent("compositionend", {
-            bubbles: true,
-            data: text,
-          }),
-        );
-      }
+      rootElement.dispatchEvent(inputEvent);
+
+      // Lexical defers native compositionend handling differently across
+      // browsers. Commit through the command directly so the fixture does
+      // not stop in a browser-specific intermediate composition state.
+      editor.dispatchCommand(
+        COMPOSITION_END_COMMAND,
+        new CompositionEvent("compositionend", {
+          bubbles: true,
+          cancelable: true,
+          data: text,
+        }),
+      );
     };
 
     const api: ReviewEditorFixtureApi = {
