@@ -18,7 +18,7 @@ The review model tracks text changes. Formatting-only changes remain regular Lex
 
 ## Installation
 
-The current compatibility baseline supports Lexical `0.45.0` through `0.49.x`.
+The package declares Lexical peer compatibility `>=0.45.0 <0.50.0`.
 The `lexical`, `@lexical/react`, `@lexical/clipboard`, and `@lexical/utils`
 packages must use the same version:
 
@@ -31,19 +31,11 @@ npm install lexical-review \
   react react-dom
 ```
 
-The tested React peer range is React 18 and React 19, with `react` and
-`react-dom` kept on the same version. Browser compatibility checks run the
-focused editor scenarios in Chromium, Firefox, and Playwright WebKit. WebKit
-coverage is not native Safari or iOS Safari certification.
-
-## Public entrypoints
-
-| Import                  | Exports                                                                              |
-| ----------------------- | ------------------------------------------------------------------------------------ |
-| `lexical-review`        | `ReviewTextNode`, `$createReviewTextNode`, `$isReviewTextNode`, and `TextReviewType` |
-| `lexical-review/client` | `ReviewTextPlugin` and `registerReviewText`                                          |
-
-The root entrypoint is React-free, so it can be used for editor-state models and serialization. Use the client entrypoint for editor registration and the React plugin.
+The package declares React peer compatibility for React 18 and React 19, and
+`react` and `react-dom` must use the same version. CI exercises the supported
+Lexical minors and browser boundary scenarios in Chromium, Firefox, and
+Playwright WebKit. Playwright WebKit results do not certify native Safari or
+iOS Safari.
 
 ## Quick start
 
@@ -85,16 +77,6 @@ export function ReviewEditor() {
 ```
 
 `ReviewTextPlugin` registers the review commands and normalizes text nodes created after registration. For a non-React integration, call `registerReviewText(editor, "word")` directly and keep the returned cleanup function.
-
-## Rendering and serialization
-
-Inserted and deleted text uses `<ins>` and `<del>` as the outermost wrappers. Lexical formatting is nested inside them, for example:
-
-```html
-<ins><strong>inserted text</strong></ins>
-```
-
-Review nodes serialize as Lexical text nodes with `type: "review"` and review metadata for `original`, `insertion`, or `deletion` text.
 
 ## Development
 
