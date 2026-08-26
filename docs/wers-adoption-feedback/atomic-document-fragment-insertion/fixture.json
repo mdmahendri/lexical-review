@@ -1,0 +1,278 @@
+{
+  "fixtureVersion": 1,
+  "id": "atomic-document-fragment-insertion/collapsed-multiline-paste",
+  "boundaries": {
+    "lexicalReview": {
+      "repository": "mahendrimd/lexical-review",
+      "baselineCommit": "c6c79d8d05da8875ba3e2674c5e8d327260f02d2",
+      "packageVersion": "2.0.0"
+    },
+    "lexical": {
+      "repository": "facebook/lexical",
+      "version": "0.49.0",
+      "tag": "v0.49.0",
+      "commit": "ffe90924bd55b5d450c88de0f9f1c8b228c4a221"
+    },
+    "webEditorRevisions": {
+      "repository": "mahendrimd/web-editor-revisions",
+      "modelVersion": "1",
+      "serializationProfile": "json-jcs-1",
+      "commit": "e6ac89287257646888a4eadf692d836eb8feb41b"
+    }
+  },
+  "action": {
+    "acceptedParagraphs": [
+      {
+        "id": "p1",
+        "text": "AB"
+      }
+    ],
+    "selection": {
+      "type": "point",
+      "paragraphId": "p1",
+      "offset": 1,
+      "collapsed": true
+    },
+    "clipboard": {
+      "selectedRepresentation": "text/plain",
+      "text/plain": "x\ny"
+    },
+    "intentionCount": 1
+  },
+  "requiredProjections": {
+    "accept": [
+      {
+        "id": "p1",
+        "text": "Ax"
+      },
+      {
+        "id": "paste-right",
+        "text": "yB"
+      }
+    ],
+    "reject": [
+      {
+        "id": "p1",
+        "text": "AB"
+      }
+    ],
+    "independentlySelectablePartialOutcomes": false
+  },
+  "candidates": {
+    "singleInsert": {
+      "id": "paste",
+      "kind": "insert",
+      "target": {
+        "type": "point",
+        "paragraphId": "p1",
+        "offset": 1,
+        "association": "after"
+      },
+      "content": {
+        "text": "x\ny",
+        "formatting": [
+          {
+            "start": 0,
+            "end": 3,
+            "values": {
+              "italic": false,
+              "bold": false,
+              "underline": false,
+              "strikethrough": false
+            }
+          }
+        ]
+      },
+      "samePointOrder": 0
+    },
+    "singleSplit": {
+      "id": "paste",
+      "kind": "paragraph-split",
+      "target": {
+        "type": "point",
+        "paragraphId": "p1",
+        "offset": 1,
+        "association": "after"
+      },
+      "newRightParagraphId": "paste-right"
+    },
+    "dependentDecomposition": [
+      {
+        "id": "insert-left",
+        "kind": "insert",
+        "target": {
+          "type": "point",
+          "paragraphId": "p1",
+          "offset": 1,
+          "association": "before"
+        },
+        "content": {
+          "text": "x",
+          "formatting": [
+            {
+              "start": 0,
+              "end": 1,
+              "values": {
+                "italic": false,
+                "bold": false,
+                "underline": false,
+                "strikethrough": false
+              }
+            }
+          ]
+        },
+        "samePointOrder": 0
+      },
+      {
+        "id": "insert-right",
+        "kind": "insert",
+        "target": {
+          "type": "point",
+          "paragraphId": "paste-right",
+          "offset": 0,
+          "association": "after"
+        },
+        "content": {
+          "text": "y",
+          "formatting": [
+            {
+              "start": 0,
+              "end": 1,
+              "values": {
+                "italic": false,
+                "bold": false,
+                "underline": false,
+                "strikethrough": false
+              }
+            }
+          ]
+        },
+        "samePointOrder": 0
+      },
+      {
+        "id": "split",
+        "kind": "paragraph-split",
+        "target": {
+          "type": "point",
+          "paragraphId": "p1",
+          "offset": 1,
+          "association": "after"
+        },
+        "newRightParagraphId": "paste-right"
+      }
+    ],
+    "validDecomposition": [
+      {
+        "id": "insert-left",
+        "kind": "insert",
+        "target": {
+          "type": "point",
+          "paragraphId": "p1",
+          "offset": 1,
+          "association": "before"
+        },
+        "content": {
+          "text": "x",
+          "formatting": [
+            {
+              "start": 0,
+              "end": 1,
+              "values": {
+                "italic": false,
+                "bold": false,
+                "underline": false,
+                "strikethrough": false
+              }
+            }
+          ]
+        },
+        "samePointOrder": 0
+      },
+      {
+        "id": "insert-right",
+        "kind": "insert",
+        "target": {
+          "type": "point",
+          "paragraphId": "p1",
+          "offset": 1,
+          "association": "after"
+        },
+        "content": {
+          "text": "y",
+          "formatting": [
+            {
+              "start": 0,
+              "end": 1,
+              "values": {
+                "italic": false,
+                "bold": false,
+                "underline": false,
+                "strikethrough": false
+              }
+            }
+          ]
+        },
+        "samePointOrder": 0
+      },
+      {
+        "id": "split",
+        "kind": "paragraph-split",
+        "target": {
+          "type": "point",
+          "paragraphId": "p1",
+          "offset": 1,
+          "association": "after"
+        },
+        "newRightParagraphId": "paste-right"
+      }
+    ]
+  },
+  "unsupportedMappingReport": {
+    "id": "atomic-document-fragment-insertion",
+    "adapter": {
+      "id": "lexical-review",
+      "version": "3-design"
+    },
+    "profile": {
+      "id": "lexical-review-to-web-editor-revisions-core",
+      "version": "1-design"
+    },
+    "direction": "proposal-authoring-to-core",
+    "boundary": "one collapsed multiline paste intention",
+    "inputRef": "fixture:atomic-document-fragment-insertion/collapsed-multiline-paste",
+    "outputRef": null,
+    "outputMutation": "none",
+    "authorizedActions": [],
+    "outcome": "unsupported",
+    "issues": [
+      {
+        "stage": "proposal-authoring",
+        "fields": [
+          "proposal.kind",
+          "proposal.payload",
+          "proposal.relations",
+          "resolution.atomicity",
+          "resolution.acceptanceProjection",
+          "resolution.rejectionProjection"
+        ],
+        "condition": "unsupported",
+        "action": "refused",
+        "impact": "review-semantics-loss",
+        "recoverability": "requires-intervention",
+        "expected": {
+          "proposalCount": 1,
+          "acceptParagraphs": [
+            ["p1", "Ax"],
+            ["paste-right", "yB"]
+          ],
+          "rejectParagraphs": [["p1", "AB"]]
+        },
+        "observed": {
+          "coreProposalKind": null,
+          "decompositionWouldExposePartialResolution": true
+        },
+        "explanation": "WER v1 has paragraph-local insertion and an independently reviewable paragraph split, but no one proposal that atomically inserts content across a new paragraph boundary."
+      }
+    ]
+  }
+}

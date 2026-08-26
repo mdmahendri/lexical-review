@@ -1,0 +1,87 @@
+{
+  "lexicalRuntime": {
+    "lexicalVersion": "0.49.0",
+    "paragraphs": ["Ax", "yB"]
+  },
+  "werV1": {
+    "publishedCoreOracle": {
+      "checksPassed": 13,
+      "checkNames": [
+        "schema and canonical insertion file",
+        "duplicate members, floats, unsafe integers, and isolated surrogates",
+        "fingerprint projection excludes proposals and reports",
+        "insertion, deletion, replacement, mixed resolution, and exact projections",
+        "all core formatting properties, removal, and atomic multi-property formatting",
+        "endpoint splits and empty-paragraph merges retain left identity",
+        "same-point ordering and before/after successor attachment",
+        "operation-specific pending-target remapping",
+        "identity persists through canonical bytes and terminal retention is optional",
+        "stale base, payload mismatch, no-op, surrogate boundary, and unknown required extension",
+        "closed formatting vocabulary, coverage integrity, proposal order, compatibility, and optional extensions",
+        "mapping outcomes are derived and every core vocabulary value is executable",
+        "unauthorized and silent loss cannot claim conformance"
+      ]
+    },
+    "singleInsert": {
+      "valid": true,
+      "accept": [["p1", "Ax\nyB"]],
+      "reject": [["p1", "AB"]],
+      "matchesRequiredAccept": false,
+      "reason": "The newline remains text inside p1; no paragraph identity is created."
+    },
+    "singleSplit": {
+      "valid": true,
+      "accept": [
+        ["p1", "A"],
+        ["paste-right", "B"]
+      ],
+      "reject": [["p1", "AB"]],
+      "matchesRequiredAccept": false,
+      "reason": "The split creates structure but carries no inserted content payload."
+    },
+    "dependentDecomposition": {
+      "valid": false,
+      "error": "proposal insert-right: unknown target paragraph",
+      "reason": "A pending insertion cannot target the right paragraph created by a pending split."
+    },
+    "validDecomposition": {
+      "valid": true,
+      "afterSplit": [
+        ["p1", "A"],
+        ["paste-right", "B"]
+      ],
+      "completeAccept": [
+        ["p1", "Ax"],
+        ["paste-right", "yB"]
+      ],
+      "completeReject": [["p1", "AB"]],
+      "partialOutcomes": {
+        "leftOnly": [
+          ["p1", "Ax"],
+          ["paste-right", "B"]
+        ],
+        "rightOnly": [
+          ["p1", "A"],
+          ["paste-right", "yB"]
+        ],
+        "neitherInsert": [
+          ["p1", "A"],
+          ["paste-right", "B"]
+        ]
+      },
+      "matchesRequiredAccept": true,
+      "matchesRequiredReject": true,
+      "preservesOneProposalAtomicity": false
+    },
+    "unsupportedMappingReport": {
+      "derivedOutcome": "unsupported",
+      "conforming": true,
+      "outputMutation": "none"
+    },
+    "conclusion": {
+      "werV1CoreProposalExists": false,
+      "currentCompatibleBehavior": "refuse-without-mutation-and-report-unsupported",
+      "smallestRemedy": "Add one future-standard atomic document-fragment insertion proposal kind with a point target, ordered paragraph fragments, and reserved identities for every created paragraph."
+    }
+  }
+}
