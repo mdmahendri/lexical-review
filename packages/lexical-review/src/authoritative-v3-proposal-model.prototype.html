@@ -1,0 +1,1591 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Authoritative v3 proposal model prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: #18242b;
+        background: #edf2f5;
+        --accent: #166b8f;
+        --accent-soft: #dceff7;
+        --core: #1f6f55;
+        --core-soft: #def2e9;
+        --draft: #9a650c;
+        --draft-soft: #fff0cf;
+        --danger: #a13e36;
+        --danger-soft: #fae5e1;
+        --line: #cbd7dd;
+        --muted: #5d6b72;
+        --panel: #fff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        width: min(1320px, calc(100% - 32px));
+        margin: 34px auto 72px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: clamp(2rem, 4vw, 3.25rem);
+        letter-spacing: -0.045em;
+      }
+
+      h2 {
+        margin-bottom: 12px;
+        font-size: 1.08rem;
+      }
+
+      h3 {
+        margin-bottom: 7px;
+        font-size: 0.93rem;
+      }
+
+      .lede {
+        max-width: 920px;
+        color: var(--muted);
+        font-size: 1.03rem;
+        line-height: 1.6;
+      }
+
+      .hypothesis,
+      .scope-note {
+        margin: 20px 0;
+        padding: 17px 19px;
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        background: var(--accent-soft);
+        line-height: 1.55;
+      }
+
+      .scope-note {
+        border-left-color: #71808a;
+        color: #42515a;
+        background: #e8eef1;
+      }
+
+      .architecture {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .layer,
+      .panel {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: var(--panel);
+        box-shadow: 0 9px 26px rgb(38 69 84 / 6%);
+      }
+
+      .layer strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .layer p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.48;
+      }
+
+      .layer.core {
+        border-top: 4px solid var(--core);
+      }
+
+      .layer.authoring {
+        border-top: 4px solid var(--draft);
+      }
+
+      .layer.projection {
+        border-top: 4px solid var(--accent);
+      }
+
+      .flow {
+        margin: -5px 0 18px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 0.86rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.75fr);
+        gap: 16px;
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .document {
+        display: grid;
+        gap: 10px;
+        min-height: 118px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fbfc;
+        font-family: Georgia, serif;
+        font-size: 1.25rem;
+        line-height: 1.7;
+      }
+
+      .paragraph {
+        position: relative;
+        margin: 0;
+      }
+
+      .paragraph-id {
+        display: inline-block;
+        min-width: 34px;
+        margin-right: 9px;
+        color: #829098;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.7rem;
+        vertical-align: middle;
+      }
+
+      ins,
+      del,
+      .pending-format,
+      .draft-text,
+      .split-mark,
+      .merge-mark {
+        border-radius: 3px;
+        text-decoration: none;
+      }
+
+      ins {
+        border-bottom: 2px solid #27875e;
+        background: #d9f2e5;
+      }
+
+      del {
+        color: #8a3f39;
+        background: #fae2df;
+        text-decoration: line-through;
+      }
+
+      .pending-format {
+        border-bottom: 2px dashed #7656a5;
+        background: #eee8f7;
+      }
+
+      .draft-text {
+        border-bottom: 2px dotted var(--draft);
+        background: var(--draft-soft);
+      }
+
+      .split-mark,
+      .merge-mark {
+        padding: 1px 4px;
+        color: #75500e;
+        background: #ffe8b3;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.7em;
+      }
+
+      .projection-stale {
+        border-color: #d7928a;
+        background: #fff7f6;
+      }
+
+      .legend,
+      .badges,
+      .button-row,
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .legend {
+        margin-top: 11px;
+        color: var(--muted);
+        font-size: 0.79rem;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 25px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        color: #46545c;
+        background: #e9eff2;
+        font-size: 0.77rem;
+      }
+
+      .badge.ok {
+        color: #17553f;
+        background: var(--core-soft);
+      }
+
+      .badge.warn {
+        color: #744b08;
+        background: var(--draft-soft);
+      }
+
+      .badge.refused {
+        color: #7d302a;
+        background: var(--danger-soft);
+      }
+
+      .controls,
+      .walkthroughs,
+      .events {
+        margin-top: 16px;
+      }
+
+      .control-group + .control-group {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid #e3eaed;
+      }
+
+      button {
+        min-height: 36px;
+        padding: 8px 11px;
+        border: 1px solid #b8c8cf;
+        border-radius: 8px;
+        color: #263940;
+        background: #fff;
+        font: inherit;
+        font-size: 0.84rem;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      button.primary,
+      button.step.active {
+        border-color: var(--accent);
+        color: #fff;
+        background: var(--accent);
+      }
+
+      button.danger {
+        color: var(--danger);
+      }
+
+      button:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+
+      .tab[aria-selected="true"] {
+        border-color: #29414c;
+        color: #fff;
+        background: #29414c;
+      }
+
+      .scenario-copy {
+        min-height: 46px;
+        color: var(--muted);
+        line-height: 1.48;
+      }
+
+      .walkthrough-steps,
+      .proposal-list,
+      .event-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .step {
+        width: 100%;
+        text-align: left;
+      }
+
+      .step.done::after {
+        float: right;
+        content: "Done";
+        opacity: 0.75;
+      }
+
+      dl {
+        display: grid;
+        grid-template-columns: 145px 1fr;
+        gap: 8px 12px;
+        margin: 0;
+        font-size: 0.86rem;
+      }
+
+      dt {
+        color: var(--muted);
+      }
+
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .proposal-card,
+      .event-list li {
+        padding: 10px 11px;
+        border: 1px solid #dfe8eb;
+        border-radius: 8px;
+        background: #fafcfd;
+        font-size: 0.84rem;
+        line-height: 1.43;
+      }
+
+      .proposal-card strong {
+        display: block;
+        margin-bottom: 3px;
+      }
+
+      .event-list {
+        max-height: 208px;
+        overflow: auto;
+      }
+
+      .event-list li:first-child {
+        border-color: #b9d3de;
+        background: #eff8fb;
+      }
+
+      .empty,
+      .prototype-mark {
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-style: italic;
+      }
+
+      .prototype-mark {
+        margin-top: 22px;
+        font-style: normal;
+      }
+
+      @media (max-width: 900px) {
+        .architecture,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .flow {
+          text-align: left;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Which state is the truth?</h1>
+      <p class="lede">
+        This throwaway model tests whether version 3 can keep accepted content,
+        immutable revision proposals, mutable proposal drafts, and the live
+        Lexical editor understandable without making Lexical JSON authoritative.
+        Press the buttons freely or follow a guided walkthrough.
+      </p>
+
+      <div class="hypothesis">
+        <strong>Hypothesis:</strong> a React-free review document is the only
+        authority for accepted state and independently identifiable proposals. A
+        local authoring overlay owns mutable proposal drafts until export. The
+        Lexical editor is a disposable projection with identity metadata and
+        selection; every semantic input returns to the core before the
+        projection is refreshed.
+      </div>
+
+      <section class="architecture" aria-label="Proposed architecture">
+        <article class="layer core">
+          <strong>1. Authoritative review document</strong>
+          <p>
+            Accepted paragraphs, fingerprint, and immutable pending proposals.
+            Pure creation and resolution logic works without React or Lexical.
+          </p>
+        </article>
+        <article class="layer authoring">
+          <strong>2. Ephemeral authoring overlay</strong>
+          <p>
+            Proposal drafts and acknowledged replacement intent. Local and
+            mutable; absent from canonical Web Editor Revisions interchange.
+          </p>
+        </article>
+        <article class="layer projection">
+          <strong>3. Live Lexical projection</strong>
+          <p>
+            Rebuildable paragraph and review segments, node keys, and selection.
+            Core IDs travel as node metadata; Lexical keys never escape upward.
+          </p>
+        </article>
+      </section>
+      <p class="flow">
+        keyboard / toolbar / IME / programmatic intent → core transaction →
+        tagged projection refresh
+      </p>
+
+      <div class="scope-note">
+        This model intentionally does not settle compound gestures, clipboard
+        transfer, or post-resolution selection; those remain separate Wayfinder
+        decisions. Fingerprints are symbolic in this prototype, not JCS hashes.
+      </div>
+
+      <div class="grid">
+        <div class="stack">
+          <section class="panel">
+            <h2>Live Lexical projection</h2>
+            <div id="badges" class="badges"></div>
+            <div id="document" class="document"></div>
+            <div class="legend">
+              <span>green: insertion</span>
+              <span>red: deletion</span>
+              <span>purple: formatting</span>
+              <span>amber: draft or paragraph boundary</span>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Free play</h2>
+            <div class="controls">
+              <div class="control-group">
+                <h3>Local authoring intent</h3>
+                <div class="button-row">
+                  <button data-action="open-draft">Open insertion draft</button>
+                  <button data-action="type-draft">Type “very ”</button>
+                  <button data-action="export-draft">Export draft</button>
+                </div>
+              </div>
+              <div class="control-group">
+                <h3>React-free programmatic creation</h3>
+                <div class="button-row">
+                  <button data-kind="insert">Insert</button>
+                  <button data-kind="delete">Delete</button>
+                  <button data-kind="replace">Replace</button>
+                  <button data-kind="format">Format</button>
+                  <button data-kind="paragraph-split">Paragraph split</button>
+                  <button data-kind="paragraph-merge">Paragraph merge</button>
+                </div>
+              </div>
+              <div class="control-group">
+                <h3>Selective resolution and safety</h3>
+                <div class="button-row">
+                  <button data-action="seed-pair">Seed compatible pair</button>
+                  <button data-action="accept-first" class="primary">
+                    Accept first pending
+                  </button>
+                  <button data-action="reject-first">
+                    Reject first pending
+                  </button>
+                  <button data-action="try-overlap" class="danger">
+                    Try overlapping proposal
+                  </button>
+                </div>
+              </div>
+              <div class="control-group">
+                <h3>Projection ownership</h3>
+                <div class="button-row">
+                  <button data-action="mutate-projection" class="danger">
+                    Mutate Lexical directly
+                  </button>
+                  <button data-action="rebuild-projection">
+                    Rebuild from authority
+                  </button>
+                  <button data-action="reset">Reset everything</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel walkthroughs">
+            <h2>Guided walkthroughs</h2>
+            <div id="tabs" class="tabs" role="tablist"></div>
+            <p id="scenario-copy" class="scenario-copy"></p>
+            <div id="walkthrough-steps" class="walkthrough-steps"></div>
+          </section>
+        </div>
+
+        <aside class="stack">
+          <section class="panel">
+            <h2>Authoritative accepted state</h2>
+            <div id="accepted-state"></div>
+          </section>
+          <section class="panel">
+            <h2>Immutable proposal ledger</h2>
+            <div id="proposal-list"></div>
+          </section>
+          <section class="panel">
+            <h2>Ephemeral authoring overlay</h2>
+            <div id="draft-state"></div>
+          </section>
+          <section class="panel">
+            <h2>Projection contract</h2>
+            <div id="projection-state"></div>
+          </section>
+          <section class="panel events">
+            <h2>Latest outcomes</h2>
+            <ol id="event-list" class="event-list"></ol>
+          </section>
+        </aside>
+      </div>
+
+      <p class="prototype-mark">
+        PROTOTYPE — throw away the page. Keep only the model decision it helps
+        validate. Source assumptions: Web Editor Revisions v1 at e6ac892 and
+        Lexical v0.49.0 at ffe9092.
+      </p>
+    </main>
+
+    <script>
+      // Portable pure logic module. It deliberately has no DOM dependency.
+      const ProposalModel = (() => {
+        const plain = Object.freeze({
+          italic: false,
+          bold: false,
+          underline: false,
+          strikethrough: false,
+        });
+
+        const clone = (value) => structuredClone(value);
+        const sameFormat = (left, right) =>
+          left.italic === right.italic &&
+          left.bold === right.bold &&
+          left.underline === right.underline &&
+          left.strikethrough === right.strikethrough;
+
+        const fullFormatting = (text, values = plain) =>
+          text.length === 0
+            ? []
+            : [{ start: 0, end: text.length, values: { ...values } }];
+
+        const expandFormatting = (paragraph) => {
+          const expanded = Array.from(
+            { length: paragraph.text.length },
+            () => ({
+              ...plain,
+            }),
+          );
+          for (const run of paragraph.formatting) {
+            for (let index = run.start; index < run.end; index += 1) {
+              expanded[index] = { ...run.values };
+            }
+          }
+          return expanded;
+        };
+
+        const collapseFormatting = (expanded) => {
+          if (expanded.length === 0) return [];
+          const runs = [];
+          let start = 0;
+          for (let index = 1; index <= expanded.length; index += 1) {
+            if (
+              index === expanded.length ||
+              !sameFormat(expanded[start], expanded[index])
+            ) {
+              runs.push({
+                start,
+                end: index,
+                values: { ...expanded[start] },
+              });
+              start = index;
+            }
+          }
+          return runs;
+        };
+
+        const paragraph = (id, text) => ({
+          id,
+          text,
+          formatting: fullFormatting(text),
+        });
+
+        const fragment = (source, start, end) => ({
+          text: source.text.slice(start, end),
+          formatting: collapseFormatting(
+            expandFormatting(source).slice(start, end),
+          ),
+        });
+
+        const sourceParagraph = (state, paragraphId = "p1") =>
+          state.acceptedState.paragraphs.find(
+            (item) => item.id === paragraphId,
+          );
+
+        const fingerprint = (revision) => `prototype-accepted-v${revision}`;
+
+        const initialState = () => ({
+          acceptedRevision: 0,
+          acceptedState: {
+            fingerprint: fingerprint(0),
+            paragraphs: [
+              paragraph("p1", "The quick brown fox."),
+              paragraph("p2", "Second paragraph."),
+            ],
+          },
+          proposals: [],
+          authoring: { draft: null },
+          projection: {
+            generation: 1,
+            sourceFingerprint: fingerprint(0),
+            status: "synchronized",
+            updateTag: "lexical-review:projection",
+            rogueText: null,
+            selection: "deliberately not modeled",
+          },
+          nextProposal: 1,
+          nextParagraph: 3,
+          events: [
+            "Reset to two accepted paragraphs. The Lexical projection was derived from the core.",
+          ],
+          lastOutcome: "ok",
+        });
+
+        const record = (state, message, outcome = "ok") => ({
+          ...state,
+          lastOutcome: outcome,
+          events: [message, ...state.events].slice(0, 18),
+        });
+
+        const refuse = (state, message) =>
+          record(state, `Refused without core mutation: ${message}`, "refused");
+
+        const refreshProjection = (state, message) =>
+          record(
+            {
+              ...state,
+              projection: {
+                ...state.projection,
+                generation: state.projection.generation + 1,
+                sourceFingerprint: state.acceptedState.fingerprint,
+                status: "synchronized",
+                rogueText: null,
+              },
+            },
+            message,
+          );
+
+        const nextId = (state) => `proposal-${state.nextProposal}`;
+
+        const targetText = (proposal) => {
+          if (proposal.target.type === "point") {
+            return `${proposal.target.paragraphId}@${proposal.target.offset} (${proposal.target.association})`;
+          }
+          if (proposal.target.type === "range") {
+            return `${proposal.target.paragraphId}[${proposal.target.start.offset}, ${proposal.target.end.offset})`;
+          }
+          return `${proposal.target.leftParagraphId} | ${proposal.target.rightParagraphId}`;
+        };
+
+        const proposalSpan = (proposal) => {
+          if (proposal.target.type === "paragraph-boundary") {
+            return {
+              type: "boundary",
+              ids: [
+                proposal.target.leftParagraphId,
+                proposal.target.rightParagraphId,
+              ],
+            };
+          }
+          if (proposal.target.type === "point") {
+            return {
+              type: "point",
+              paragraphId: proposal.target.paragraphId,
+              start: proposal.target.offset,
+              end: proposal.target.offset,
+              kind: proposal.kind,
+            };
+          }
+          return {
+            type: "range",
+            paragraphId: proposal.target.paragraphId,
+            start: proposal.target.start.offset,
+            end: proposal.target.end.offset,
+            kind: proposal.kind,
+          };
+        };
+
+        const conflicts = (left, right) => {
+          const a = proposalSpan(left);
+          const b = proposalSpan(right);
+          if (a.type === "boundary" || b.type === "boundary") {
+            const boundary = a.type === "boundary" ? a : b;
+            const other = a.type === "boundary" ? b : a;
+            if (other.type === "boundary") {
+              return boundary.ids.some((id) => other.ids.includes(id));
+            }
+            return boundary.ids.includes(other.paragraphId);
+          }
+          if (a.paragraphId !== b.paragraphId) return false;
+          if (a.type === "point" && b.type === "point") {
+            return !(
+              a.kind === "insert" &&
+              b.kind === "insert" &&
+              a.start === b.start
+            );
+          }
+          if (a.type === "point") return a.start > b.start && a.start < b.end;
+          if (b.type === "point") return b.start > a.start && b.start < a.end;
+          return Math.max(a.start, b.start) < Math.min(a.end, b.end);
+        };
+
+        const addProposal = (state, proposal, message) => {
+          if (state.projection.status !== "synchronized") {
+            return refuse(
+              state,
+              "the live projection is stale; rebuild it before another semantic transaction",
+            );
+          }
+          const collision = state.proposals.find((item) =>
+            conflicts(item, proposal),
+          );
+          if (collision) {
+            return refuse(
+              state,
+              `${proposal.kind} conflicts with ${collision.id} (${collision.kind}); pending sets stay non-overlapping`,
+            );
+          }
+          const next = {
+            ...state,
+            proposals: [...state.proposals, proposal],
+            nextProposal: state.nextProposal + 1,
+          };
+          return refreshProjection(next, message);
+        };
+
+        const pointTarget = (paragraphId, offset, association = "after") => ({
+          type: "point",
+          paragraphId,
+          offset,
+          association,
+        });
+
+        const rangeTarget = (paragraphId, start, end) => ({
+          type: "range",
+          paragraphId,
+          start: { offset: start, association: "after" },
+          end: { offset: end, association: "before" },
+        });
+
+        const makeProposal = (state, kind, overrides = {}) => {
+          const source = sourceParagraph(state);
+          if (!source) return null;
+          const id = nextId(state);
+          const base = {
+            id,
+            baseFingerprint: state.acceptedState.fingerprint,
+            state: "pending",
+            kind,
+            provenance: {
+              sourceSystem: overrides.origin ?? "lexical-review/core",
+            },
+          };
+          const start = Math.min(4, Math.max(0, source.text.length - 1));
+          const end = Math.min(Math.max(start + 1, 9), source.text.length);
+          switch (kind) {
+            case "insert":
+              return {
+                ...base,
+                target: pointTarget(source.id, start, "after"),
+                content: {
+                  text: overrides.text ?? "very ",
+                  formatting: fullFormatting(overrides.text ?? "very "),
+                },
+                samePointOrder: state.nextProposal,
+              };
+            case "delete":
+              return {
+                ...base,
+                target: rangeTarget(source.id, start, end),
+                content: fragment(source, start, end),
+              };
+            case "replace":
+              return {
+                ...base,
+                target: rangeTarget(source.id, start, end),
+                oldContent: fragment(source, start, end),
+                newContent: {
+                  text: "nimble",
+                  formatting: fullFormatting("nimble"),
+                },
+              };
+            case "format":
+              return {
+                ...base,
+                target: rangeTarget(source.id, start, end),
+                changes: { bold: { before: false, after: true } },
+              };
+            case "paragraph-split": {
+              const offset = Math.floor(source.text.length / 2);
+              return {
+                ...base,
+                target: pointTarget(source.id, offset, "after"),
+                newRightParagraphId: `p${state.nextParagraph}`,
+              };
+            }
+            case "paragraph-merge": {
+              const [left, right] = state.acceptedState.paragraphs;
+              if (!left || !right) return null;
+              return {
+                ...base,
+                target: {
+                  type: "paragraph-boundary",
+                  leftParagraphId: left.id,
+                  rightParagraphId: right.id,
+                },
+              };
+            }
+            default:
+              return null;
+          }
+        };
+
+        const withInsertedFragment = (source, offset, content) => {
+          const formats = expandFormatting(source);
+          const inserted = [];
+          for (const run of content.formatting) {
+            for (let index = run.start; index < run.end; index += 1) {
+              inserted[index] = { ...run.values };
+            }
+          }
+          return {
+            ...source,
+            text:
+              source.text.slice(0, offset) +
+              content.text +
+              source.text.slice(offset),
+            formatting: collapseFormatting([
+              ...formats.slice(0, offset),
+              ...inserted,
+              ...formats.slice(offset),
+            ]),
+          };
+        };
+
+        const withDeletedRange = (source, start, end) => {
+          const formats = expandFormatting(source);
+          return {
+            ...source,
+            text: source.text.slice(0, start) + source.text.slice(end),
+            formatting: collapseFormatting([
+              ...formats.slice(0, start),
+              ...formats.slice(end),
+            ]),
+          };
+        };
+
+        const withFormattedRange = (source, start, end, changes) => {
+          const formats = expandFormatting(source);
+          for (let index = start; index < end; index += 1) {
+            for (const [name, change] of Object.entries(changes)) {
+              formats[index][name] = change.after;
+            }
+          }
+          return { ...source, formatting: collapseFormatting(formats) };
+        };
+
+        const applyAcceptedProposal = (acceptedState, proposal) => {
+          const paragraphs = clone(acceptedState.paragraphs);
+          if (proposal.kind === "paragraph-merge") {
+            const leftIndex = paragraphs.findIndex(
+              (item) => item.id === proposal.target.leftParagraphId,
+            );
+            const rightIndex = paragraphs.findIndex(
+              (item) => item.id === proposal.target.rightParagraphId,
+            );
+            const left = paragraphs[leftIndex];
+            const right = paragraphs[rightIndex];
+            const leftFormats = expandFormatting(left);
+            const rightFormats = expandFormatting(right);
+            paragraphs.splice(leftIndex, 2, {
+              ...left,
+              text: left.text + right.text,
+              formatting: collapseFormatting([...leftFormats, ...rightFormats]),
+            });
+            return { ...acceptedState, paragraphs };
+          }
+
+          const paragraphIndex = paragraphs.findIndex(
+            (item) => item.id === proposal.target.paragraphId,
+          );
+          const source = paragraphs[paragraphIndex];
+          if (proposal.kind === "insert") {
+            paragraphs[paragraphIndex] = withInsertedFragment(
+              source,
+              proposal.target.offset,
+              proposal.content,
+            );
+          } else if (proposal.kind === "delete") {
+            paragraphs[paragraphIndex] = withDeletedRange(
+              source,
+              proposal.target.start.offset,
+              proposal.target.end.offset,
+            );
+          } else if (proposal.kind === "replace") {
+            const deleted = withDeletedRange(
+              source,
+              proposal.target.start.offset,
+              proposal.target.end.offset,
+            );
+            paragraphs[paragraphIndex] = withInsertedFragment(
+              deleted,
+              proposal.target.start.offset,
+              proposal.newContent,
+            );
+          } else if (proposal.kind === "format") {
+            paragraphs[paragraphIndex] = withFormattedRange(
+              source,
+              proposal.target.start.offset,
+              proposal.target.end.offset,
+              proposal.changes,
+            );
+          } else if (proposal.kind === "paragraph-split") {
+            const offset = proposal.target.offset;
+            const formats = expandFormatting(source);
+            paragraphs.splice(
+              paragraphIndex,
+              1,
+              {
+                ...source,
+                text: source.text.slice(0, offset),
+                formatting: collapseFormatting(formats.slice(0, offset)),
+              },
+              {
+                id: proposal.newRightParagraphId,
+                text: source.text.slice(offset),
+                formatting: collapseFormatting(formats.slice(offset)),
+              },
+            );
+          }
+          return { ...acceptedState, paragraphs };
+        };
+
+        const mapOffset = (offset, association, operation) => {
+          if (operation.kind === "insert") {
+            const point = operation.target.offset;
+            return offset > point ||
+              (offset === point && association === "after")
+              ? offset + operation.content.text.length
+              : offset;
+          }
+          if (operation.kind === "delete") {
+            const start = operation.target.start.offset;
+            const end = operation.target.end.offset;
+            return offset >= end ? offset - (end - start) : offset;
+          }
+          if (operation.kind === "replace") {
+            const start = operation.target.start.offset;
+            const end = operation.target.end.offset;
+            const delta = operation.newContent.text.length - (end - start);
+            return offset >= end ? offset + delta : offset;
+          }
+          return offset;
+        };
+
+        const remapProposal = (
+          proposal,
+          acceptedProposal,
+          beforeAccepted,
+          nextFingerprint,
+        ) => {
+          const next = clone(proposal);
+          const target = next.target;
+          if (["insert", "delete", "replace"].includes(acceptedProposal.kind)) {
+            const paragraphId = acceptedProposal.target.paragraphId;
+            if (target.type === "point" && target.paragraphId === paragraphId) {
+              target.offset = mapOffset(
+                target.offset,
+                target.association,
+                acceptedProposal,
+              );
+            } else if (
+              target.type === "range" &&
+              target.paragraphId === paragraphId
+            ) {
+              target.start.offset = mapOffset(
+                target.start.offset,
+                target.start.association,
+                acceptedProposal,
+              );
+              target.end.offset = mapOffset(
+                target.end.offset,
+                target.end.association,
+                acceptedProposal,
+              );
+            }
+          } else if (acceptedProposal.kind === "paragraph-split") {
+            const splitId = acceptedProposal.target.paragraphId;
+            const splitOffset = acceptedProposal.target.offset;
+            const remapPoint = (holder) => {
+              if (
+                holder.paragraphId === splitId &&
+                (holder.offset > splitOffset ||
+                  (holder.offset === splitOffset &&
+                    holder.association === "after"))
+              ) {
+                holder.paragraphId = acceptedProposal.newRightParagraphId;
+                holder.offset -= splitOffset;
+              }
+            };
+            if (target.type === "point") remapPoint(target);
+            if (target.type === "range") {
+              const start = {
+                paragraphId: target.paragraphId,
+                ...target.start,
+              };
+              const end = { paragraphId: target.paragraphId, ...target.end };
+              remapPoint(start);
+              remapPoint(end);
+              if (start.paragraphId === end.paragraphId) {
+                target.paragraphId = start.paragraphId;
+                target.start.offset = start.offset;
+                target.end.offset = end.offset;
+              }
+            }
+          } else if (acceptedProposal.kind === "paragraph-merge") {
+            const rightId = acceptedProposal.target.rightParagraphId;
+            const leftId = acceptedProposal.target.leftParagraphId;
+            const leftLength = beforeAccepted.paragraphs.find(
+              (item) => item.id === leftId,
+            ).text.length;
+            if (target.type === "point" && target.paragraphId === rightId) {
+              target.paragraphId = leftId;
+              target.offset += leftLength;
+            } else if (
+              target.type === "range" &&
+              target.paragraphId === rightId
+            ) {
+              target.paragraphId = leftId;
+              target.start.offset += leftLength;
+              target.end.offset += leftLength;
+            }
+          }
+          next.baseFingerprint = nextFingerprint;
+          return next;
+        };
+
+        const resolve = (state, proposalId, decision) => {
+          if (state.projection.status !== "synchronized") {
+            return refuse(
+              state,
+              "resolution cannot use a stale editor projection",
+            );
+          }
+          const proposal = state.proposals.find(
+            (item) => item.id === proposalId,
+          );
+          if (!proposal) return refuse(state, `${proposalId} is not pending`);
+          const remaining = state.proposals.filter(
+            (item) => item.id !== proposalId,
+          );
+          if (decision === "rejected") {
+            return refreshProjection(
+              { ...state, proposals: remaining },
+              `Rejected ${proposal.id}. Accepted state and fingerprint did not change; the terminal record is omitted from this focused model.`,
+            );
+          }
+          const beforeAccepted = state.acceptedState;
+          const acceptedRevision = state.acceptedRevision + 1;
+          const nextFingerprint = fingerprint(acceptedRevision);
+          const applied = applyAcceptedProposal(beforeAccepted, proposal);
+          const acceptedState = { ...applied, fingerprint: nextFingerprint };
+          const remapped = remaining.map((item) =>
+            remapProposal(item, proposal, beforeAccepted, nextFingerprint),
+          );
+          const nextParagraph =
+            proposal.kind === "paragraph-split"
+              ? state.nextParagraph + 1
+              : state.nextParagraph;
+          return refreshProjection(
+            {
+              ...state,
+              acceptedRevision,
+              acceptedState,
+              proposals: remapped,
+              nextParagraph,
+            },
+            `Accepted ${proposal.id} atomically. The accepted fingerprint advanced and ${remapped.length} remaining proposal target(s) were remapped to the successor state.`,
+          );
+        };
+
+        const reduce = (state, action) => {
+          switch (action.type) {
+            case "reset":
+              return initialState();
+            case "open-draft": {
+              if (state.authoring.draft)
+                return refuse(state, "a proposal draft is already open");
+              if (state.projection.status !== "synchronized")
+                return refuse(state, "rebuild the stale projection first");
+              const draft = {
+                anchor: pointTarget("p1", 4, "after"),
+                text: "",
+                formatting: fullFormatting(""),
+                portableId: null,
+              };
+              return refreshProjection(
+                { ...state, authoring: { draft } },
+                "Opened a local proposal draft at p1@4. It has no portable identity and is absent from the proposal ledger.",
+              );
+            }
+            case "type-draft": {
+              const draft = state.authoring.draft;
+              if (!draft)
+                return refuse(state, "open a proposal draft before typing");
+              const text = draft.text + (action.text ?? "very ");
+              return refreshProjection(
+                {
+                  ...state,
+                  authoring: {
+                    draft: { ...draft, text, formatting: fullFormatting(text) },
+                  },
+                },
+                `Extended the mutable proposal draft to “${text}”. No revision proposal identity was minted.`,
+              );
+            }
+            case "export-draft": {
+              const draft = state.authoring.draft;
+              if (!draft || draft.text.length === 0)
+                return refuse(
+                  state,
+                  "there is no non-empty proposal draft to export",
+                );
+              const proposal = {
+                id: nextId(state),
+                baseFingerprint: state.acceptedState.fingerprint,
+                state: "pending",
+                kind: "insert",
+                provenance: {
+                  sourceSystem: "lexical-review/client draft export",
+                },
+                target: clone(draft.anchor),
+                content: {
+                  text: draft.text,
+                  formatting: clone(draft.formatting),
+                },
+                samePointOrder: state.nextProposal,
+              };
+              const next = {
+                ...state,
+                authoring: { draft: null },
+                proposals: [...state.proposals, proposal],
+                nextProposal: state.nextProposal + 1,
+              };
+              return refreshProjection(
+                next,
+                `Export minted ${proposal.id}. Its kind, target, payload, and identity are now independently reviewable and immutable.`,
+              );
+            }
+            case "add-kind": {
+              const proposal = makeProposal(state, action.kind);
+              if (!proposal)
+                return refuse(
+                  state,
+                  `${action.kind} has no valid accepted-state target`,
+                );
+              return addProposal(
+                state,
+                proposal,
+                `Created immutable ${proposal.id} (${proposal.kind}) directly in the React-free core; Lexical only re-projected the result.`,
+              );
+            }
+            case "seed-pair": {
+              if (state.proposals.length || state.authoring.draft) {
+                return refuse(
+                  state,
+                  "reset or resolve current work before seeding the focused pair",
+                );
+              }
+              const insertion = makeProposal(state, "insert", {
+                text: "very ",
+              });
+              const interim = {
+                ...state,
+                nextProposal: state.nextProposal + 1,
+              };
+              const formatting = makeProposal(interim, "format");
+              formatting.target = rangeTarget("p1", 10, 15);
+              const next = {
+                ...state,
+                proposals: [insertion, formatting],
+                nextProposal: state.nextProposal + 2,
+              };
+              return refreshProjection(
+                next,
+                `Created compatible ${insertion.id} at p1@4 and ${formatting.id} over p1[10,15). Selective acceptance must shift the latter target.`,
+              );
+            }
+            case "accept-first": {
+              const first = state.proposals[0];
+              return first
+                ? resolve(state, first.id, "accepted")
+                : refuse(state, "there is no pending proposal to accept");
+            }
+            case "reject-first": {
+              const first = state.proposals[0];
+              return first
+                ? resolve(state, first.id, "rejected")
+                : refuse(state, "there is no pending proposal to reject");
+            }
+            case "try-overlap": {
+              const source = sourceParagraph(state);
+              const proposal = {
+                id: nextId(state),
+                baseFingerprint: state.acceptedState.fingerprint,
+                state: "pending",
+                kind: "delete",
+                provenance: { sourceSystem: "lexical-review/core" },
+                target: rangeTarget("p1", 3, Math.min(12, source.text.length)),
+                content: fragment(source, 3, Math.min(12, source.text.length)),
+              };
+              return addProposal(
+                state,
+                proposal,
+                `Created ${proposal.id}; no existing target overlapped it.`,
+              );
+            }
+            case "mutate-projection":
+              return record(
+                {
+                  ...state,
+                  projection: {
+                    ...state.projection,
+                    status: "stale",
+                    rogueText: "ROGUE LEXICAL TEXT — not accepted",
+                  },
+                },
+                "A direct Lexical-only mutation made the projection stale. Accepted state, proposals, and fingerprint stayed unchanged.",
+                "refused",
+              );
+            case "rebuild-projection":
+              return refreshProjection(
+                state,
+                "Discarded projection-only drift and rebuilt Lexical nodes from accepted state, proposals, and the authoring overlay.",
+              );
+            default:
+              return refuse(state, `unknown action ${action.type}`);
+          }
+        };
+
+        return { initialState, reduce, targetText };
+      })();
+
+      // Throwaway page shell below this line.
+      const escapeHtml = (value) =>
+        String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+
+      const scenarios = [
+        {
+          name: "Draft to proposal",
+          description:
+            "Local typing changes only a proposal draft. Export mints immutable portable identity; acceptance alone changes accepted content.",
+          steps: [
+            ["open-draft", "Open a proposal draft"],
+            ["type-draft", "Type “very ” into the draft"],
+            ["export-draft", "Export and mint proposal-1"],
+            ["accept-first", "Accept proposal-1 atomically"],
+          ],
+        },
+        {
+          name: "No editor required",
+          description:
+            "Programmatic callers create a complete immutable proposal in the React-free core. The Lexical projection observes it; it is not needed to define it.",
+          steps: [
+            ["add-kind", "Create an atomic replacement", { kind: "replace" }],
+            ["accept-first", "Accept the replacement"],
+            ["add-kind", "Create a formatting proposal", { kind: "format" }],
+            ["reject-first", "Reject without changing accepted state"],
+          ],
+        },
+        {
+          name: "Selective remapping",
+          description:
+            "Two compatible proposals share one base. Accepting the earlier insertion advances the fingerprint and shifts the still-pending formatting target from [10,15) to [15,20).",
+          steps: [
+            ["seed-pair", "Create insertion plus later formatting"],
+            ["accept-first", "Accept insertion and remap formatting"],
+            ["reject-first", "Reject the remapped formatting"],
+          ],
+        },
+        {
+          name: "All six kinds",
+          description:
+            "The same authoritative ledger and resolver carry every in-scope kind. Paragraph identities survive split and merge according to the portable rules.",
+          steps: [
+            ["add-kind", "Create insertion", { kind: "insert" }],
+            ["accept-first", "Accept insertion"],
+            ["add-kind", "Create deletion", { kind: "delete" }],
+            ["accept-first", "Accept deletion"],
+            ["add-kind", "Create replacement", { kind: "replace" }],
+            ["accept-first", "Accept replacement"],
+            ["add-kind", "Create formatting", { kind: "format" }],
+            ["accept-first", "Accept formatting"],
+            ["add-kind", "Create paragraph split", { kind: "paragraph-split" }],
+            ["accept-first", "Accept split and create a paragraph ID"],
+            ["add-kind", "Create paragraph merge", { kind: "paragraph-merge" }],
+            ["accept-first", "Accept merge and retire the right ID"],
+          ],
+        },
+        {
+          name: "Projection drift",
+          description:
+            "A mutation that bypasses semantic intent can make Lexical stale, but it cannot silently become accepted content. Further model transactions refuse until projection rebuild.",
+          steps: [
+            ["add-kind", "Create a programmatic insertion", { kind: "insert" }],
+            ["mutate-projection", "Inject rogue Lexical-only text"],
+            ["accept-first", "Try to resolve from stale projection"],
+            ["rebuild-projection", "Rebuild from authoritative state"],
+            ["accept-first", "Resolve safely after rebuild"],
+          ],
+        },
+        {
+          name: "No pending-on-pending",
+          description:
+            "An overlapping second proposal is refused before mutation. The first proposal and live projection stay intact and independently reviewable.",
+          steps: [
+            ["add-kind", "Create a deletion", { kind: "delete" }],
+            ["try-overlap", "Try an overlapping deletion"],
+            ["reject-first", "Reject the original proposal"],
+          ],
+        },
+      ];
+
+      let state = ProposalModel.initialState();
+      let activeScenario = 0;
+      let completedSteps = 0;
+
+      const dispatch = (action) => {
+        state = ProposalModel.reduce(state, action);
+        render();
+      };
+
+      const actionFor = (name, extra = {}) => ({ type: name, ...extra });
+
+      const proposalRange = (proposal) => {
+        if (proposal.target.type !== "range") return null;
+        return {
+          start: proposal.target.start.offset,
+          end: proposal.target.end.offset,
+          proposal,
+        };
+      };
+
+      const renderProjectionParagraph = (paragraph) => {
+        if (state.projection.rogueText && paragraph.id === "p1") {
+          return `<p class="paragraph"><span class="paragraph-id">${paragraph.id}</span>${escapeHtml(state.projection.rogueText)}</p>`;
+        }
+        const proposals = state.proposals.filter((proposal) => {
+          const target = proposal.target;
+          return (
+            target.paragraphId === paragraph.id ||
+            target.leftParagraphId === paragraph.id
+          );
+        });
+        const points = new Map();
+        const ranges = [];
+        const addPoint = (offset, html) => {
+          points.set(offset, [...(points.get(offset) ?? []), html]);
+        };
+        for (const proposal of proposals) {
+          const label = `${proposal.id}: ${proposal.kind}`;
+          if (proposal.kind === "insert") {
+            addPoint(
+              proposal.target.offset,
+              `<ins title="${label}">${escapeHtml(proposal.content.text)}</ins>`,
+            );
+          } else if (proposal.kind === "paragraph-split") {
+            addPoint(
+              proposal.target.offset,
+              `<span class="split-mark" title="${label}">¶ split → ${escapeHtml(proposal.newRightParagraphId)}</span>`,
+            );
+          } else if (proposal.kind === "paragraph-merge") {
+            addPoint(
+              paragraph.text.length,
+              `<span class="merge-mark" title="${label}">merge with ${escapeHtml(proposal.target.rightParagraphId)}</span>`,
+            );
+          } else {
+            ranges.push(proposalRange(proposal));
+          }
+        }
+        const draft = state.authoring.draft;
+        if (draft?.anchor.paragraphId === paragraph.id) {
+          addPoint(
+            draft.anchor.offset,
+            `<span class="draft-text" title="proposal draft; no portable ID">${escapeHtml(draft.text || "▏")}</span>`,
+          );
+        }
+        ranges.sort((left, right) => left.start - right.start);
+        let html = "";
+        let offset = 0;
+        while (offset <= paragraph.text.length) {
+          if (points.has(offset)) html += points.get(offset).join("");
+          if (offset === paragraph.text.length) break;
+          const range = ranges.find((item) => item.start === offset);
+          if (!range) {
+            html += escapeHtml(paragraph.text[offset]);
+            offset += 1;
+            continue;
+          }
+          const text = escapeHtml(paragraph.text.slice(range.start, range.end));
+          const proposal = range.proposal;
+          if (proposal.kind === "delete") {
+            html += `<del title="${proposal.id}: delete">${text}</del>`;
+          } else if (proposal.kind === "replace") {
+            html += `<del title="${proposal.id}: old content">${text}</del><ins title="${proposal.id}: new content">${escapeHtml(proposal.newContent.text)}</ins>`;
+          } else {
+            html += `<span class="pending-format" title="${proposal.id}: format">${text}</span>`;
+          }
+          offset = range.end;
+        }
+        return `<p class="paragraph"><span class="paragraph-id">${paragraph.id}</span>${html}</p>`;
+      };
+
+      const render = () => {
+        const accepted = state.acceptedState;
+        const documentPanel = document.querySelector("#document");
+        documentPanel.classList.toggle(
+          "projection-stale",
+          state.projection.status === "stale",
+        );
+        documentPanel.innerHTML = accepted.paragraphs
+          .map(renderProjectionParagraph)
+          .join("");
+
+        document.querySelector("#badges").innerHTML = [
+          `<span class="badge ${state.projection.status === "synchronized" ? "ok" : "refused"}">Projection: ${state.projection.status}</span>`,
+          `<span class="badge">Generation ${state.projection.generation}</span>`,
+          `<span class="badge">Accepted ${escapeHtml(accepted.fingerprint)}</span>`,
+          `<span class="badge ${state.authoring.draft ? "warn" : ""}">Draft: ${state.authoring.draft ? "open" : "none"}</span>`,
+          `<span class="badge ${state.lastOutcome === "refused" ? "refused" : "ok"}">Last: ${state.lastOutcome}</span>`,
+        ].join("");
+
+        document.querySelector("#accepted-state").innerHTML = `
+          <dl>
+            <dt>Authority</dt><dd>React-free review document</dd>
+            <dt>Fingerprint</dt><dd>${escapeHtml(accepted.fingerprint)}</dd>
+            <dt>Paragraph order</dt><dd>${accepted.paragraphs.map((item) => item.id).join(" → ")}</dd>
+            <dt>Exact text</dt><dd>${accepted.paragraphs.map((item) => `${item.id}: “${escapeHtml(item.text)}”`).join("<br>")}</dd>
+            <dt>Formatting runs</dt><dd>${accepted.paragraphs.reduce((total, item) => total + item.formatting.length, 0)} normalized run(s)</dd>
+          </dl>`;
+
+        document.querySelector("#proposal-list").innerHTML = state.proposals
+          .length
+          ? `<ol class="proposal-list">${state.proposals
+              .map(
+                (proposal) => `
+                  <li class="proposal-card">
+                    <strong>${escapeHtml(proposal.id)} · ${escapeHtml(proposal.kind)}</strong>
+                    ${escapeHtml(ProposalModel.targetText(proposal))}<br>
+                    base ${escapeHtml(proposal.baseFingerprint)} · ${escapeHtml(proposal.provenance.sourceSystem)}<br>
+                    <em>immutable identity, target semantics, kind, and payload</em>
+                  </li>`,
+              )
+              .join("")}</ol>`
+          : '<p class="empty">No independently identifiable proposal is pending.</p>';
+
+        const draft = state.authoring.draft;
+        document.querySelector("#draft-state").innerHTML = draft
+          ? `<dl>
+              <dt>Portable ID</dt><dd>none</dd>
+              <dt>Anchor</dt><dd>${escapeHtml(draft.anchor.paragraphId)}@${draft.anchor.offset}</dd>
+              <dt>Mutable text</dt><dd>“${escapeHtml(draft.text)}”</dd>
+              <dt>Interchange</dt><dd>excluded until export</dd>
+            </dl>`
+          : '<p class="empty">No local proposal draft is open.</p>';
+
+        document.querySelector("#projection-state").innerHTML = `
+          <dl>
+            <dt>Status</dt><dd>${escapeHtml(state.projection.status)}</dd>
+            <dt>Source</dt><dd>${escapeHtml(state.projection.sourceFingerprint)}</dd>
+            <dt>Update tag</dt><dd>${escapeHtml(state.projection.updateTag)}</dd>
+            <dt>Paragraph IDs</dt><dd>NodeState metadata; not Lexical keys</dd>
+            <dt>Proposal IDs</dt><dd>NodeState metadata on review segments</dd>
+            <dt>Selection</dt><dd>${escapeHtml(state.projection.selection)}</dd>
+          </dl>`;
+
+        document.querySelector("#event-list").innerHTML = state.events
+          .map((message) => `<li>${escapeHtml(message)}</li>`)
+          .join("");
+
+        const scenario = scenarios[activeScenario];
+        document.querySelector("#tabs").innerHTML = scenarios
+          .map(
+            (item, index) =>
+              `<button class="tab" data-scenario="${index}" role="tab" aria-selected="${index === activeScenario}">${escapeHtml(item.name)}</button>`,
+          )
+          .join("");
+        document.querySelector("#scenario-copy").textContent =
+          scenario.description;
+        document.querySelector("#walkthrough-steps").innerHTML = scenario.steps
+          .map(
+            (step, index) =>
+              `<button class="step ${index < completedSteps ? "done" : index === completedSteps ? "active" : ""}" data-step="${index}" ${index > completedSteps ? "disabled" : ""}>${index + 1}. ${escapeHtml(step[1])}</button>`,
+          )
+          .join("");
+
+        document.querySelectorAll("[data-scenario]").forEach((button) => {
+          button.addEventListener("click", () => {
+            activeScenario = Number(button.dataset.scenario);
+            completedSteps = 0;
+            state = ProposalModel.initialState();
+            render();
+          });
+        });
+
+        document.querySelectorAll("[data-step]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const index = Number(button.dataset.step);
+            if (index !== completedSteps) return;
+            const [type, , extra = {}] = scenario.steps[index];
+            state = ProposalModel.reduce(state, actionFor(type, extra));
+            completedSteps += 1;
+            render();
+          });
+        });
+      };
+
+      document.querySelectorAll("[data-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          dispatch(actionFor(button.dataset.action));
+        });
+      });
+
+      document.querySelectorAll("[data-kind]").forEach((button) => {
+        button.addEventListener("click", () => {
+          dispatch({ type: "add-kind", kind: button.dataset.kind });
+        });
+      });
+
+      render();
+    </script>
+  </body>
+</html>
