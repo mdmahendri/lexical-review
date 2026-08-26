@@ -17,8 +17,12 @@ Primary-source observations used to justify or challenge an interaction contract
 _Avoid_: Standard requirement, vendor vote
 
 **Proposal draft**:
-A mutable local pending change being authored before it becomes a revision proposal. It has no portable proposal identity and may be discarded without proposal resolution.
+A mutable local pending change being authored before it becomes a revision proposal. It has no portable proposal identity, is never rebased beyond its frozen accepted document state, and may be discarded without proposal resolution.
 _Avoid_: Revision proposal, pending proposal
+
+**Proposal replacement**:
+An explicitly acknowledged authoring flow that supersedes an immutable revision proposal with a newly authored proposal identity. The original stays pending while an ordinary proposal draft is authored; discarding that draft leaves the original untouched.
+_Avoid_: Edit proposal, deletion draft
 
 **Revision proposal**:
 An independently reviewable lifecycle record representing a pending document change, aligned with the Web Editor Revisions definition.

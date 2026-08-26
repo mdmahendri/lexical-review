@@ -433,8 +433,8 @@
             Rebuildable review segments plus mutable draft text, local anchors,
             node keys, and selection. Draft keystrokes cause no proposal-ledger
             remapping; core IDs travel as node metadata. While a draft is open,
-            core resolution waits for export or discard so its coordinate frame
-            cannot shift underneath it.
+            accepted state and core resolution stay frozen until export or
+            discard. Drafts are never rebased onto a newer accepted state.
           </p>
         </article>
       </section>
@@ -454,6 +454,12 @@
         be headless. “Programmatic” means the caller already has a complete
         semantic proposal or resolution request; that caller may still be UI
         code.
+        <br /><br />
+        A revision proposal is never edited into a kind-specific draft. An
+        explicit “revise” flow may start a new ordinary proposal draft from the
+        frozen accepted state, but its kind comes from the new semantic edit.
+        The old proposal remains immutable until that flow is exported or
+        discarded.
         <br /><br />
         This model intentionally does not settle compound gestures, clipboard
         transfer, or post-resolution selection; those remain separate Wayfinder
@@ -1361,7 +1367,7 @@
                 );
               return refuse(
                 state,
-                `Delete on ${proposal.id} is ambiguous and cannot imply resolution. The user must explicitly choose “accept deletion” (remove accepted text), “reject deletion” (keep accepted text), or “acknowledge editing” (open a local deletion draft and later replace this proposal under a new identity)`,
+                `Delete on ${proposal.id} is ambiguous and cannot imply resolution. The user must explicitly choose “accept deletion” (remove accepted text) or “reject deletion” (keep accepted text). Revising it is a separate acknowledged action that starts an ordinary new proposal draft; there is no special deletion draft`,
               );
             }
             case "mutate-projection":
@@ -1470,7 +1476,7 @@
         {
           name: "Delete draft vs proposal",
           description:
-            "Delete edits or discards a local draft directly. Once exported, the gesture cannot silently amend or resolve immutable work. An exported insertion needs reject-or-replace; an exported deletion needs explicit accept, reject, or acknowledged deletion-draft editing.",
+            "Delete edits or discards a local draft directly. Once exported, the gesture cannot silently amend or resolve immutable work. An exported insertion needs reject-or-revise; an exported deletion needs explicit accept or reject. Revising either proposal is a separate action that creates an ordinary new draft from the frozen accepted state.",
           steps: [
             ["open-draft", "Open a local proposal draft"],
             ["type-draft", "Type “very ” in Lexical"],
