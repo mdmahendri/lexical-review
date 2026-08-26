@@ -8,6 +8,18 @@ Lexical Review defines predictable review-mode editing interactions for Lexical 
 An observable editing behavior that creates, changes, or resolves reviewable content while review mode is active.
 _Avoid_: Vendor behavior, standard interaction
 
+**Compound review interaction**:
+A single editing intent whose faithful pending meaning spans multiple revision proposals. Its constituent proposals are independent only when every partial acceptance or rejection remains truthful to that intent.
+_Avoid_: Compound gesture, decomposed edit
+
+**Atomic document-fragment insertion**:
+A single revision proposal that inserts an ordered text-and-paragraph fragment at one accepted-state point and can be accepted or rejected only as a whole.
+_Avoid_: Decomposed paste, proposal group
+
+**No-mutation refusal**:
+A machine-readable outcome that declines a review interaction while preserving accepted content, pending work, the editor projection, and the logical selection.
+_Avoid_: Silent failure, fallback edit
+
 **Interaction contract**:
 The library-owned definition of how editing inputs become review interactions and observable document outcomes.
 _Avoid_: Interchange standard, vendor emulation
@@ -15,6 +27,14 @@ _Avoid_: Interchange standard, vendor emulation
 **Interaction evidence**:
 Primary-source observations used to justify or challenge an interaction contract without making any one vendor's behavior authoritative.
 _Avoid_: Standard requirement, vendor vote
+
+**Clipboard projection**:
+A content-only representation of a selected review projection used by ordinary copy or cut. It carries no portable proposal identity, and generic markup cannot establish one.
+_Avoid_: Proposal transfer, interchange document
+
+**Clipboard content**:
+Untrusted plain or rich content consumed by ordinary paste. Supported presentation may survive, but foreign review markup and metadata never confer revision-proposal identity.
+_Avoid_: Proposal fragment, interchange document
 
 **Proposal draft**:
 A mutable local pending change being authored before it becomes a revision proposal. It has no portable proposal identity, is never rebased beyond its frozen accepted document state, and may be discarded without proposal resolution.
