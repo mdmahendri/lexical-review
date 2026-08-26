@@ -47,6 +47,9 @@ From the Lexical Review repository root, with the clean sibling
 ```bash
 python3 -m venv /tmp/lexical-review-wer-proof-venv
 /tmp/lexical-review-wer-proof-venv/bin/python -m pip install jsonschema==4.20.0
+cd docs/wers-adoption-feedback/atomic-document-fragment-insertion
+sha256sum --check SHA256SUMS
+cd ../../..
 /tmp/lexical-review-wer-proof-venv/bin/python docs/wers-adoption-feedback/atomic-document-fragment-insertion/reproduce.py --check
 ```
 
@@ -60,6 +63,10 @@ Use `--write-observed` to refresh the environment-bearing `observed.json` after
 reviewing an intentional boundary change. Semantic output is checked separately
 against `expected.json` so another machine does not need to match the recorded
 OS or tool patch versions.
+
+`SHA256SUMS` binds the explanatory record, minimized input, expected and
+observed results, and both replay programs. Refresh it only when an intentional
+evidence change has been reviewed.
 
 ## Why this is not harness misuse
 
