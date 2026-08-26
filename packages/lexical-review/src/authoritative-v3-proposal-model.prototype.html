@@ -91,7 +91,7 @@
 
       .architecture {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 14px;
         margin-bottom: 18px;
       }
@@ -119,10 +119,6 @@
 
       .layer.core {
         border-top: 4px solid var(--core);
-      }
-
-      .layer.authoring {
-        border-top: 4px solid var(--draft);
       }
 
       .layer.projection {
@@ -417,10 +413,9 @@
       <div class="hypothesis">
         <strong>Hypothesis:</strong> a React-free review document is the only
         authority for accepted state and independently identifiable proposals. A
-        local authoring overlay owns mutable proposal drafts until export. The
-        Lexical editor is a disposable projection with identity metadata and
-        selection; every semantic input returns to the core before the
-        projection is refreshed.
+        mutable proposal draft stays in the live Lexical workspace and never
+        enters that ledger. Export computes its portable target once and mints
+        immutable identity. Lexical node keys and selection remain local.
       </div>
 
       <section class="architecture" aria-label="Proposed architecture">
@@ -431,27 +426,28 @@
             Pure creation and resolution logic works without React or Lexical.
           </p>
         </article>
-        <article class="layer authoring">
-          <strong>2. Ephemeral authoring overlay</strong>
-          <p>
-            Proposal drafts and acknowledged replacement intent. Local and
-            mutable; absent from canonical Web Editor Revisions interchange.
-          </p>
-        </article>
         <article class="layer projection">
-          <strong>3. Live Lexical projection</strong>
+          <strong>2. Live Lexical projection and drafts</strong>
           <p>
-            Rebuildable paragraph and review segments, node keys, and selection.
-            Core IDs travel as node metadata; Lexical keys never escape upward.
+            Rebuildable review segments plus mutable draft text, local anchors,
+            node keys, and selection. Draft keystrokes cause no proposal-ledger
+            remapping; core IDs travel as node metadata. While a draft is open,
+            core resolution waits for export or discard so its coordinate frame
+            cannot shift underneath it.
           </p>
         </article>
       </section>
       <p class="flow">
-        keyboard / toolbar / IME / programmatic intent → core transaction →
-        tagged projection refresh
+        draft input → Lexical-local mutation → export boundary → immutable core
+        proposal → tagged projection refresh
       </p>
 
       <div class="scope-note">
+        Paragraph split and merge are structural proposals, not insertion
+        proposals: split creates a right paragraph identity and moves existing
+        suffix text; merge retires the right identity and rehomes its existing
+        text. Neither operation inserts a text fragment.
+        <br /><br />
         This model intentionally does not settle compound gestures, clipboard
         transfer, or post-resolution selection; those remain separate Wayfinder
         decisions. Fingerprints are symbolic in this prototype, not JCS hashes.
@@ -479,6 +475,10 @@
                 <div class="button-row">
                   <button data-action="open-draft">Open insertion draft</button>
                   <button data-action="type-draft">Type “very ”</button>
+                  <button data-action="backspace-draft">Backspace draft</button>
+                  <button data-action="discard-draft">
+                    Delete whole draft
+                  </button>
                   <button data-action="export-draft">Export draft</button>
                 </div>
               </div>
@@ -506,13 +506,16 @@
                   <button data-action="try-overlap" class="danger">
                     Try overlapping proposal
                   </button>
+                  <button data-action="delete-exported" class="danger">
+                    Delete exported insertion
+                  </button>
                 </div>
               </div>
               <div class="control-group">
                 <h3>Projection ownership</h3>
                 <div class="button-row">
                   <button data-action="mutate-projection" class="danger">
-                    Mutate Lexical directly
+                    Simulate host-plugin bug
                   </button>
                   <button data-action="rebuild-projection">
                     Rebuild from authority
@@ -541,7 +544,7 @@
             <div id="proposal-list"></div>
           </section>
           <section class="panel">
-            <h2>Ephemeral authoring overlay</h2>
+            <h2>Lexical-local proposal draft</h2>
             <div id="draft-state"></div>
           </section>
           <section class="panel">
@@ -650,6 +653,7 @@
           },
           proposals: [],
           authoring: { draft: null },
+          proposalRemaps: 0,
           projection: {
             generation: 1,
             sourceFingerprint: fingerprint(0),
@@ -759,6 +763,12 @@
             return refuse(
               state,
               "the live projection is stale; rebuild it before another semantic transaction",
+            );
+          }
+          if (state.authoring.draft) {
+            return refuse(
+              state,
+              "export or discard the Lexical-local draft before creating another core proposal; its accepted-state coordinate frame stays frozen while authoring",
             );
           }
           const collision = state.proposals.find((item) =>
@@ -1096,6 +1106,12 @@
               "resolution cannot use a stale editor projection",
             );
           }
+          if (state.authoring.draft) {
+            return refuse(
+              state,
+              "export or discard the Lexical-local draft before resolution; accepted state must not shift under an unexported local anchor",
+            );
+          }
           const proposal = state.proposals.find(
             (item) => item.id === proposalId,
           );
@@ -1127,6 +1143,7 @@
               acceptedRevision,
               acceptedState,
               proposals: remapped,
+              proposalRemaps: state.proposalRemaps + remapped.length,
               nextParagraph,
             },
             `Accepted ${proposal.id} atomically. The accepted fingerprint advanced and ${remapped.length} remaining proposal target(s) were remapped to the successor state.`,
@@ -1143,20 +1160,26 @@
               if (state.projection.status !== "synchronized")
                 return refuse(state, "rebuild the stale projection first");
               const draft = {
-                anchor: pointTarget("p1", 4, "after"),
+                anchor: {
+                  paragraphId: "p1",
+                  lexicalNodeKey: "lexical:p1:text:0",
+                  localOffset: 4,
+                },
                 text: "",
                 formatting: fullFormatting(""),
                 portableId: null,
               };
               return refreshProjection(
                 { ...state, authoring: { draft } },
-                "Opened a local proposal draft at p1@4. It has no portable identity and is absent from the proposal ledger.",
+                "Opened a Lexical-local proposal draft. It has no portable identity, base fingerprint, or proposal-ledger entry.",
               );
             }
             case "type-draft": {
               const draft = state.authoring.draft;
               if (!draft)
                 return refuse(state, "open a proposal draft before typing");
+              if (state.projection.status !== "synchronized")
+                return refuse(state, "the Lexical workspace is stale");
               const text = draft.text + (action.text ?? "very ");
               return refreshProjection(
                 {
@@ -1165,7 +1188,31 @@
                     draft: { ...draft, text, formatting: fullFormatting(text) },
                   },
                 },
-                `Extended the mutable proposal draft to “${text}”. No revision proposal identity was minted.`,
+                `Extended the Lexical-local draft to “${text}”. Accepted state and the proposal ledger were unchanged; no proposal target was remapped.`,
+              );
+            }
+            case "backspace-draft": {
+              const draft = state.authoring.draft;
+              if (!draft || draft.text.length === 0)
+                return refuse(state, "there is no draft text to correct");
+              const text = draft.text.slice(0, -1);
+              const nextDraft =
+                text.length === 0
+                  ? null
+                  : { ...draft, text, formatting: fullFormatting(text) };
+              return refreshProjection(
+                { ...state, authoring: { draft: nextDraft } },
+                nextDraft
+                  ? `Backspace corrected the local draft to “${text}”. No portable proposal changed.`
+                  : "Backspace removed the last draft character, so local authoring was discarded. Nothing was withdrawn or rejected.",
+              );
+            }
+            case "discard-draft": {
+              if (!state.authoring.draft)
+                return refuse(state, "there is no proposal draft to discard");
+              return refreshProjection(
+                { ...state, authoring: { draft: null } },
+                "Deleted the whole proposal draft directly from Lexical-local state. Nothing was withdrawn, rejected, or remapped in the proposal ledger.",
               );
             }
             case "export-draft": {
@@ -1183,7 +1230,11 @@
                 provenance: {
                   sourceSystem: "lexical-review/client draft export",
                 },
-                target: clone(draft.anchor),
+                target: pointTarget(
+                  draft.anchor.paragraphId,
+                  draft.anchor.localOffset,
+                  "after",
+                ),
                 content: {
                   text: draft.text,
                   formatting: clone(draft.formatting),
@@ -1198,7 +1249,7 @@
               };
               return refreshProjection(
                 next,
-                `Export minted ${proposal.id}. Its kind, target, payload, and identity are now independently reviewable and immutable.`,
+                `Export normalized the local Lexical anchor to ${proposal.target.paragraphId}@${proposal.target.offset} and minted ${proposal.id}. Its target, payload, and identity are now immutable.`,
               );
             }
             case "add-kind": {
@@ -1208,10 +1259,16 @@
                   state,
                   `${action.kind} has no valid accepted-state target`,
                 );
+              const structuralExplanation =
+                proposal.kind === "paragraph-split"
+                  ? " This is structural: it creates a right paragraph identity and moves existing suffix text; it is not text insertion."
+                  : proposal.kind === "paragraph-merge"
+                    ? " This is structural: it retires the right paragraph identity and rehomes existing text; it is not text insertion."
+                    : "";
               return addProposal(
                 state,
                 proposal,
-                `Created immutable ${proposal.id} (${proposal.kind}) directly in the React-free core; Lexical only re-projected the result.`,
+                `Created immutable ${proposal.id} (${proposal.kind}) directly in the React-free core; Lexical only re-projected the result.${structuralExplanation}`,
               );
             }
             case "seed-pair": {
@@ -1269,6 +1326,20 @@
                 `Created ${proposal.id}; no existing target overlapped it.`,
               );
             }
+            case "delete-exported": {
+              const proposal = state.proposals.find(
+                (item) => item.kind === "insert",
+              );
+              if (!proposal)
+                return refuse(
+                  state,
+                  "there is no exported insertion under the delete gesture",
+                );
+              return refuse(
+                state,
+                `Delete cannot silently change ${proposal.id}. The user must explicitly choose either “reject this whole proposal” or “acknowledge replacement editing”; partial correction follows the staged replacement decision`,
+              );
+            }
             case "mutate-projection":
               return record(
                 {
@@ -1279,13 +1350,18 @@
                     rogueText: "ROGUE LEXICAL TEXT — not accepted",
                   },
                 },
-                "A direct Lexical-only mutation made the projection stale. Accepted state, proposals, and fingerprint stayed unchanged.",
+                "Fault injection: host code called editor.update(() => textNode.setTextContent(...)) outside the review adapter. This is a bug/integration violation, not normal review-mode input. The projection became stale while authoritative state stayed unchanged.",
                 "refused",
               );
             case "rebuild-projection":
+              if (state.authoring.draft)
+                return refuse(
+                  state,
+                  "a full rebuild cannot reconstruct an unexported Lexical-local draft from the core; export, discard, or explicitly recover it first",
+                );
               return refreshProjection(
                 state,
-                "Discarded projection-only drift and rebuilt Lexical nodes from accepted state, proposals, and the authoring overlay.",
+                "Discarded projection-only drift and rebuilt Lexical nodes from accepted state and immutable proposals. No unexported draft was present.",
               );
             default:
               return refuse(state, `unknown action ${action.type}`);
@@ -1307,7 +1383,7 @@
         {
           name: "Draft to proposal",
           description:
-            "Local typing changes only a proposal draft. Export mints immutable portable identity; acceptance alone changes accepted content.",
+            "Local typing lives in Lexical state, outside the immutable ledger. Export computes the portable point once and mints identity; acceptance alone changes accepted content.",
           steps: [
             ["open-draft", "Open a proposal draft"],
             ["type-draft", "Type “very ” into the draft"],
@@ -1339,7 +1415,7 @@
         {
           name: "All six kinds",
           description:
-            "The same authoritative ledger and resolver carry every in-scope kind. Paragraph identities survive split and merge according to the portable rules.",
+            "The same authoritative ledger and resolver carry every in-scope kind. Split and merge are structural—not insertion: split creates a right paragraph identity and moves suffix text; merge retires the right identity and rehomes existing text.",
           steps: [
             ["add-kind", "Create insertion", { kind: "insert" }],
             ["accept-first", "Accept insertion"],
@@ -1356,25 +1432,30 @@
           ],
         },
         {
-          name: "Projection drift",
+          name: "Fault injection",
           description:
-            "A mutation that bypasses semantic intent can make Lexical stale, but it cannot silently become accepted content. Further model transactions refuse until projection rebuild.",
+            "Normal review-mode input must not drift. This deliberately simulates buggy host/plugin code calling a Lexical mutator outside the review adapter; containment refuses semantic work until the projection is rebuilt.",
           steps: [
             ["add-kind", "Create a programmatic insertion", { kind: "insert" }],
-            ["mutate-projection", "Inject rogue Lexical-only text"],
+            ["mutate-projection", "Simulate an untagged editor.update bug"],
             ["accept-first", "Try to resolve from stale projection"],
             ["rebuild-projection", "Rebuild from authoritative state"],
             ["accept-first", "Resolve safely after rebuild"],
           ],
         },
         {
-          name: "No pending-on-pending",
+          name: "Delete draft vs proposal",
           description:
-            "An overlapping second proposal is refused before mutation. The first proposal and live projection stay intact and independently reviewable.",
+            "Delete edits or discards a local draft directly. Once exported, the same gesture cannot silently amend or resolve immutable work; it must offer explicit reject-whole or acknowledged replacement paths.",
           steps: [
-            ["add-kind", "Create a deletion", { kind: "delete" }],
-            ["try-overlap", "Try an overlapping deletion"],
-            ["reject-first", "Reject the original proposal"],
+            ["open-draft", "Open a local proposal draft"],
+            ["type-draft", "Type “very ” in Lexical"],
+            ["backspace-draft", "Backspace the local draft directly"],
+            ["discard-draft", "Delete the remaining local draft"],
+            ["open-draft", "Open another local draft"],
+            ["type-draft", "Type “very ” again"],
+            ["export-draft", "Export immutable proposal-1"],
+            ["delete-exported", "Press Delete on exported proposal-1"],
           ],
         },
       ];
@@ -1439,7 +1520,7 @@
         const draft = state.authoring.draft;
         if (draft?.anchor.paragraphId === paragraph.id) {
           addPoint(
-            draft.anchor.offset,
+            draft.anchor.localOffset,
             `<span class="draft-text" title="proposal draft; no portable ID">${escapeHtml(draft.text || "▏")}</span>`,
           );
         }
@@ -1495,6 +1576,7 @@
             <dt>Paragraph order</dt><dd>${accepted.paragraphs.map((item) => item.id).join(" → ")}</dd>
             <dt>Exact text</dt><dd>${accepted.paragraphs.map((item) => `${item.id}: “${escapeHtml(item.text)}”`).join("<br>")}</dd>
             <dt>Formatting runs</dt><dd>${accepted.paragraphs.reduce((total, item) => total + item.formatting.length, 0)} normalized run(s)</dd>
+            <dt>Proposal remaps</dt><dd>${state.proposalRemaps}</dd>
           </dl>`;
 
         document.querySelector("#proposal-list").innerHTML = state.proposals
@@ -1516,8 +1598,9 @@
         document.querySelector("#draft-state").innerHTML = draft
           ? `<dl>
               <dt>Portable ID</dt><dd>none</dd>
-              <dt>Anchor</dt><dd>${escapeHtml(draft.anchor.paragraphId)}@${draft.anchor.offset}</dd>
+              <dt>Local anchor</dt><dd>${escapeHtml(draft.anchor.lexicalNodeKey)}@${draft.anchor.localOffset}</dd>
               <dt>Mutable text</dt><dd>“${escapeHtml(draft.text)}”</dd>
+              <dt>Proposal remaps</dt><dd>none while drafting</dd>
               <dt>Interchange</dt><dd>excluded until export</dd>
             </dl>`
           : '<p class="empty">No local proposal draft is open.</p>';
