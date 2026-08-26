@@ -330,8 +330,9 @@
         changes, commands, and IME do not finalize a proposal draft. Contiguous
         inserted content remains one mutable local change. Export mints its
         immutable portable identity. Editing after export requires explicit
-        replacement under a new identity; preparing that replacement does not
-        resolve the original proposal.
+        replacement under a new identity. The user acknowledges replacement
+        once, before editing begins; export applies that already-authorized
+        reject-and-create transition without another confirmation.
       </div>
 
       <div class="grid">
@@ -383,11 +384,8 @@
               <button data-action="edit-exported" class="danger">
                 Correct exported insertion
               </button>
-              <button data-action="begin-replacement">
-                Start replacement draft
-              </button>
-              <button data-action="commit-replacement" class="danger">
-                Confirm replacement export
+              <button data-action="begin-replacement" class="danger">
+                Acknowledge and start replacement
               </button>
               <button data-action="cancel-replacement">
                 Cancel replacement draft
@@ -465,6 +463,40 @@
               selection: "at exported insertion edge",
             },
             `Export minted ${proposal.id} for “${proposal.text}”. Its portable identity and payload are now immutable.`,
+          );
+        };
+
+        const exportReplacement = (state) => {
+          if (!state.draft?.replacementOf || state.draft.text.length === 0) {
+            return state;
+          }
+          const original = state.proposals.find(
+            (item) => item.id === state.draft.replacementOf,
+          );
+          if (!original) return state;
+
+          const replacement = {
+            id: `proposal-${state.nextProposal}`,
+            kind: "insert",
+            text: state.draft.text,
+            acceptedOffset: state.draft.acceptedOffset,
+            formatting: { bold: state.draft.bold },
+            reviewState: "pending",
+          };
+
+          return addEvent(
+            {
+              ...state,
+              draft: null,
+              proposals: [replacement],
+              resolutionHistory: [
+                ...state.resolutionHistory,
+                { id: original.id, outcome: "rejected" },
+              ],
+              nextProposal: state.nextProposal + 1,
+              selection: "at exported insertion edge",
+            },
+            `Export applied the replacement authorized at the start: ${original.id} was rejected and ${replacement.id} was created atomically. No second acknowledgement was requested.`,
           );
         };
 
@@ -612,10 +644,7 @@
                 );
               }
               if (state.draft.replacementOf) {
-                return refuse(
-                  state,
-                  `Export requires explicit acknowledgement that ${state.draft.replacementOf} will be rejected and replaced by a new immutable proposal.`,
-                );
+                return exportReplacement(state);
               }
               state = exportDraft(state);
               return addEvent(
@@ -689,7 +718,7 @@
                   },
                   selection: "at proposal-draft edge",
                 },
-                `Opened a replacement proposal draft copied from ${original.id}. The original remains pending and unchanged until replacement export is explicitly confirmed.`,
+                `Acknowledged replacement of ${original.id} and opened its copied content as a proposal draft. The original remains portably pending until ordinary export applies the authorized transition.`,
               );
             }
 
@@ -705,43 +734,6 @@
                   selection: "at exported insertion edge",
                 },
                 `Cancelled the replacement draft. ${originalId} remains pending and unchanged.`,
-              );
-            }
-
-            case "commit-replacement": {
-              if (!state.draft?.replacementOf || state.draft.text.length === 0) {
-                return refuse(
-                  state,
-                  "There is no non-empty replacement proposal draft to confirm.",
-                );
-              }
-              const original = state.proposals.find(
-                (item) => item.id === state.draft.replacementOf,
-              );
-              if (!original) {
-                return refuse(state, "The original proposal is no longer pending.");
-              }
-              const replacement = {
-                id: `proposal-${state.nextProposal}`,
-                kind: "insert",
-                text: state.draft.text,
-                acceptedOffset: state.draft.acceptedOffset,
-                formatting: { bold: state.draft.bold },
-                reviewState: "pending",
-              };
-              return addEvent(
-                {
-                  ...state,
-                  draft: null,
-                  proposals: [replacement],
-                  resolutionHistory: [
-                    ...state.resolutionHistory,
-                    { id: original.id, outcome: "rejected" },
-                  ],
-                  nextProposal: state.nextProposal + 1,
-                  selection: "at exported insertion edge",
-                },
-                `Confirmed replacement: ${original.id} was rejected and ${replacement.id} was exported atomically. The current schema contains only the new pending proposal.`,
               );
             }
 
@@ -771,42 +763,45 @@
         {
           name: "Extend after export",
           description:
-            "Export made the first identity immutable. A replacement draft can be prepared without changing it; explicit confirmation then rejects the old identity and exports one combined proposal under a new identity.",
+            "Export made the first identity immutable. The user acknowledges replacement once before editing; ordinary export later applies the authorized reject-and-create transition without another confirmation.",
           steps: [
             ["type", "Type “a”", { text: "a" }],
             ["export", "Export as proposal-1", {}],
             ["return", "Return to the exported edge", {}],
             ["type", "Try to type “bc”", { text: "bc" }],
-            ["begin-replacement", "Start a replacement draft", {}],
-            ["type", "Type “bc”", { text: "bc" }],
-            ["export", "Try ordinary export", {}],
             [
-              "commit-replacement",
-              "Acknowledge and export proposal-2",
+              "begin-replacement",
+              "Acknowledge and start replacement",
               {},
             ],
+            ["type", "Type “bc”", { text: "bc" }],
+            ["export", "Export proposal-2 without another prompt", {}],
           ],
         },
         {
           name: "Correction after export",
           description:
-            "Direct correction is refused because v1 has neither amendment nor pending-on-pending targets. A replacement draft can be cancelled safely or explicitly committed as a reject-and-create transaction.",
+            "Direct correction is refused because v1 has neither amendment nor pending-on-pending targets. Replacement is acknowledged before editing; cancellation is safe, and ordinary export needs no second confirmation.",
           steps: [
             ["type", "Type “abc”", { text: "abc" }],
             ["export", "Export as proposal-1", {}],
             ["edit-exported", "Try to correct exported text", {}],
-            ["begin-replacement", "Start a replacement draft", {}],
+            [
+              "begin-replacement",
+              "Acknowledge and start replacement",
+              {},
+            ],
             ["backspace", "Remove “c” from the proposal draft", {}],
             ["type", "Type “d”", { text: "d" }],
             ["cancel-replacement", "Cancel and preserve proposal-1", {}],
-            ["begin-replacement", "Start replacement again", {}],
-            ["backspace", "Remove “c” again", {}],
-            ["type", "Type “d” again", { text: "d" }],
             [
-              "commit-replacement",
-              "Acknowledge and export proposal-2",
+              "begin-replacement",
+              "Acknowledge replacement again",
               {},
             ],
+            ["backspace", "Remove “c” again", {}],
+            ["type", "Type “d” again", { text: "d" }],
+            ["export", "Export proposal-2 without another prompt", {}],
           ],
         },
         {
@@ -881,7 +876,11 @@
           <dt>Selection</dt><dd>${escapeHtml(state.selection)}</dd>
           <dt>Proposal draft</dt><dd>${draftValue}</dd>
           <dt>Draft target</dt><dd>${state.draft ? `Accepted-state offset ${state.draft.acceptedOffset}` : "—"}</dd>
-          <dt>Replacement source</dt><dd>${state.draft?.replacementOf || "None"}</dd>
+          <dt>Replacement intent</dt><dd>${
+            state.draft?.replacementOf
+              ? `${state.draft.replacementOf} — acknowledged before editing`
+              : "None"
+          }</dd>
           <dt>Draft formatting</dt><dd>${state.draft ? `bold: ${state.draft.bold}` : "—"}</dd>
           <dt>IME commits</dt><dd>${state.draft ? state.draft.compositionCount : "—"}</dd>
           <dt>Resolution history</dt><dd>${
