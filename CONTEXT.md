@@ -17,7 +17,7 @@ A single revision proposal that inserts an ordered text-and-paragraph fragment a
 _Avoid_: Decomposed paste, proposal group
 
 **No-mutation refusal**:
-A machine-readable outcome that declines a review interaction while preserving accepted content, pending work, the editor projection, and the logical selection.
+A machine-readable outcome that declines a review interaction while preserving accepted content, pending work, the review projection, and the logical selection.
 _Avoid_: Silent failure, fallback edit
 
 **Interaction contract**:
@@ -36,17 +36,37 @@ _Avoid_: Proposal transfer, interchange document
 Untrusted plain or rich content consumed by ordinary paste. Supported presentation may survive, but foreign review markup and metadata never confer revision-proposal identity.
 _Avoid_: Proposal fragment, interchange document
 
+**Authoring session**:
+A period of editing over session-local review state loaded from one frozen review document or imported WER interchange document. Concurrent or simultaneous review and merging external changes are outside version 3.
+_Avoid_: Editor instance, review document
+
 **Proposal draft**:
-A mutable local pending change being authored before it becomes a revision proposal. It has no portable proposal identity, is never rebased beyond its frozen accepted document state, and may be discarded without proposal resolution.
+A mutable candidate change within review state before it receives stable proposal identity. It may be edited or discarded without proposal resolution.
 _Avoid_: Revision proposal, pending proposal
 
-**Proposal replacement**:
-An explicitly acknowledged authoring flow that supersedes an immutable revision proposal with a newly authored proposal identity. The original stays pending while an ordinary proposal draft is authored; discarding that draft leaves the original untouched.
-_Avoid_: Edit proposal, deletion draft
+**Proposal finalization**:
+The local authoring transition that validates one proposal draft, assigns immutable semantic identity, and makes it a revision proposal within review state. It does not serialize a review document or produce a WER interchange document.
+_Avoid_: Proposal draft export, WER export, proposal resolution, commit
+
+**Text composition**:
+A native editor-input session with provisional intermediate text. Each completed session is normalized by the editor integration into zero or one insertion, deletion, or replacement intention; it is neither a proposal draft nor a revision proposal.
+_Avoid_: IME commit, composition proposal
+
+**Proposal reauthoring**:
+An explicit flow that uses a pending revision proposal as the starting point for a new proposal draft without modifying the original. Finalizing that draft atomically rejects the original and creates a new pending proposal with new identity; discarding it leaves the original pending.
+_Avoid_: Proposal replacement, proposal revision, edit proposal, mutate proposal
 
 **Revision proposal**:
 An independently reviewable lifecycle record representing a pending document change, aligned with the Web Editor Revisions definition.
 _Avoid_: Edit operation, history entry, review segment
+
+**Review document**:
+Lexical Review's native, Lexical-shaped serialized document for directly loading and saving accepted content and review state. It is distinct from a WER interchange document and need not satisfy the WER schema.
+_Avoid_: WER interchange document, review projection, accepted document state
+
+**Review state**:
+The session-local Lexical editor state in which review-aware nodes represent accepted content, revision proposals, and proposal drafts. It is the working state during authoring and can be serialized as a review document or mapped through a WER adapter.
+_Avoid_: Review projection, WER interchange document, DOM state
 
 **Review segment**:
 A contiguous text span classified as original, inserted, or deleted for editing and presentation. A review segment is not necessarily an independently identifiable revision proposal.
@@ -56,8 +76,32 @@ _Avoid_: Revision proposal, suggestion
 The authoritative document content against which pending revision proposals are interpreted.
 _Avoid_: Current editor view, history snapshot
 
+**Review projection**:
+The visible editor view reconciled from review state, with accepted content, revision proposals, and proposal drafts kept observable. It is neither a serialized review document nor a WER interchange document.
+_Avoid_: Review state, accepted document state, all-accepted preview
+
+**All-accepted preview**:
+A read-only projection of the document outcome produced by accepting every compatible pending revision proposal. It does not resolve those proposals or advance accepted document state.
+_Avoid_: Review projection, accepted document state
+
+**Accepted-state preview**:
+A read-only projection of accepted document state without applying pending revision proposals. It does not reject or otherwise resolve those proposals.
+_Avoid_: Review projection, all-rejected document
+
+**Web Editor Revisions (WER)**:
+An implementation-independent family of interchange models for accepted document state and independently reviewable revision proposals, including portable identity, targeting, resolution, remapping, canonical serialization, and mapping outcomes. It does not define editor interactions, UI, runtime structures, transport, private persistence, concurrency, or undo/redo.
+_Avoid_: Lexical Review interaction contract, editor model
+
+**[Web Editor Revisions version 1 (WER v1)](https://github.com/mahendrimd/web-editor-revisions/blob/e6ac89287257646888a4eadf692d836eb8feb41b/standards/v1/standard.md)**:
+The WER interchange model selected by `modelVersion: "1"` and `serializationProfile: "json-jcs-1"`, bounded to ordered paragraphs, exact text, four effective inline-formatting properties, and six proposal kinds: insertion, deletion, atomic replacement, formatting, paragraph split, and paragraph merge. It constrains portable data and observable adapter outcomes, not Lexical nodes, authoring state, algorithms, or native review-document serialization.
+_Avoid_: Unversioned WER when model semantics matter, general editor standard
+
+**WER interchange document**:
+A portable artifact conforming to a WER model, containing one accepted document state and a proposal array plus optional reports and extensions. It enters or leaves Lexical Review through an interchange adapter and is neither a native review document nor live review state.
+_Avoid_: Review document, review state, editor serialization
+
 **Interchange adapter**:
-A direction-specific mapping between Lexical Review's interaction model and a versioned Web Editor Revisions interchange document.
+A direction-specific mapping between Lexical Review's native review document or review state and a WER interchange document. It validates the boundary and reports normalization, synthesis, refusal, or loss under a declared mapping profile.
 _Avoid_: Universal converter, native model
 
 **Capability demo**:
