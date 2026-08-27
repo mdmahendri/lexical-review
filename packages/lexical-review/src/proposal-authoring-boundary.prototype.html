@@ -8,8 +8,13 @@
       :root {
         color-scheme: light;
         font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
         color: #172126;
         background: #edf3f1;
         --accent: #0d796a;
@@ -319,6 +324,20 @@
   </head>
   <body>
     <main>
+      <div class="notice">
+        <strong>Status: SUPERSEDED — do not use for implementation.</strong>
+        This prototype predates proposal finalization and proposal reauthoring
+        and conflates authoring lifecycle with interchange output. Do not patch
+        it forward. Rebuild from the canonical decisions in
+        <a href="https://github.com/mahendrimd/lexical-review/issues/41"
+          >Decide the proposal authoring boundary</a
+        >
+        and
+        <a href="https://github.com/mahendrimd/lexical-review/issues/35"
+          >Define the v3 interaction contract</a
+        >
+        if another authoring prototype is required.
+      </div>
       <h1>When does typing become a proposal?</h1>
       <p class="lede">
         This throwaway model explores how a mutable local proposal draft becomes
@@ -546,7 +565,10 @@
               return addEvent(
                 {
                   ...state,
-                  draft: { ...state.draft, text: state.draft.text + action.text },
+                  draft: {
+                    ...state.draft,
+                    text: state.draft.text + action.text,
+                  },
                 },
                 `Extended the mutable proposal draft with “${action.text}”; portable identity is still unminted.`,
               );
@@ -687,7 +709,10 @@
                 .reverse()
                 .find((item) => item.reviewState === "pending");
               if (!latestPending) {
-                return refuse(state, "There is no exported pending insertion to edit.");
+                return refuse(
+                  state,
+                  "There is no exported pending insertion to edit.",
+                );
               }
               return refuse(
                 state,
@@ -700,7 +725,10 @@
                 (item) => item.reviewState === "pending",
               );
               if (index < 0) {
-                return refuse(state, "There is no exported pending proposal to replace.");
+                return refuse(
+                  state,
+                  "There is no exported pending proposal to replace.",
+                );
               }
               if (state.draft) {
                 return refuse(state, "A proposal draft is already open.");
@@ -724,7 +752,10 @@
 
             case "cancel-replacement": {
               if (!state.draft?.replacementOf) {
-                return refuse(state, "There is no replacement proposal draft to cancel.");
+                return refuse(
+                  state,
+                  "There is no replacement proposal draft to cancel.",
+                );
               }
               const originalId = state.draft.replacementOf;
               return addEvent(
@@ -769,11 +800,7 @@
             ["export", "Export as proposal-1", {}],
             ["return", "Return to the exported edge", {}],
             ["type", "Try to type “bc”", { text: "bc" }],
-            [
-              "begin-replacement",
-              "Acknowledge and start replacement",
-              {},
-            ],
+            ["begin-replacement", "Acknowledge and start replacement", {}],
             ["type", "Type “bc”", { text: "bc" }],
             ["export", "Export proposal-2 without another prompt", {}],
           ],
@@ -786,19 +813,11 @@
             ["type", "Type “abc”", { text: "abc" }],
             ["export", "Export as proposal-1", {}],
             ["edit-exported", "Try to correct exported text", {}],
-            [
-              "begin-replacement",
-              "Acknowledge and start replacement",
-              {},
-            ],
+            ["begin-replacement", "Acknowledge and start replacement", {}],
             ["backspace", "Remove “c” from the proposal draft", {}],
             ["type", "Type “d”", { text: "d" }],
             ["cancel-replacement", "Cancel and preserve proposal-1", {}],
-            [
-              "begin-replacement",
-              "Acknowledge replacement again",
-              {},
-            ],
+            ["begin-replacement", "Acknowledge replacement again", {}],
             ["backspace", "Remove “c” again", {}],
             ["type", "Type “d” again", { text: "d" }],
             ["export", "Export proposal-2 without another prompt", {}],
@@ -886,7 +905,10 @@
           <dt>Resolution history</dt><dd>${
             state.resolutionHistory.length
               ? state.resolutionHistory
-                  .map((item) => `${item.id}: ${item.outcome} (terminal record omitted from next schema)`)
+                  .map(
+                    (item) =>
+                      `${item.id}: ${item.outcome} (terminal record omitted from next schema)`,
+                  )
                   .join("; ")
               : "None"
           }</dd>
