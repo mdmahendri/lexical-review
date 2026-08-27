@@ -366,6 +366,13 @@
   </head>
   <body>
     <main>
+      <div class="question">
+        <strong>Status: VALIDATED THROWAWAY PROTOTYPE.</strong> This remains a
+        non-normative decision aid. The canonical contract is
+        <a href="https://github.com/mahendrimd/lexical-review/issues/44"
+          >Define post-resolution selection behavior</a
+        >; rebuild rather than extending this artifact if that question changes.
+      </div>
       <h1>Where should the selection go?</h1>
       <p class="lede">
         A throwaway version 3 model for feeling how editor selection and
@@ -386,11 +393,11 @@
         project and resolve itself; those semantics also define how the client
         adapter recovers equivalent selection when a projection rebuild
         invalidates old Lexical node references. No user selection is persisted
-        in a proposal or the React-free core. Proposal inspection is separate,
-        and resolution never auto-advances.
+        in a proposal, native review document, or WER interchange document.
+        Proposal inspection is separate, and resolution never auto-advances.
       </div>
 
-      <section class="principles" aria-label="Candidate principles">
+      <section class="principles" aria-label="Validated principles">
         <article class="principle">
           <strong>Lexical owns selection</strong>
           <p>
@@ -402,7 +409,7 @@
           <strong>Proposal supplies the transform</strong>
           <p>
             Immutable target and payload semantics let the client recover both
-            endpoints when rebuilding the disposable Lexical projection.
+            endpoints when rebuilding the visible review projection.
           </p>
         </article>
         <article class="principle">
@@ -513,7 +520,7 @@
           </section>
 
           <section class="panel">
-            <h2>Candidate creation matrix</h2>
+            <h2>Validated creation matrix</h2>
             <table>
               <thead>
                 <tr>
