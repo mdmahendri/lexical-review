@@ -340,11 +340,6 @@
         text-transform: uppercase;
       }
 
-      .badge.candidate {
-        background: var(--warning-soft);
-        color: var(--warning);
-      }
-
       .badge.settled {
         background: var(--accent-soft);
         color: var(--accent);
@@ -457,13 +452,17 @@
   </head>
   <body>
     <main>
-      <p><span class="badge candidate">Throwaway prototype</span></p>
+      <p><span class="badge settled">Validated throwaway prototype</span></p>
       <h1>One interaction contract, many noisy input routes</h1>
       <p class="lede">
-        Drive candidate version 3 rules through proposal boundaries, local
+        Drive resolved version 3 rules through proposal boundaries, local
         authoring, finalized work, formatting, paragraphs, clipboard, IME, and
-        preview projections. The prototype is a discussion tool, not production
-        code or a public API draft.
+        preview projections. This is a non-normative decision aid, not
+        production code or a public API draft; the
+        <a href="https://github.com/mahendrimd/lexical-review/issues/35"
+          >closed interaction-contract decision</a
+        >
+        is canonical.
       </p>
 
       <div class="question">
@@ -474,7 +473,7 @@
       </div>
 
       <div class="hypothesis">
-        <strong>Candidate answer:</strong> Browser events, Lexical commands,
+        <strong>Validated answer:</strong> Browser events, Lexical commands,
         toolbar actions, clipboard actions, IME sessions, and programmatic calls
         first normalize into one semantic intent applied to session-local
         Lexical review state. Review-aware nodes carry accepted content,
@@ -501,7 +500,7 @@
         informative, never normative.
       </div>
 
-      <section class="principles" aria-label="Candidate principles">
+      <section class="principles" aria-label="Validated principles">
         <article class="principle">
           <strong>Semantic intent is normative</strong>
           <p>
@@ -606,7 +605,8 @@
             <h2>Guided walkthroughs</h2>
             <p class="section-copy">
               Each walkthrough resets to a known state. Work down the buttons
-              and watch for the moment where the candidate rule feels wrong.
+              and inspect whether each resolved rule produces its documented
+              outcome.
             </p>
             <div class="walkthrough-tabs" id="walkthrough-tabs"></div>
             <div id="walkthrough"></div>
