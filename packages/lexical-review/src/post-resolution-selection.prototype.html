@@ -374,36 +374,35 @@
       </p>
 
       <div class="question">
-        <strong>Question:</strong> does one route-neutral selection bookmark,
-        remapped through the same semantic transaction as the document, keep
-        every proposal kind predictable without treating Lexical node keys or a
-        proposal card as selection authority?
+        <strong>Question:</strong> can Lexical remain the sole live-selection
+        authority while proposal semantics still supply everything the client
+        adapter needs to restore equivalent selection after rebuilding the
+        projection?
       </div>
 
       <div class="hypothesis">
-        <strong>Candidate contract:</strong> the package snapshots both logical
-        selection endpoints before a semantic transaction and returns their
-        remapped successors afterward. It collapses only when the editing intent
-        says to collapse or when accepted content containing both endpoints is
-        removed. Proposal inspection is separate. Resolution never
-        auto-advances; a host explicitly invokes deterministic next/previous
-        navigation if it wants that workflow.
+        <strong>Validated contract:</strong> Lexical owns the live selection. A
+        proposal stores the immutable semantic target and payload needed to
+        project and resolve itself; those semantics also define how the client
+        adapter recovers equivalent selection when a projection rebuild
+        invalidates old Lexical node references. No user selection is persisted
+        in a proposal or the React-free core. Proposal inspection is separate,
+        and resolution never auto-advances.
       </div>
 
       <section class="principles" aria-label="Candidate principles">
         <article class="principle">
-          <strong>Bookmark, not node key</strong>
+          <strong>Lexical owns selection</strong>
           <p>
-            Accepted-state points carry paragraph identity, offset, and boundary
-            association. Visible proposal content may use a proposal-local
-            point.
+            The active caret or range remains live editor state. The proposal
+            never stores a user-selection snapshot or portable bookmark.
           </p>
         </article>
         <article class="principle">
-          <strong>Remap both endpoints</strong>
+          <strong>Proposal supplies the transform</strong>
           <p>
-            Forward/backward range orientation survives. A range collapses only
-            when its semantic successors become the same point.
+            Immutable target and payload semantics let the client recover both
+            endpoints when rebuilding the disposable Lexical projection.
           </p>
         </article>
         <article class="principle">
@@ -429,8 +428,9 @@
           <section class="panel">
             <h2>Free play</h2>
             <p class="section-copy">
-              Load a proposal-creation outcome, move the logical selection, then
-              preview or resolve it. Every action renders the full model state.
+              Load a proposal-creation outcome, move the modeled live selection,
+              then preview or resolve it. Every action renders the full model
+              state.
             </p>
 
             <div class="control-group">
@@ -518,7 +518,7 @@
               <thead>
                 <tr>
                   <th>Proposal kind</th>
-                  <th>Post-creation logical selection</th>
+                  <th>Post-creation editor selection</th>
                   <th>Why</th>
                 </tr>
               </thead>
@@ -581,11 +581,11 @@
                 <div id="document" class="document"></div>
               </div>
               <div class="state-card">
-                <span class="label">Logical selection bookmark</span>
+                <span class="label">Modeled live Lexical selection</span>
                 <div id="bookmark" class="value"></div>
               </div>
               <div class="state-card">
-                <span class="label">Visible projection mapping</span>
+                <span class="label">Projection-recovery mapping</span>
                 <div id="projected-selection" class="value"></div>
               </div>
               <div class="state-card">
@@ -617,8 +617,9 @@
 
       <p class="note">
         Throwaway prototype: this file models the contract in plain data. It
-        does not use Lexical, persist state, define the final TypeScript API, or
-        ship as package UI.
+        does not use Lexical, persist a user selection, define the final
+        TypeScript API, or ship as package UI. Its internal bookmark-shaped data
+        exists only to simulate live selection and one-transaction recovery.
       </p>
     </main>
 
@@ -1148,7 +1149,7 @@
                 successorHint: null,
               },
             },
-            `Inspection moved to ${candidate.id}. The logical text selection remained ${bookmarkLabel(state.bookmark)}.`,
+            `Inspection moved to ${candidate.id}. The modeled live text selection remained ${bookmarkLabel(state.bookmark)}.`,
           );
         };
 
@@ -1186,7 +1187,7 @@
           }
           return addEvent(
             { ...state, bookmark },
-            `Moved the logical selection inside ${proposal.id} without changing the inspection cursor.`,
+            `Moved the modeled live selection inside ${proposal.id} without changing the inspection cursor.`,
           );
         };
 
@@ -1263,14 +1264,14 @@
               const preview = action.type.replace("preview-", "");
               return addEvent(
                 { ...state, preview },
-                `Changed only the visible projection to ${preview}. The logical bookmark was not rewritten.`,
+                `Changed only the visible projection to ${preview}. The modeled live selection was not rewritten or persisted in the proposal.`,
               );
             }
             case "refuse": {
               const before = JSON.stringify(state.bookmark);
               const next = addEvent(
                 state,
-                "Refused unsupported cross-paragraph replacement. Document, proposals, projection mode, logical selection, and inspection remained unchanged.",
+                "Refused unsupported cross-paragraph replacement. Document, proposals, projection mode, editor selection, and inspection remained unchanged.",
                 "refused",
               );
               if (before !== JSON.stringify(next.bookmark)) {
@@ -1351,7 +1352,7 @@
         {
           name: "Preview and refusal",
           description:
-            "A preview may hide proposal-local content, but only its projected fallback changes. A no-mutation refusal preserves the logical bookmark exactly.",
+            "A preview may hide proposal-local content, but only its projected fallback changes. A no-mutation refusal preserves the live editor selection exactly; no selection is stored in the proposal.",
           steps: [
             ["Load insertion", "load-insert"],
             ["Select inside inserted content", "select-inside"],

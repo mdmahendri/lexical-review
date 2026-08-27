@@ -17,7 +17,7 @@ A single revision proposal that inserts an ordered text-and-paragraph fragment a
 _Avoid_: Decomposed paste, proposal group
 
 **No-mutation refusal**:
-A machine-readable outcome that declines a review interaction while preserving accepted content, pending work, the editor projection, and the logical selection.
+A machine-readable outcome that declines a review interaction while preserving accepted content, pending work, the editor projection, and the editor selection.
 _Avoid_: Silent failure, fallback edit
 
 **Interaction contract**:
@@ -45,8 +45,16 @@ An explicitly acknowledged authoring flow that supersedes an immutable revision 
 _Avoid_: Edit proposal, deletion draft
 
 **Revision proposal**:
-An independently reviewable lifecycle record representing a pending document change, aligned with the Web Editor Revisions definition.
+An independently reviewable lifecycle record whose immutable semantics are sufficient to project and resolve a pending document change, aligned with the Web Editor Revisions definition.
 _Avoid_: Edit operation, history entry, review segment
+
+**Editor selection**:
+The transient caret or range in the active editor projection. It is not revision-proposal data or portable interchange state.
+_Avoid_: Proposal selection, portable selection bookmark
+
+**Proposal inspection target**:
+The pending revision proposal currently chosen for review navigation or presentation, independent of editor selection and input focus.
+_Avoid_: Active selection, automatic navigation
 
 **Review segment**:
 A contiguous text span classified as original, inserted, or deleted for editing and presentation. A review segment is not necessarily an independently identifiable revision proposal.
