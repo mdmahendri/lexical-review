@@ -261,7 +261,7 @@
         line-height: 1.47;
       }
 
-      .status-applied {
+      .status-changed {
         color: var(--accent);
       }
 
@@ -269,8 +269,12 @@
         color: var(--danger);
       }
 
-      .status-informative {
+      .status-no-change {
         color: var(--info);
+      }
+
+      .status-failed {
+        color: var(--warning);
       }
 
       .document {
@@ -457,7 +461,7 @@
       <h1>One interaction contract, many noisy input routes</h1>
       <p class="lede">
         Drive candidate version 3 rules through proposal boundaries, local
-        authoring, exported work, formatting, paragraphs, clipboard, IME, and
+        authoring, finalized work, formatting, paragraphs, clipboard, IME, and
         preview projections. The prototype is a discussion tool, not production
         code or a public API draft.
       </p>
@@ -472,10 +476,20 @@
       <div class="hypothesis">
         <strong>Candidate answer:</strong> Browser events, Lexical commands,
         toolbar actions, clipboard actions, IME sessions, and programmatic calls
-        first normalize into one semantic intent. That service decides from the
-        accepted-state target, proposal intersection, local draft, composition
-        phase, and projection. Raw browser event order never changes the
+        first normalize into one semantic intent applied to session-local
+        Lexical review state. Review-aware nodes carry accepted content,
+        finalized proposals, and the active draft; the visible review projection
+        is reconciled from that state. Raw browser event order never changes the
         normative outcome.
+      </div>
+
+      <div class="evidence">
+        <strong>Two serialization paths:</strong> The native Lexical-shaped
+        review document loads and saves review state directly. A Web Editor
+        Revisions v1 interchange document enters or leaves only through a
+        validated adapter with a mapping report. WER constrains portable data
+        and adapter outcomes, not live nodes, algorithms, or native
+        serialization.
       </div>
 
       <div class="evidence">
@@ -502,10 +516,10 @@
           </p>
         </article>
         <article class="principle">
-          <strong>Draft or immutable</strong>
+          <strong>Draft or finalized</strong>
           <p>
-            Authoring can change a local draft; exported proposals require
-            explicit resolution or replacement.
+            Authoring can change a local draft; finalized proposals require
+            explicit resolution or reauthoring under a new identity.
           </p>
         </article>
         <article class="principle">
@@ -551,7 +565,7 @@
                 <button data-action="composition-update-2">
                   Update “日本”
                 </button>
-                <button data-action="composition-commit">Commit IME</button>
+                <button data-action="composition-end">End composition</button>
                 <button data-action="composition-cancel">Cancel IME</button>
               </div>
             </div>
@@ -559,19 +573,19 @@
             <div class="control-group">
               <h3>Draft and proposal lifecycle</h3>
               <div class="button-row">
-                <button data-action="export-draft" class="primary">
-                  Export draft
+                <button data-action="finalize-draft" class="primary">
+                  Finalize draft
                 </button>
-                <button data-action="begin-replacement">
-                  Revise one exported proposal
+                <button data-action="begin-reauthoring">
+                  Reauthor one proposal
                 </button>
-                <button data-action="cancel-replacement">
-                  Cancel revision
+                <button data-action="cancel-reauthoring">
+                  Cancel reauthoring
                 </button>
                 <button data-action="accept-first">Accept first pending</button>
                 <button data-action="reject-first">Reject first pending</button>
                 <button data-action="seed-proposal">
-                  Seed exported insertion
+                  Seed finalized insertion
                 </button>
               </div>
             </div>
@@ -606,7 +620,7 @@
           </section>
 
           <section class="panel">
-            <h2>Proposal ledger</h2>
+            <h2>Revision proposals in review state</h2>
             <ul class="record-list" id="proposal-list"></ul>
           </section>
 
@@ -618,12 +632,11 @@
       </div>
 
       <section class="panel full-width">
-        <h2>Candidate coverage ledger</h2>
+        <h2>Resolved coverage</h2>
         <p class="section-copy">
-          “Settled” rows come from prerequisite Wayfinder decisions. “Candidate”
-          rows are the decisions this prototype asks the maintainer to validate.
-          “Evidence only” rows describe adapter facts. “Unsupported” rows are
-          explicit version 3 boundaries, not silent fallbacks.
+          “Settled” rows are the agreed version 3 contract. “Evidence only” rows
+          describe adapter facts. “Unsupported” rows are explicit boundaries,
+          not silent fallbacks.
         </p>
         <div class="table-wrap">
           <table>
@@ -631,7 +644,7 @@
               <tr>
                 <th>Surface</th>
                 <th>Context</th>
-                <th>Candidate contract</th>
+                <th>Version 3 contract</th>
                 <th>Authority</th>
               </tr>
             </thead>
@@ -641,43 +654,45 @@
       </section>
 
       <section class="panel full-width">
-        <h2>Assumptions deliberately exposed for review</h2>
+        <h2>Resolved invariants</h2>
         <ul class="assumptions">
           <li>
-            <span class="badge candidate">Candidate</span> A caret adjacent to
-            exported work must carry an accepted-side association. The service
+            <span class="badge settled">Settled</span> A caret adjacent to
+            finalized work must carry an accepted-side association. The service
             supports an action only when that association makes the accepted
             target unique; an ambiguous visual boundary refuses.
           </li>
           <li>
-            <span class="badge candidate">Candidate</span> Continuous text
+            <span class="badge settled">Settled</span> Continuous text
             authoring—insert, delete, replace, paste, and IME—uses a mutable
             local draft. Complete discrete intentions—format, split, and
-            merge—create immutable proposals immediately.
+            merge—create finalized proposals immediately in Lexical review
+            state. Proposal finalization is not document serialization.
           </li>
           <li>
-            <span class="badge candidate">Candidate</span> Active composition is
-            a semantic critical section. Export and proposal resolution refuse
-            until commit or cancel; interim DOM variation is adapter-local.
+            <span class="badge settled">Settled</span> Active composition is a
+            semantic critical section. Proposal finalization and resolution
+            refuse until composition ends or is cancelled; interim DOM variation
+            is adapter-local.
           </li>
           <li>
-            <span class="badge candidate">Candidate</span> A formatting adapter
+            <span class="badge settled">Settled</span> A formatting adapter
             resolves “toggle” into an explicit desired value before calling the
             semantic service. A collapsed toggle only changes future local input
             formatting and creates no proposal by itself.
           </li>
           <li>
-            <span class="badge candidate">Candidate</span> Review-changing edits
-            run only in the review projection. Projection previews are
-            read-only, but explicit accept/reject remains available because it
-            acts on the authoritative proposal ledger rather than preview
-            content.
+            <span class="badge settled">Settled</span> Review-changing edits run
+            only in the review projection. Projection previews are read-only,
+            but explicit accept/reject remains available because it acts on
+            revision proposals in review state rather than preview content.
           </li>
           <li>
-            <span class="badge candidate">Candidate</span> If an adapter cannot
-            normalize or roll back a browser mutation safely, it reports an
-            operational failure and rebuilds from authoritative state; it never
-            invents different review semantics for that browser.
+            <span class="badge settled">Settled</span> If an input adapter
+            cannot normalize or roll back a browser mutation safely, it reports
+            an operational failure and rebuilds the visible projection from
+            Lexical review state; it never invents different semantics for that
+            browser.
           </li>
         </ul>
       </section>
@@ -697,17 +712,19 @@
         "accepted-point": "Collapsed point in accepted text",
         "accepted-range": "Same-paragraph accepted range",
         "paragraph-boundary": "Exact accepted paragraph boundary",
-        "local-draft": "Inside the local proposal draft",
-        "exported-insertion": "Inside an exported insertion",
-        "exported-deletion": "Inside an exported deletion",
-        "exported-other":
-          "Inside an exported replacement, formatting, or structural proposal",
+        "local-draft": "Inside editable content of the local proposal draft",
+        "draft-deleted-content": "Inside content deleted by the local draft",
+        "mixed-local-accepted": "Range mixes local draft and accepted content",
+        "finalized-insertion": "Inside a finalized insertion",
+        "finalized-deletion": "Inside a finalized deletion",
+        "finalized-other":
+          "Inside a finalized replacement, formatting, or structural proposal",
         "boundary-accepted-side":
           "Proposal boundary, accepted side is explicit",
         "boundary-proposal-side":
           "Proposal boundary, action targets proposal side",
         "ambiguous-boundary": "Visually adjacent boundary with no association",
-        "mixed-exported": "Range intersects accepted and exported work",
+        "mixed-finalized": "Range intersects accepted and finalized work",
         "multi-paragraph": "Range spans paragraph boundaries",
       };
 
@@ -747,20 +764,32 @@
         [
           "Browser",
           "Normalization or rollback cannot be proven",
-          "Report operational failure and rebuild from authoritative state; never silently accept browser-specific semantics.",
-          "candidate",
+          "Report operational failure and rebuild the visible projection from Lexical review state; never silently accept browser-specific semantics.",
+          "settled",
         ],
         [
           "Insertion",
           "Collapsed accepted-state point",
-          "Begin or extend one contiguous local insertion draft; export freezes one insertion proposal.",
+          "Begin or extend one contiguous local insertion draft; finalization assigns one immutable semantic proposal identity without serializing a document.",
           "settled",
         ],
         [
           "Deletion",
           "Same-paragraph accepted target",
-          "Begin or extend a local deletion draft; explicit range deletion uses the document-order start as continuation.",
-          "candidate",
+          "Begin or extend one adjacent local deletion draft using a native range supplied by the Lexical input adapter.",
+          "settled",
+        ],
+        [
+          "Deletion",
+          "Collapsed character or word command",
+          "The Lexical input adapter resolves a concrete native range; the review contract does not redefine browser or locale segmentation.",
+          "settled",
+        ],
+        [
+          "Deletion",
+          "Delete or Backspace targets content deleted by the local draft",
+          "Restore the entire deletion draft; for an atomic replacement draft, cancel the entire replacement. A zero-length caret merely adjacent to deleted draft content does not restore it.",
+          "settled",
         ],
         [
           "Replacement",
@@ -771,26 +800,26 @@
         [
           "Formatting",
           "Uniform same-paragraph accepted range",
-          "Normalize toggle to an explicit desired value and create one immutable formatting proposal.",
-          "candidate",
+          "Normalize toggle to an explicit desired value and create one finalized formatting proposal.",
+          "settled",
         ],
         [
           "Formatting",
           "Collapsed accepted-state point",
           "Change future local input formatting only; no proposal exists until content is authored.",
-          "candidate",
+          "settled",
         ],
         [
           "Paragraph",
           "Collapsed accepted point",
-          "Enter creates one immutable paragraph-split proposal and moves the caret to the proposed right paragraph.",
-          "candidate",
+          "Enter creates one finalized paragraph-split proposal and moves the caret to the proposed right paragraph.",
+          "settled",
         ],
         [
           "Paragraph",
           "Exact paragraph boundary",
-          "Backward/forward deletion creates one immutable paragraph-merge proposal.",
-          "candidate",
+          "Backward/forward deletion creates one finalized paragraph-merge proposal.",
+          "settled",
         ],
         [
           "Draft",
@@ -799,22 +828,22 @@
           "settled",
         ],
         [
-          "Exported work",
+          "Finalized work",
           "Edit inside one insertion, deletion, replacement, or format proposal",
-          "Refuse direct mutation. Exactly one exported proposal may enter the explicit staged replacement flow.",
+          "Refuse direct mutation. Exactly one pending proposal may enter explicit proposal reauthoring under a new identity.",
           "settled",
         ],
         [
           "Boundary",
           "Action has an explicit accepted-side association",
           "Act on the unique accepted target without amending the adjacent proposal.",
-          "candidate",
+          "settled",
         ],
         [
           "Boundary",
           "Action targets proposal side or association is ambiguous",
           "Return a typed no-mutation refusal.",
-          "candidate",
+          "settled",
         ],
         [
           "Clipboard",
@@ -842,27 +871,51 @@
         ],
         [
           "Composition",
-          "Start/update/commit",
-          "Treat the entire committed IME session as at most one insertion or same-paragraph replacement draft.",
+          "Start/update/end",
+          "Normalize each completed composition session into at most one insertion, deletion, or same-paragraph replacement intention; completion does not finalize the draft.",
           "settled",
         ],
         [
           "Composition",
-          "Export or resolve while composing",
-          "Refuse until commit or cancel so interim DOM state never becomes proposal semantics.",
-          "candidate",
+          "Finalize or resolve while composing",
+          "Refuse until composition ends or is cancelled so interim DOM state never becomes proposal semantics.",
+          "settled",
         ],
         [
           "Projection",
           "Edit in all-accepted or accepted-state preview",
           "Refuse review-changing input; previews are read-only views.",
-          "candidate",
+          "settled",
         ],
         [
           "Projection",
           "Accept or reject while previewing",
-          "Resolve from the authoritative proposal ledger, then recompute the selected preview.",
-          "candidate",
+          "Resolve from revision proposals in review state, then recompute the selected preview.",
+          "settled",
+        ],
+        [
+          "Draft",
+          "Range mixes local draft and accepted content",
+          "Return a typed no-mutation refusal; finalize or discard the draft before authoring a separate accepted-state change.",
+          "settled",
+        ],
+        [
+          "Draft",
+          "Authoring reduces to an empty or semantic no-op draft",
+          "Clear the draft without assigning proposal identity or creating a revision proposal.",
+          "settled",
+        ],
+        [
+          "Outcome",
+          "Every semantic transaction",
+          "Distinguish review-state change, successful no-change, semantic refusal, and operational failure with final state preserved.",
+          "settled",
+        ],
+        [
+          "Serialization",
+          "Native review document or WER interchange",
+          "Load/save the Lexical-shaped review document directly; map WER v1 only through a validated adapter and mapping report.",
+          "settled",
         ],
         [
           "Unsupported",
@@ -888,7 +941,7 @@
           futureFormatting: [],
           nextProposalId: 1,
           lastOutcome: {
-            status: "informative",
+            status: "no-change",
             code: "ready",
             message: "Choose an action or start a guided walkthrough.",
           },
@@ -908,20 +961,24 @@
         return state;
       }
 
-      function applied(state, code, message, route) {
-        return withOutcome(state, { status: "applied", code, message }, route);
+      function changed(state, code, message, route) {
+        return withOutcome(state, { status: "changed", code, message }, route);
       }
 
       function refused(state, code, message, route) {
         return withOutcome(state, { status: "refused", code, message }, route);
       }
 
-      function informative(state, code, message, route) {
+      function noChange(state, code, message, route) {
         return withOutcome(
           state,
-          { status: "informative", code, message },
+          { status: "no-change", code, message },
           route,
         );
+      }
+
+      function failed(state, code, message, route) {
+        return withOutcome(state, { status: "failed", code, message }, route);
       }
 
       function createProposal(state, kind, details, route) {
@@ -937,12 +994,12 @@
         return proposal;
       }
 
-      function openDraft(state, kind, details, route, replacementOf = null) {
+      function openDraft(state, kind, details, route, reauthoringOf = null) {
         state.draft = {
           kind,
           details,
           sourceRoutes: [route],
-          replacementOf,
+          reauthoringOf,
           formatting: clone(state.futureFormatting),
         };
       }
@@ -954,13 +1011,13 @@
         );
       }
 
-      function selectionIntersectsExported(selection) {
+      function selectionIntersectsFinalized(selection) {
         return [
-          "exported-insertion",
-          "exported-deletion",
-          "exported-other",
+          "finalized-insertion",
+          "finalized-deletion",
+          "finalized-other",
           "boundary-proposal-side",
-          "mixed-exported",
+          "mixed-finalized",
         ].includes(selection);
       }
 
@@ -977,13 +1034,13 @@
           return refused(
             state,
             "composition-active",
-            "The composition session must commit or cancel before another semantic transaction.",
+            "The composition session must end or be cancelled before another semantic transaction.",
             route,
           );
         }
 
         if (intent === "copy") {
-          return informative(
+          return noChange(
             state,
             "clipboard-projected",
             `Copied content-only ${PROJECTIONS[state.projection].toLowerCase()}; no proposal identity crossed the clipboard boundary.`,
@@ -995,7 +1052,7 @@
           return refused(
             state,
             "projection-read-only",
-            "Review-changing input is disabled in a preview projection; the authoritative review projection is unchanged.",
+            "Review-changing input is disabled in a preview projection; review state is unchanged.",
             route,
           );
         }
@@ -1009,11 +1066,20 @@
           );
         }
 
-        if (selectionIntersectsExported(selection)) {
+        if (selection === "mixed-local-accepted") {
           return refused(
             state,
-            "exported-proposal-intersection",
-            "Direct editing would amend or layer pending work. Reject it or explicitly begin revision of exactly one proposal.",
+            "mixed-draft-accepted-selection",
+            "A selection cannot author one proposal across local draft content and accepted content; finalize or discard the draft first.",
+            route,
+          );
+        }
+
+        if (selectionIntersectsFinalized(selection)) {
+          return refused(
+            state,
+            "finalized-proposal-intersection",
+            "Direct editing would amend or layer pending work. Resolve it or explicitly begin reauthoring of exactly one proposal.",
             route,
           );
         }
@@ -1027,11 +1093,33 @@
           );
         }
 
-        if (selection === "local-draft" && state.draft === null) {
+        if (
+          ["local-draft", "draft-deleted-content"].includes(selection) &&
+          state.draft === null
+        ) {
           return refused(
             state,
             "missing-local-draft",
             "The selected draft no longer exists; the adapter must reconstruct the selection before retrying.",
+            route,
+          );
+        }
+
+        const continuesAdjacentDeletion =
+          state.draft !== null &&
+          state.draft.kind === "deletion" &&
+          selection === "boundary-accepted-side" &&
+          ["delete-backward", "delete-forward"].includes(intent);
+
+        if (
+          state.draft !== null &&
+          !["local-draft", "draft-deleted-content"].includes(selection) &&
+          !continuesAdjacentDeletion
+        ) {
+          return refused(
+            state,
+            "separate-intent-while-draft-open",
+            "Finalize or discard the active proposal draft before authoring a separate accepted-state intention.",
             route,
           );
         }
@@ -1045,7 +1133,7 @@
               route,
             );
             state.selection = "local-draft";
-            return applied(
+            return changed(
               state,
               "draft-started",
               "Started one atomic replacement draft.",
@@ -1063,7 +1151,7 @@
           if (state.draft !== null && selection === "local-draft") {
             state.draft.details += " + tea";
             state.draft.sourceRoutes.push(route);
-            return applied(
+            return changed(
               state,
               "draft-mutated",
               "Extended the existing local draft without minting proposal identity.",
@@ -1077,7 +1165,7 @@
             route,
           );
           state.selection = "local-draft";
-          return applied(
+          return changed(
             state,
             "draft-started",
             "Started one local insertion draft.",
@@ -1088,6 +1176,33 @@
         if (intent === "delete-backward" || intent === "delete-forward") {
           const direction =
             intent === "delete-backward" ? "backward" : "forward";
+          if (selection === "draft-deleted-content" && state.draft !== null) {
+            const cancelledKind = state.draft.kind;
+            state.draft = null;
+            state.selection =
+              cancelledKind === "atomic replacement"
+                ? "accepted-range"
+                : "accepted-point";
+            return changed(
+              state,
+              cancelledKind === "atomic replacement"
+                ? "replacement-draft-cancelled"
+                : "deletion-draft-restored",
+              cancelledKind === "atomic replacement"
+                ? "Restored the deleted accepted content and removed the inserted content, cancelling the entire replacement draft."
+                : "Restored the entire local deletion draft; deleting only a selected subset requires selecting accepted content again.",
+              route,
+            );
+          }
+          if (continuesAdjacentDeletion && state.draft !== null) {
+            state.draft.details += `; extended ${direction} over adjacent accepted text`;
+            return changed(
+              state,
+              "deletion-draft-extended",
+              `Extended the same deletion draft ${direction}; no new proposal identity exists.`,
+              route,
+            );
+          }
           if (selection === "paragraph-boundary") {
             const proposal = createProposal(
               state,
@@ -1095,16 +1210,16 @@
               `${direction} merge at accepted paragraph boundary`,
               route,
             );
-            return applied(
+            return changed(
               state,
               "proposal-created",
-              `Created immutable ${proposal.id} for one paragraph merge.`,
+              `Created finalized ${proposal.id} for one paragraph merge.`,
               route,
             );
           }
           if (selection === "local-draft" && state.draft !== null) {
             state.draft.details += `; corrected ${direction}`;
-            return applied(
+            return changed(
               state,
               "draft-corrected",
               "Corrected local authoring without resolving a proposal.",
@@ -1124,8 +1239,8 @@
               `Delete accepted text ${direction}`,
               route,
             );
-            state.selection = "local-draft";
-            return applied(
+            state.selection = "boundary-accepted-side";
+            return changed(
               state,
               "draft-started",
               `Started a ${direction} deletion draft against accepted text.`,
@@ -1149,7 +1264,7 @@
               route,
             );
             state.selection = "local-draft";
-            return applied(
+            return changed(
               state,
               "draft-started",
               "Started one atomic replacement draft.",
@@ -1158,7 +1273,7 @@
           }
           if (selection === "local-draft" && state.draft !== null) {
             state.draft.details = "Locally replaced draft content with “tea”";
-            return applied(
+            return changed(
               state,
               "draft-mutated",
               "Replaced content within the same local draft.",
@@ -1180,7 +1295,7 @@
             if (!state.futureFormatting.includes("bold")) {
               state.futureFormatting.push("bold");
             }
-            return informative(
+            return changed(
               state,
               "future-format-set",
               "Set future local input to bold; no proposal exists without a content target.",
@@ -1194,10 +1309,10 @@
               "Set bold=true on one uniform same-paragraph range",
               route,
             );
-            return applied(
+            return changed(
               state,
               "proposal-created",
-              `Created immutable ${proposal.id} with explicit desired formatting.`,
+              `Created finalized ${proposal.id} with explicit desired formatting.`,
               route,
             );
           }
@@ -1205,7 +1320,7 @@
             if (!state.draft.formatting.includes("bold")) {
               state.draft.formatting.push("bold");
             }
-            return applied(
+            return changed(
               state,
               "draft-formatted",
               "Changed supported formatting inside the local draft.",
@@ -1230,10 +1345,10 @@
               "Create right paragraph identity and move accepted suffix",
               route,
             );
-            return applied(
+            return changed(
               state,
               "proposal-created",
-              `Created immutable ${proposal.id}; caret continues at the proposed right paragraph start.`,
+              `Created finalized ${proposal.id}; caret continues at the proposed right paragraph start.`,
               route,
             );
           }
@@ -1253,10 +1368,10 @@
               "Retire right paragraph identity and rehome its accepted text",
               route,
             );
-            return applied(
+            return changed(
               state,
               "proposal-created",
-              `Created immutable ${proposal.id} for one paragraph merge.`,
+              `Created finalized ${proposal.id} for one paragraph merge.`,
               route,
             );
           }
@@ -1287,7 +1402,7 @@
             );
           } else if (selection === "local-draft" && state.draft !== null) {
             state.draft.details += "; pasted normalized one-paragraph content";
-            return applied(
+            return changed(
               state,
               "draft-mutated",
               "Pasted supported content into the local draft.",
@@ -1302,7 +1417,7 @@
             );
           }
           state.selection = "local-draft";
-          return applied(
+          return changed(
             state,
             "draft-started",
             "Started a content-only clipboard draft with fresh local semantics.",
@@ -1321,7 +1436,7 @@
               route,
             );
             state.selection = "local-draft";
-            return applied(
+            return changed(
               state,
               "draft-started",
               "Started one native atomic document-fragment insertion draft.",
@@ -1344,8 +1459,8 @@
               "Delete range after successful content-only clipboard write",
               route,
             );
-            state.selection = "local-draft";
-            return applied(
+            state.selection = "boundary-accepted-side";
+            return changed(
               state,
               "clipboard-written-draft-started",
               "Clipboard preflight succeeded, then one local deletion draft began.",
@@ -1354,7 +1469,7 @@
           }
           if (selection === "local-draft" && state.draft !== null) {
             state.draft.details += "; locally cut supported draft content";
-            return applied(
+            return changed(
               state,
               "clipboard-written-draft-mutated",
               "Copied projected content, then changed only the local draft.",
@@ -1386,7 +1501,7 @@
 
         if (action.type === "SET_SELECTION") {
           state.selection = action.selection;
-          return informative(
+          return changed(
             state,
             "selection-positioned",
             SELECTIONS[action.selection],
@@ -1395,10 +1510,10 @@
 
         if (action.type === "SET_PROJECTION") {
           state.projection = action.projection;
-          return informative(
+          return changed(
             state,
             "projection-changed",
-            `Showing ${PROJECTIONS[action.projection].toLowerCase()}; authoritative state is unchanged.`,
+            `Showing ${PROJECTIONS[action.projection].toLowerCase()}; review state is unchanged.`,
           );
         }
 
@@ -1410,36 +1525,36 @@
           const proposal = createProposal(
             state,
             "insertion",
-            "Exported insertion “pending” at accepted-state point",
+            "Finalized insertion “pending” at accepted-state point",
             "fixture",
           );
-          state.selection = "exported-insertion";
-          return informative(
+          state.selection = "finalized-insertion";
+          return changed(
             state,
             "fixture-created",
-            `Seeded ${proposal.id} so exported-boundary behavior can be explored.`,
+            `Seeded ${proposal.id} so finalized-boundary behavior can be explored.`,
           );
         }
 
-        if (action.type === "EXPORT_DRAFT") {
+        if (action.type === "FINALIZE_DRAFT") {
           if (state.composition !== null) {
             return refused(
               state,
               "composition-active",
-              "Commit or cancel composition before export.",
+              "End or cancel composition before proposal finalization.",
             );
           }
           if (state.draft === null) {
             return refused(
               state,
               "no-draft",
-              "There is no local proposal draft to export.",
+              "There is no local proposal draft to finalize.",
             );
           }
           const draft = state.draft;
-          if (draft.replacementOf !== null) {
+          if (draft.reauthoringOf !== null) {
             const original = state.proposals.find(
-              (proposal) => proposal.id === draft.replacementOf,
+              (proposal) => proposal.id === draft.reauthoringOf,
             );
             if (original !== undefined) {
               original.status = "rejected";
@@ -1451,36 +1566,36 @@
             draft.details,
             draft.sourceRoutes.at(-1) ?? "unknown",
           );
-          const replaced = draft.replacementOf;
+          const reauthored = draft.reauthoringOf;
           state.draft = null;
           state.selection =
             proposal.kind === "deletion"
-              ? "exported-deletion"
+              ? "finalized-deletion"
               : ["insertion", "atomic document-fragment insertion"].includes(
                     proposal.kind,
                   )
-                ? "exported-insertion"
-                : "exported-other";
-          if (replaced !== null) {
-            return applied(
+                ? "finalized-insertion"
+                : "finalized-other";
+          if (reauthored !== null) {
+            return changed(
               state,
-              "replacement-exported",
-              `Atomically rejected ${replaced} and created new immutable ${proposal.id}.`,
+              "proposal-reauthored",
+              `Atomically rejected ${reauthored} and finalized ${proposal.id} under a new semantic identity.`,
             );
           }
-          return applied(
+          return changed(
             state,
-            "draft-exported",
-            `Minted immutable ${proposal.id}; its target, kind, payload, and base semantics are now frozen.`,
+            "draft-finalized",
+            `Finalized ${proposal.id}; its semantic identity, target, kind, and payload are now immutable. No document serialization occurred.`,
           );
         }
 
-        if (action.type === "BEGIN_REPLACEMENT") {
+        if (action.type === "BEGIN_REAUTHORING") {
           if (state.composition !== null || state.draft !== null) {
             return refused(
               state,
               "authoring-busy",
-              "Finish or discard the current local authoring session first.",
+              "Finalize or discard the current proposal draft first.",
             );
           }
           const proposal = pendingProposal(state);
@@ -1488,39 +1603,39 @@
             return refused(
               state,
               "no-pending-proposal",
-              "There is no pending proposal to revise.",
+              "There is no pending proposal to reauthor.",
             );
           }
           openDraft(
             state,
             proposal.kind,
-            `Revised copy of ${proposal.id}: ${proposal.details}`,
-            "explicit-revision",
+            `Reauthored copy of ${proposal.id}: ${proposal.details}`,
+            "explicit-reauthoring",
             proposal.id,
           );
           state.selection = "local-draft";
-          return applied(
+          return changed(
             state,
-            "replacement-started",
+            "reauthoring-started",
             `${proposal.id} remains pending and unchanged while a new local draft is authored.`,
           );
         }
 
-        if (action.type === "CANCEL_REPLACEMENT") {
-          if (state.draft === null || state.draft.replacementOf === null) {
+        if (action.type === "CANCEL_REAUTHORING") {
+          if (state.draft === null || state.draft.reauthoringOf === null) {
             return refused(
               state,
-              "no-replacement-draft",
-              "There is no staged proposal revision to cancel.",
+              "no-reauthoring-draft",
+              "There is no staged proposal reauthoring draft to cancel.",
             );
           }
-          const original = state.draft.replacementOf;
+          const original = state.draft.reauthoringOf;
           state.draft = null;
-          state.selection = "exported-insertion";
-          return applied(
+          state.selection = "finalized-insertion";
+          return changed(
             state,
-            "replacement-cancelled",
-            `Discarded local replacement intent; ${original} remains pending and unchanged.`,
+            "reauthoring-cancelled",
+            `Discarded local reauthoring; ${original} remains pending and unchanged.`,
           );
         }
 
@@ -1542,9 +1657,11 @@
             );
           }
           if (
-            selectionIntersectsExported(state.selection) ||
+            selectionIntersectsFinalized(state.selection) ||
             [
               "ambiguous-boundary",
+              "draft-deleted-content",
+              "mixed-local-accepted",
               "multi-paragraph",
               "paragraph-boundary",
             ].includes(state.selection)
@@ -1564,7 +1681,7 @@
                 ? "atomic replacement"
                 : "insertion",
           };
-          return applied(
+          return changed(
             state,
             "composition-started",
             "Captured one semantic start target; interim DOM text is adapter-local.",
@@ -1582,7 +1699,7 @@
             );
           }
           state.composition.buffer = action.text;
-          return informative(
+          return changed(
             state,
             "composition-updated",
             `Adapter buffer is now “${action.text}”; no proposal identity or accepted mutation exists.`,
@@ -1602,7 +1719,7 @@
           const originalSelection = state.composition.originalSelection;
           state.composition = null;
           state.selection = originalSelection;
-          return applied(
+          return changed(
             state,
             "composition-cancelled",
             "Discarded adapter-local composition and restored the original semantic target.",
@@ -1610,18 +1727,18 @@
           );
         }
 
-        if (action.type === "COMPOSITION_COMMIT") {
+        if (action.type === "COMPOSITION_END") {
           if (state.composition === null) {
             return refused(
               state,
               "no-composition",
-              "There is no active IME session to commit.",
+              "There is no active IME session to end.",
               "ime",
             );
           }
           if (state.composition.buffer === "") {
             state.composition = null;
-            return informative(
+            return noChange(
               state,
               "empty-composition",
               "The empty composition ended without creating a review interaction.",
@@ -1634,27 +1751,27 @@
             state.draft !== null &&
             composition.originalSelection === "local-draft"
           ) {
-            state.draft.details += `; IME committed “${composition.buffer}”`;
+            state.draft.details += `; composition produced “${composition.buffer}”`;
             state.draft.sourceRoutes.push("ime");
             state.selection = "local-draft";
-            return applied(
+            return changed(
               state,
               "draft-mutated",
-              "Folded the whole committed IME session into the existing local draft.",
+              "Folded the completed composition session into the existing local draft.",
               "ime",
             );
           }
           openDraft(
             state,
             composition.intendedKind,
-            `${composition.intendedKind} with committed IME text “${composition.buffer}”`,
+            `${composition.intendedKind} with completed composition text “${composition.buffer}”`,
             "ime",
           );
           state.selection = "local-draft";
-          return applied(
+          return changed(
             state,
-            "composition-committed",
-            `Created at most one ${composition.intendedKind} draft from the committed session.`,
+            "composition-ended",
+            `Created at most one ${composition.intendedKind} draft from the completed session.`,
             "ime",
           );
         }
@@ -1664,14 +1781,14 @@
             return refused(
               state,
               "composition-active",
-              "Accept/reject waits for composition commit or cancel.",
+              "Accept/reject waits for composition to end or be cancelled.",
             );
           }
           if (state.draft !== null) {
             return refused(
               state,
-              "draft-freezes-resolution",
-              "Export or discard the local draft before accepted-state resolution.",
+              "draft-blocks-resolution",
+              "Finalize or discard the local draft before accepted-state resolution.",
             );
           }
           const proposal = pendingProposal(state);
@@ -1687,10 +1804,10 @@
           state.acceptedTransactions.push(
             `${action.decision} ${proposal.id} (${proposal.kind})`,
           );
-          return applied(
+          return changed(
             state,
             `proposal-${proposal.status}`,
-            `${proposal.id} resolved from the authoritative ledger; ${PROJECTIONS[state.projection].toLowerCase()} was recomputed.`,
+            `${proposal.id} resolved in Lexical review state; ${PROJECTIONS[state.projection].toLowerCase()} was recomputed.`,
           );
         }
 
@@ -1722,9 +1839,9 @@
         },
         {
           id: "authoring",
-          title: "Draft → exported",
+          title: "Draft → finalized",
           description:
-            "Feel the boundary between mutable local authoring and immutable exported work.",
+            "Feel the boundary between mutable local authoring and finalized semantic identity inside review state.",
           steps: [
             ["Reset", [{ type: "RESET" }]],
             [
@@ -1741,20 +1858,62 @@
                 },
               ],
             ],
-            ["Export the draft", [{ type: "EXPORT_DRAFT" }]],
+            ["Finalize the draft", [{ type: "FINALIZE_DRAFT" }]],
             [
-              "Try typing inside the exported insertion",
+              "Try typing inside the finalized insertion",
               [{ type: "INTENT", route: "beforeinput", intent: "insert" }],
             ],
             [
-              "Explicitly begin proposal revision",
-              [{ type: "BEGIN_REPLACEMENT" }],
+              "Explicitly begin proposal reauthoring",
+              [{ type: "BEGIN_REAUTHORING" }],
             ],
             [
-              "Edit the replacement draft",
+              "Edit the reauthoring draft",
               [{ type: "INTENT", route: "beforeinput", intent: "insert" }],
             ],
-            ["Export the replacement", [{ type: "EXPORT_DRAFT" }]],
+            ["Finalize the reauthored proposal", [{ type: "FINALIZE_DRAFT" }]],
+          ],
+        },
+        {
+          id: "draft-restoration",
+          title: "Draft restoration",
+          description:
+            "Deleting content already deleted by local authoring restores the whole deletion draft or cancels the whole atomic replacement draft.",
+          steps: [
+            ["Reset", [{ type: "RESET" }]],
+            [
+              "Create a local deletion draft",
+              [
+                {
+                  type: "INTENT",
+                  route: "keyboard",
+                  intent: "delete-backward",
+                },
+              ],
+            ],
+            [
+              "Target its deleted content",
+              [{ type: "SET_SELECTION", selection: "draft-deleted-content" }],
+            ],
+            [
+              "Delete again to restore the entire draft",
+              [{ type: "INTENT", route: "keyboard", intent: "delete-forward" }],
+            ],
+            [
+              "Create an atomic replacement draft",
+              [
+                { type: "SET_SELECTION", selection: "accepted-range" },
+                { type: "INTENT", route: "beforeinput", intent: "insert" },
+              ],
+            ],
+            [
+              "Target its deleted content",
+              [{ type: "SET_SELECTION", selection: "draft-deleted-content" }],
+            ],
+            [
+              "Delete again to cancel the entire replacement",
+              [{ type: "INTENT", route: "keyboard", intent: "delete-forward" }],
+            ],
           ],
         },
         {
@@ -1764,7 +1923,7 @@
             "The visible caret is not enough. Compare proposal-side, accepted-side, and ambiguous associations.",
           steps: [
             [
-              "Reset and seed an exported insertion",
+              "Reset and seed a finalized insertion",
               [{ type: "RESET" }, { type: "SEED_PROPOSAL" }],
             ],
             [
@@ -1806,7 +1965,7 @@
           id: "composition",
           title: "IME critical section",
           description:
-            "An IME may emit very different raw events, but only its committed semantic result enters local authoring.",
+            "An IME may emit very different raw events, but only its completed semantic result enters local authoring.",
           steps: [
             [
               "Reset, seed a proposal, and select accepted text",
@@ -1832,8 +1991,11 @@
               "Try resolving a proposal mid-composition",
               [{ type: "RESOLVE", decision: "accept" }],
             ],
-            ["Commit the IME session", [{ type: "COMPOSITION_COMMIT" }]],
-            ["Export the one replacement draft", [{ type: "EXPORT_DRAFT" }]],
+            ["End the composition session", [{ type: "COMPOSITION_END" }]],
+            [
+              "Finalize the one replacement draft",
+              [{ type: "FINALIZE_DRAFT" }],
+            ],
           ],
         },
         {
@@ -1851,7 +2013,7 @@
               "Type bold local content",
               [{ type: "INTENT", route: "beforeinput", intent: "insert" }],
             ],
-            ["Export the insertion", [{ type: "EXPORT_DRAFT" }]],
+            ["Finalize the insertion", [{ type: "FINALIZE_DRAFT" }]],
             [
               "Select a separate accepted range",
               [{ type: "SET_SELECTION", selection: "accepted-range" }],
@@ -1879,7 +2041,10 @@
                 },
               ],
             ],
-            ["Export the native fragment proposal", [{ type: "EXPORT_DRAFT" }]],
+            [
+              "Finalize the native fragment proposal",
+              [{ type: "FINALIZE_DRAFT" }],
+            ],
             [
               "Select an accepted range",
               [{ type: "SET_SELECTION", selection: "accepted-range" }],
@@ -1908,10 +2073,10 @@
           id: "projection",
           title: "Preview & resolution",
           description:
-            "Preview content is read-only, while explicit proposal resolution still uses the authoritative ledger.",
+            "Preview content is read-only, while explicit proposal resolution still uses Lexical review state.",
           steps: [
             [
-              "Reset and seed an exported proposal",
+              "Reset and seed a finalized proposal",
               [{ type: "RESET" }, { type: "SEED_PROPOSAL" }],
             ],
             [
@@ -1926,7 +2091,7 @@
               ],
             ],
             [
-              "Accept from the proposal ledger",
+              "Accept from review state",
               [{ type: "RESOLVE", decision: "accept" }],
             ],
             [
@@ -1999,7 +2164,7 @@
 
       function renderState() {
         const draft = state.draft
-          ? `<strong>${state.draft.kind}</strong><br />${state.draft.details}<br />Formatting: ${state.draft.formatting.join(", ") || "none"}${state.draft.replacementOf ? `<br />Replaces: ${state.draft.replacementOf}` : ""}`
+          ? `<strong>${state.draft.kind}</strong><br />${state.draft.details}<br />Formatting: ${state.draft.formatting.join(", ") || "none"}${state.draft.reauthoringOf ? `<br />Reauthors: ${state.draft.reauthoringOf}` : ""}`
           : "None";
         const composition = state.composition
           ? `<strong>${state.composition.intendedKind}</strong><br />Buffer: “${state.composition.buffer}”<br />Start: ${SELECTIONS[state.composition.originalSelection]}`
@@ -2020,12 +2185,12 @@
             <div class="value">${PROJECTIONS[state.projection]}</div>
           </div>
           <div class="state-card wide">
-            <span class="label">Accepted document state</span>
+            <span class="label">Accepted content in Lexical review state</span>
             <div class="document">${state.acceptedDocument.map((paragraph, index) => `<div class="paragraph">¶${index + 1} ${paragraph}</div>`).join("")}</div>
             <div class="value" style="margin-top: 8px">Resolved transactions: ${state.acceptedTransactions.join("; ") || "none"}</div>
           </div>
           <div class="state-card">
-            <span class="label">Local proposal draft</span>
+            <span class="label">Active proposal draft</span>
             <div class="value">${draft}</div>
           </div>
           <div class="state-card">
@@ -2039,7 +2204,7 @@
 
         proposalList.innerHTML = state.proposals.length
           ? state.proposals.map(recordMarkup).join("")
-          : "<li>No immutable proposals.</li>";
+          : "<li>No finalized revision proposals.</li>";
         eventList.innerHTML = state.events.length
           ? state.events.map((event) => `<li>${event}</li>`).join("")
           : "<li>No transitions yet.</li>";
@@ -2128,16 +2293,16 @@
 
         const actions = {
           reset: { type: "RESET" },
-          "export-draft": { type: "EXPORT_DRAFT" },
-          "begin-replacement": { type: "BEGIN_REPLACEMENT" },
-          "cancel-replacement": { type: "CANCEL_REPLACEMENT" },
+          "finalize-draft": { type: "FINALIZE_DRAFT" },
+          "begin-reauthoring": { type: "BEGIN_REAUTHORING" },
+          "cancel-reauthoring": { type: "CANCEL_REAUTHORING" },
           "accept-first": { type: "RESOLVE", decision: "accept" },
           "reject-first": { type: "RESOLVE", decision: "reject" },
           "seed-proposal": { type: "SEED_PROPOSAL" },
           "composition-start": { type: "COMPOSITION_START" },
           "composition-update": { type: "COMPOSITION_UPDATE", text: "に" },
           "composition-update-2": { type: "COMPOSITION_UPDATE", text: "日本" },
-          "composition-commit": { type: "COMPOSITION_COMMIT" },
+          "composition-end": { type: "COMPOSITION_END" },
           "composition-cancel": { type: "COMPOSITION_CANCEL" },
         };
 

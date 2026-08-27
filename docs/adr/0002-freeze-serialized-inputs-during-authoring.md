@@ -1,0 +1,3 @@
+# Freeze serialized inputs during authoring
+
+Lexical Review supports two input/output paths: its native Lexical-shaped review document is loaded and saved directly, while a WER interchange document crosses a validated adapter boundary. Either serialized input is immutable for the lifetime of the resulting authoring session; session-local review state may evolve through drafting and proposal resolution, and output is a newly serialized review document or WER interchange document rather than a mutation or rebase of the input. Concurrent or simultaneous review and merging external changes are outside version 3, while WER constrains the portable adapter result rather than the session's nodes, algorithms, or native serialization.
