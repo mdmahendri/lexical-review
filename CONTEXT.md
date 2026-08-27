@@ -37,7 +37,7 @@ Untrusted plain or rich content consumed by ordinary paste. Supported presentati
 _Avoid_: Proposal fragment, interchange document
 
 **Authoring session**:
-A period of editing over session-local review state loaded from one frozen review document or imported WER interchange document. Concurrent or simultaneous review and merging external changes are outside version 3.
+A period of editing during which session-local review state evolves from a serialized input. It ends when that state is discarded or serialized as a successor document.
 _Avoid_: Editor instance, review document
 
 **Proposal draft**:
@@ -57,15 +57,15 @@ An explicit flow that uses a pending revision proposal as the starting point for
 _Avoid_: Proposal replacement, proposal revision, edit proposal, mutate proposal
 
 **Revision proposal**:
-An independently reviewable lifecycle record representing a pending document change, aligned with the Web Editor Revisions definition.
+An independently reviewable lifecycle record whose semantic identity, kind, target, and payload are immutable after finalization.
 _Avoid_: Edit operation, history entry, review segment
 
 **Review document**:
-Lexical Review's native, Lexical-shaped serialized document for directly loading and saving accepted content and review state. It is distinct from a WER interchange document and need not satisfy the WER schema.
+Lexical Review's native, Lexical-shaped serialization of review state. It is distinct from a WER interchange document and need not satisfy the WER schema.
 _Avoid_: WER interchange document, review projection, accepted document state
 
 **Review state**:
-The session-local Lexical editor state in which review-aware nodes represent accepted content, revision proposals, and proposal drafts. It is the working state during authoring and can be serialized as a review document or mapped through a WER adapter.
+The mutable working representation of accepted content, revision proposals, and zero or one active proposal draft during an authoring session. It is distinct from both its visible projection and serialized forms.
 _Avoid_: Review projection, WER interchange document, DOM state
 
 **Review segment**:
