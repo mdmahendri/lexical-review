@@ -1,0 +1,2152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Version 3 interaction contract prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #18201d;
+        --muted: #5f6c66;
+        --paper: #f4f2ea;
+        --panel: #fffdf7;
+        --line: #d8d4c8;
+        --accent: #225f55;
+        --accent-soft: #dcece7;
+        --warning: #9a5b17;
+        --warning-soft: #fff1d8;
+        --danger: #993d3d;
+        --danger-soft: #f8e4e1;
+        --info: #355f8a;
+        --info-soft: #e4edf7;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      main {
+        width: min(1240px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 46px 0 80px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 900px;
+        margin-bottom: 12px;
+        font-size: clamp(2.2rem, 5vw, 4.6rem);
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+      }
+
+      h2 {
+        font-size: 1.1rem;
+        letter-spacing: -0.01em;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+      }
+
+      .lede {
+        max-width: 900px;
+        color: var(--muted);
+        font-size: 1.08rem;
+        line-height: 1.62;
+      }
+
+      .question,
+      .hypothesis,
+      .evidence {
+        max-width: 1080px;
+        margin: 22px 0;
+        padding: 17px 20px;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 10px;
+        background: var(--panel);
+        line-height: 1.55;
+      }
+
+      .hypothesis {
+        border-left-color: var(--warning);
+      }
+
+      .evidence {
+        border-left-color: var(--info);
+        color: var(--muted);
+      }
+
+      .principles {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 26px 0 32px;
+      }
+
+      .principle,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+      }
+
+      .principle {
+        padding: 16px;
+      }
+
+      .principle strong {
+        display: block;
+        margin-bottom: 7px;
+      }
+
+      .principle p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.12fr) minmax(350px, 0.88fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .panel > :last-child {
+        margin-bottom: 0;
+      }
+
+      .section-copy {
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      .control-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      select {
+        width: 100%;
+        padding: 9px 10px;
+        border: 1px solid #b8b3a7;
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.88rem;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+
+      .control-group + .control-group {
+        margin-top: 20px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button {
+        padding: 9px 12px;
+        border: 1px solid #b8b3a7;
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.86rem;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: white;
+      }
+
+      button.danger {
+        border-color: #d7abab;
+        color: var(--danger);
+      }
+
+      button[aria-pressed="true"] {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .state-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .state-card {
+        min-height: 90px;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+      }
+
+      .state-card.wide {
+        grid-column: 1 / -1;
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .value {
+        font-size: 0.9rem;
+        line-height: 1.47;
+      }
+
+      .status-applied {
+        color: var(--accent);
+      }
+
+      .status-refused {
+        color: var(--danger);
+      }
+
+      .status-informative {
+        color: var(--info);
+      }
+
+      .document {
+        display: grid;
+        gap: 7px;
+      }
+
+      .paragraph {
+        padding: 8px 10px;
+        border-radius: 7px;
+        background: #f7f6f1;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.84rem;
+      }
+
+      .record-list,
+      .events,
+      .assumptions {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .record-list li,
+      .events li,
+      .assumptions li {
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        font-size: 0.84rem;
+        line-height: 1.45;
+      }
+
+      .record-list li.pending {
+        border-left: 4px solid var(--warning);
+      }
+
+      .record-list li.accepted {
+        border-left: 4px solid var(--accent);
+      }
+
+      .record-list li.rejected {
+        border-left: 4px solid var(--danger);
+      }
+
+      .events li:first-child {
+        border-color: #a9d1c2;
+      }
+
+      .badge {
+        display: inline-block;
+        margin-right: 5px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #eeeae0;
+        color: var(--muted);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .badge.candidate {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .badge.settled {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .badge.evidence-only {
+        background: var(--info-soft);
+        color: var(--info);
+      }
+
+      .badge.unsupported {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .walkthrough-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+
+      .walkthrough {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .walkthrough-steps {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .walkthrough-steps button {
+        text-align: left;
+      }
+
+      .walkthrough-steps button.done {
+        border-color: #b9d2c8;
+        background: var(--accent-soft);
+      }
+
+      .walkthrough-steps button.current {
+        border-color: var(--accent);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.84rem;
+      }
+
+      th,
+      td {
+        padding: 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+        line-height: 1.45;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.7rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .full-width {
+        margin-top: 18px;
+      }
+
+      code {
+        padding: 0.08em 0.3em;
+        border-radius: 4px;
+        background: #efede6;
+        font-size: 0.88em;
+      }
+
+      @media (max-width: 920px) {
+        .principles,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 620px) {
+        main {
+          width: min(100% - 20px, 1240px);
+          padding-top: 28px;
+        }
+
+        .principles,
+        .control-grid,
+        .state-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .state-card.wide {
+          grid-column: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p><span class="badge candidate">Throwaway prototype</span></p>
+      <h1>One interaction contract, many noisy input routes</h1>
+      <p class="lede">
+        Drive candidate version 3 rules through proposal boundaries, local
+        authoring, exported work, formatting, paragraphs, clipboard, IME, and
+        preview projections. The prototype is a discussion tool, not production
+        code or a public API draft.
+      </p>
+
+      <div class="question">
+        <strong>Question being tested:</strong> Can one route-neutral semantic
+        state machine make every in-scope review interaction deterministic while
+        preserving accepted state, pending work, projection, and logical
+        selection on every refusal?
+      </div>
+
+      <div class="hypothesis">
+        <strong>Candidate answer:</strong> Browser events, Lexical commands,
+        toolbar actions, clipboard actions, IME sessions, and programmatic calls
+        first normalize into one semantic intent. That service decides from the
+        accepted-state target, proposal intersection, local draft, composition
+        phase, and projection. Raw browser event order never changes the
+        normative outcome.
+      </div>
+
+      <div class="evidence">
+        <strong>Evidence boundary:</strong> The repository resolves Lexical
+        0.49.0. Its tagged source contains different Android Chrome, Firefox,
+        Safari/WebKit, and iOS composition/deletion paths. Those facts justify
+        adapter-specific normalization and browser conformance tests; they do
+        not define Lexical Review semantics. Vendor observations are likewise
+        informative, never normative.
+      </div>
+
+      <section class="principles" aria-label="Candidate principles">
+        <article class="principle">
+          <strong>Semantic intent is normative</strong>
+          <p>
+            Input routes translate. They do not get route-specific review rules.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Accepted-state targets</strong>
+          <p>
+            Pending projections never become an accidental second coordinate
+            system.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Draft or immutable</strong>
+          <p>
+            Authoring can change a local draft; exported proposals require
+            explicit resolution or replacement.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Refusal means no mutation</strong>
+          <p>
+            Semantic refusal preserves document, proposals, draft, projection,
+            and selection.
+          </p>
+        </article>
+      </section>
+
+      <div class="grid">
+        <div class="stack">
+          <section class="panel">
+            <h2>Free play</h2>
+            <p class="section-copy">
+              Choose an input route and semantic target, then try any action.
+              The same intent should produce the same semantic result regardless
+              of route; route-specific facts appear only in the trace.
+            </p>
+
+            <div class="control-group control-grid">
+              <label>
+                Input route
+                <select id="route-select"></select>
+              </label>
+              <label>
+                Semantic target
+                <select id="selection-select"></select>
+              </label>
+            </div>
+
+            <div class="control-group">
+              <h3>Text and formatting intentions</h3>
+              <div class="button-row" id="intent-buttons"></div>
+            </div>
+
+            <div class="control-group">
+              <h3>Composition session</h3>
+              <div class="button-row">
+                <button data-action="composition-start">Start IME</button>
+                <button data-action="composition-update">Update “に”</button>
+                <button data-action="composition-update-2">
+                  Update “日本”
+                </button>
+                <button data-action="composition-commit">Commit IME</button>
+                <button data-action="composition-cancel">Cancel IME</button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <h3>Draft and proposal lifecycle</h3>
+              <div class="button-row">
+                <button data-action="export-draft" class="primary">
+                  Export draft
+                </button>
+                <button data-action="begin-replacement">
+                  Revise one exported proposal
+                </button>
+                <button data-action="cancel-replacement">
+                  Cancel revision
+                </button>
+                <button data-action="accept-first">Accept first pending</button>
+                <button data-action="reject-first">Reject first pending</button>
+                <button data-action="seed-proposal">
+                  Seed exported insertion
+                </button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <h3>Projection</h3>
+              <div class="button-row" id="projection-buttons"></div>
+            </div>
+
+            <div class="control-group">
+              <button data-action="reset" class="danger">
+                Reset prototype
+              </button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Guided walkthroughs</h2>
+            <p class="section-copy">
+              Each walkthrough resets to a known state. Work down the buttons
+              and watch for the moment where the candidate rule feels wrong.
+            </p>
+            <div class="walkthrough-tabs" id="walkthrough-tabs"></div>
+            <div id="walkthrough"></div>
+          </section>
+        </div>
+
+        <aside class="stack">
+          <section class="panel">
+            <h2>Current semantic state</h2>
+            <div class="state-grid" id="state-grid"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Proposal ledger</h2>
+            <ul class="record-list" id="proposal-list"></ul>
+          </section>
+
+          <section class="panel">
+            <h2>Latest transitions</h2>
+            <ul class="events" id="event-list"></ul>
+          </section>
+        </aside>
+      </div>
+
+      <section class="panel full-width">
+        <h2>Candidate coverage ledger</h2>
+        <p class="section-copy">
+          “Settled” rows come from prerequisite Wayfinder decisions. “Candidate”
+          rows are the decisions this prototype asks the maintainer to validate.
+          “Evidence only” rows describe adapter facts. “Unsupported” rows are
+          explicit version 3 boundaries, not silent fallbacks.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Surface</th>
+                <th>Context</th>
+                <th>Candidate contract</th>
+                <th>Authority</th>
+              </tr>
+            </thead>
+            <tbody id="coverage-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel full-width">
+        <h2>Assumptions deliberately exposed for review</h2>
+        <ul class="assumptions">
+          <li>
+            <span class="badge candidate">Candidate</span> A caret adjacent to
+            exported work must carry an accepted-side association. The service
+            supports an action only when that association makes the accepted
+            target unique; an ambiguous visual boundary refuses.
+          </li>
+          <li>
+            <span class="badge candidate">Candidate</span> Continuous text
+            authoring—insert, delete, replace, paste, and IME—uses a mutable
+            local draft. Complete discrete intentions—format, split, and
+            merge—create immutable proposals immediately.
+          </li>
+          <li>
+            <span class="badge candidate">Candidate</span> Active composition is
+            a semantic critical section. Export and proposal resolution refuse
+            until commit or cancel; interim DOM variation is adapter-local.
+          </li>
+          <li>
+            <span class="badge candidate">Candidate</span> A formatting adapter
+            resolves “toggle” into an explicit desired value before calling the
+            semantic service. A collapsed toggle only changes future local input
+            formatting and creates no proposal by itself.
+          </li>
+          <li>
+            <span class="badge candidate">Candidate</span> Review-changing edits
+            run only in the review projection. Projection previews are
+            read-only, but explicit accept/reject remains available because it
+            acts on the authoritative proposal ledger rather than preview
+            content.
+          </li>
+          <li>
+            <span class="badge candidate">Candidate</span> If an adapter cannot
+            normalize or roll back a browser mutation safely, it reports an
+            operational failure and rebuilds from authoritative state; it never
+            invents different review semantics for that browser.
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <script>
+      const ROUTES = {
+        beforeinput: "Browser beforeinput",
+        keyboard: "Lexical keyboard command",
+        toolbar: "Toolbar action",
+        clipboard: "Clipboard action",
+        ime: "IME adapter",
+        programmatic: "Programmatic call",
+      };
+
+      const SELECTIONS = {
+        "accepted-point": "Collapsed point in accepted text",
+        "accepted-range": "Same-paragraph accepted range",
+        "paragraph-boundary": "Exact accepted paragraph boundary",
+        "local-draft": "Inside the local proposal draft",
+        "exported-insertion": "Inside an exported insertion",
+        "exported-deletion": "Inside an exported deletion",
+        "exported-other":
+          "Inside an exported replacement, formatting, or structural proposal",
+        "boundary-accepted-side":
+          "Proposal boundary, accepted side is explicit",
+        "boundary-proposal-side":
+          "Proposal boundary, action targets proposal side",
+        "ambiguous-boundary": "Visually adjacent boundary with no association",
+        "mixed-exported": "Range intersects accepted and exported work",
+        "multi-paragraph": "Range spans paragraph boundaries",
+      };
+
+      const INTENTS = [
+        ["insert", "Insert text"],
+        ["delete-backward", "Delete backward"],
+        ["delete-forward", "Delete forward"],
+        ["replace", "Replace selection"],
+        ["format-bold", "Set bold on"],
+        ["split", "Split paragraph"],
+        ["merge", "Merge paragraphs"],
+        ["copy", "Copy"],
+        ["cut", "Cut"],
+        ["paste-single", "Paste one paragraph"],
+        ["paste-fragment", "Paste paragraph fragment"],
+      ];
+
+      const PROJECTIONS = {
+        review: "Review projection",
+        "all-accepted": "All-pending-as-accepted preview",
+        "accepted-state": "Accepted-state preview",
+      };
+
+      const COVERAGE = [
+        [
+          "Routes",
+          "Equivalent complete semantic intent",
+          "Keyboard, beforeinput, toolbar, clipboard, IME, and programmatic adapters call the same proposal-intent service.",
+          "settled",
+        ],
+        [
+          "Browser",
+          "Different event order or native mutation path",
+          "Normalize adapter evidence into the same semantic intent; test each required engine without making its raw events normative.",
+          "evidence-only",
+        ],
+        [
+          "Browser",
+          "Normalization or rollback cannot be proven",
+          "Report operational failure and rebuild from authoritative state; never silently accept browser-specific semantics.",
+          "candidate",
+        ],
+        [
+          "Insertion",
+          "Collapsed accepted-state point",
+          "Begin or extend one contiguous local insertion draft; export freezes one insertion proposal.",
+          "settled",
+        ],
+        [
+          "Deletion",
+          "Same-paragraph accepted target",
+          "Begin or extend a local deletion draft; explicit range deletion uses the document-order start as continuation.",
+          "candidate",
+        ],
+        [
+          "Replacement",
+          "Noncollapsed same-paragraph accepted range",
+          "Begin one atomic replacement draft; never decompose it into independently resolvable deletion and insertion.",
+          "settled",
+        ],
+        [
+          "Formatting",
+          "Uniform same-paragraph accepted range",
+          "Normalize toggle to an explicit desired value and create one immutable formatting proposal.",
+          "candidate",
+        ],
+        [
+          "Formatting",
+          "Collapsed accepted-state point",
+          "Change future local input formatting only; no proposal exists until content is authored.",
+          "candidate",
+        ],
+        [
+          "Paragraph",
+          "Collapsed accepted point",
+          "Enter creates one immutable paragraph-split proposal and moves the caret to the proposed right paragraph.",
+          "candidate",
+        ],
+        [
+          "Paragraph",
+          "Exact paragraph boundary",
+          "Backward/forward deletion creates one immutable paragraph-merge proposal.",
+          "candidate",
+        ],
+        [
+          "Draft",
+          "Edit inside locally authored inserted content",
+          "Mutate or discard the draft without portable identity or proposal resolution.",
+          "settled",
+        ],
+        [
+          "Exported work",
+          "Edit inside one insertion, deletion, replacement, or format proposal",
+          "Refuse direct mutation. Exactly one exported proposal may enter the explicit staged replacement flow.",
+          "settled",
+        ],
+        [
+          "Boundary",
+          "Action has an explicit accepted-side association",
+          "Act on the unique accepted target without amending the adjacent proposal.",
+          "candidate",
+        ],
+        [
+          "Boundary",
+          "Action targets proposal side or association is ambiguous",
+          "Return a typed no-mutation refusal.",
+          "candidate",
+        ],
+        [
+          "Clipboard",
+          "Copy",
+          "Project content only using all-accepted by default or host-configured accepted-state; never transfer proposal identity.",
+          "settled",
+        ],
+        [
+          "Clipboard",
+          "Collapsed paste of paragraph fragment",
+          "Create one native atomic document-fragment insertion draft; WER v1 export remains unsupported without mutation.",
+          "settled",
+        ],
+        [
+          "Clipboard",
+          "Paragraph fragment over noncollapsed range",
+          "Refuse: version 3 has no atomic document-fragment replacement kind.",
+          "unsupported",
+        ],
+        [
+          "Clipboard",
+          "Move-style drag/drop",
+          "Refuse: version 3 has no proposal-preserving compound move.",
+          "unsupported",
+        ],
+        [
+          "Composition",
+          "Start/update/commit",
+          "Treat the entire committed IME session as at most one insertion or same-paragraph replacement draft.",
+          "settled",
+        ],
+        [
+          "Composition",
+          "Export or resolve while composing",
+          "Refuse until commit or cancel so interim DOM state never becomes proposal semantics.",
+          "candidate",
+        ],
+        [
+          "Projection",
+          "Edit in all-accepted or accepted-state preview",
+          "Refuse review-changing input; previews are read-only views.",
+          "candidate",
+        ],
+        [
+          "Projection",
+          "Accept or reject while previewing",
+          "Resolve from the authoritative proposal ledger, then recompute the selected preview.",
+          "candidate",
+        ],
+        [
+          "Unsupported",
+          "Cross-paragraph delete/replacement, Enter over range, multi-range formatting",
+          "Return one machine-readable semantic refusal and preserve document, proposals, draft, projection, and logical selection.",
+          "settled",
+        ],
+      ];
+
+      function clone(value) {
+        return JSON.parse(JSON.stringify(value));
+      }
+
+      function initialState() {
+        return {
+          acceptedDocument: ["Alpha bravo.", "Charlie delta."],
+          acceptedTransactions: [],
+          projection: "review",
+          selection: "accepted-point",
+          draft: null,
+          composition: null,
+          proposals: [],
+          futureFormatting: [],
+          nextProposalId: 1,
+          lastOutcome: {
+            status: "informative",
+            code: "ready",
+            message: "Choose an action or start a guided walkthrough.",
+          },
+          events: [],
+        };
+      }
+
+      function eventText(outcome, route) {
+        const routeText = route ? ` via ${ROUTES[route]}` : "";
+        return `${outcome.status.toUpperCase()} · ${outcome.code}${routeText} — ${outcome.message}`;
+      }
+
+      function withOutcome(state, outcome, route) {
+        state.lastOutcome = outcome;
+        state.events.unshift(eventText(outcome, route));
+        state.events = state.events.slice(0, 8);
+        return state;
+      }
+
+      function applied(state, code, message, route) {
+        return withOutcome(state, { status: "applied", code, message }, route);
+      }
+
+      function refused(state, code, message, route) {
+        return withOutcome(state, { status: "refused", code, message }, route);
+      }
+
+      function informative(state, code, message, route) {
+        return withOutcome(
+          state,
+          { status: "informative", code, message },
+          route,
+        );
+      }
+
+      function createProposal(state, kind, details, route) {
+        const proposal = {
+          id: `P${state.nextProposalId}`,
+          kind,
+          status: "pending",
+          details,
+          sourceRoute: route,
+        };
+        state.nextProposalId += 1;
+        state.proposals.push(proposal);
+        return proposal;
+      }
+
+      function openDraft(state, kind, details, route, replacementOf = null) {
+        state.draft = {
+          kind,
+          details,
+          sourceRoutes: [route],
+          replacementOf,
+          formatting: clone(state.futureFormatting),
+        };
+      }
+
+      function pendingProposal(state) {
+        return (
+          state.proposals.find((proposal) => proposal.status === "pending") ??
+          null
+        );
+      }
+
+      function selectionIntersectsExported(selection) {
+        return [
+          "exported-insertion",
+          "exported-deletion",
+          "exported-other",
+          "boundary-proposal-side",
+          "mixed-exported",
+        ].includes(selection);
+      }
+
+      function isPreview(state) {
+        return state.projection !== "review";
+      }
+
+      function evaluateIntent(state, action) {
+        const route = action.route;
+        const intent = action.intent;
+        const selection = state.selection;
+
+        if (state.composition !== null) {
+          return refused(
+            state,
+            "composition-active",
+            "The composition session must commit or cancel before another semantic transaction.",
+            route,
+          );
+        }
+
+        if (intent === "copy") {
+          return informative(
+            state,
+            "clipboard-projected",
+            `Copied content-only ${PROJECTIONS[state.projection].toLowerCase()}; no proposal identity crossed the clipboard boundary.`,
+            route,
+          );
+        }
+
+        if (isPreview(state)) {
+          return refused(
+            state,
+            "projection-read-only",
+            "Review-changing input is disabled in a preview projection; the authoritative review projection is unchanged.",
+            route,
+          );
+        }
+
+        if (selection === "ambiguous-boundary") {
+          return refused(
+            state,
+            "ambiguous-proposal-boundary",
+            "The visible boundary does not identify a unique accepted-state target and association.",
+            route,
+          );
+        }
+
+        if (selectionIntersectsExported(selection)) {
+          return refused(
+            state,
+            "exported-proposal-intersection",
+            "Direct editing would amend or layer pending work. Reject it or explicitly begin revision of exactly one proposal.",
+            route,
+          );
+        }
+
+        if (selection === "multi-paragraph") {
+          return refused(
+            state,
+            "unsupported-compound-interaction",
+            "Version 3 does not silently decompose a cross-paragraph or disjoint intention into independently resolvable proposals.",
+            route,
+          );
+        }
+
+        if (selection === "local-draft" && state.draft === null) {
+          return refused(
+            state,
+            "missing-local-draft",
+            "The selected draft no longer exists; the adapter must reconstruct the selection before retrying.",
+            route,
+          );
+        }
+
+        if (intent === "insert") {
+          if (selection === "accepted-range") {
+            openDraft(
+              state,
+              "atomic replacement",
+              "Replace same-paragraph range with “tea”",
+              route,
+            );
+            state.selection = "local-draft";
+            return applied(
+              state,
+              "draft-started",
+              "Started one atomic replacement draft.",
+              route,
+            );
+          }
+          if (selection === "paragraph-boundary") {
+            return refused(
+              state,
+              "target-kind-mismatch",
+              "Text insertion needs an associated text point, not an unassociated structural boundary.",
+              route,
+            );
+          }
+          if (state.draft !== null && selection === "local-draft") {
+            state.draft.details += " + tea";
+            state.draft.sourceRoutes.push(route);
+            return applied(
+              state,
+              "draft-mutated",
+              "Extended the existing local draft without minting proposal identity.",
+              route,
+            );
+          }
+          openDraft(
+            state,
+            "insertion",
+            "Insert “tea” at accepted-state point",
+            route,
+          );
+          state.selection = "local-draft";
+          return applied(
+            state,
+            "draft-started",
+            "Started one local insertion draft.",
+            route,
+          );
+        }
+
+        if (intent === "delete-backward" || intent === "delete-forward") {
+          const direction =
+            intent === "delete-backward" ? "backward" : "forward";
+          if (selection === "paragraph-boundary") {
+            const proposal = createProposal(
+              state,
+              "paragraph merge",
+              `${direction} merge at accepted paragraph boundary`,
+              route,
+            );
+            return applied(
+              state,
+              "proposal-created",
+              `Created immutable ${proposal.id} for one paragraph merge.`,
+              route,
+            );
+          }
+          if (selection === "local-draft" && state.draft !== null) {
+            state.draft.details += `; corrected ${direction}`;
+            return applied(
+              state,
+              "draft-corrected",
+              "Corrected local authoring without resolving a proposal.",
+              route,
+            );
+          }
+          if (
+            [
+              "accepted-point",
+              "accepted-range",
+              "boundary-accepted-side",
+            ].includes(selection)
+          ) {
+            openDraft(
+              state,
+              "deletion",
+              `Delete accepted text ${direction}`,
+              route,
+            );
+            state.selection = "local-draft";
+            return applied(
+              state,
+              "draft-started",
+              `Started a ${direction} deletion draft against accepted text.`,
+              route,
+            );
+          }
+          return refused(
+            state,
+            "unsupported-delete-target",
+            "This target does not identify supported accepted text to delete.",
+            route,
+          );
+        }
+
+        if (intent === "replace") {
+          if (selection === "accepted-range") {
+            openDraft(
+              state,
+              "atomic replacement",
+              "Replace same-paragraph accepted range with “tea”",
+              route,
+            );
+            state.selection = "local-draft";
+            return applied(
+              state,
+              "draft-started",
+              "Started one atomic replacement draft.",
+              route,
+            );
+          }
+          if (selection === "local-draft" && state.draft !== null) {
+            state.draft.details = "Locally replaced draft content with “tea”";
+            return applied(
+              state,
+              "draft-mutated",
+              "Replaced content within the same local draft.",
+              route,
+            );
+          }
+          return refused(
+            state,
+            "replacement-requires-range",
+            "Atomic replacement requires one noncollapsed same-paragraph accepted range.",
+            route,
+          );
+        }
+
+        if (intent === "format-bold") {
+          if (
+            ["accepted-point", "boundary-accepted-side"].includes(selection)
+          ) {
+            if (!state.futureFormatting.includes("bold")) {
+              state.futureFormatting.push("bold");
+            }
+            return informative(
+              state,
+              "future-format-set",
+              "Set future local input to bold; no proposal exists without a content target.",
+              route,
+            );
+          }
+          if (selection === "accepted-range") {
+            const proposal = createProposal(
+              state,
+              "formatting",
+              "Set bold=true on one uniform same-paragraph range",
+              route,
+            );
+            return applied(
+              state,
+              "proposal-created",
+              `Created immutable ${proposal.id} with explicit desired formatting.`,
+              route,
+            );
+          }
+          if (selection === "local-draft" && state.draft !== null) {
+            if (!state.draft.formatting.includes("bold")) {
+              state.draft.formatting.push("bold");
+            }
+            return applied(
+              state,
+              "draft-formatted",
+              "Changed supported formatting inside the local draft.",
+              route,
+            );
+          }
+          return refused(
+            state,
+            "unsupported-format-target",
+            "Formatting requires one supported local draft or uniform same-paragraph accepted range.",
+            route,
+          );
+        }
+
+        if (intent === "split") {
+          if (
+            ["accepted-point", "boundary-accepted-side"].includes(selection)
+          ) {
+            const proposal = createProposal(
+              state,
+              "paragraph split",
+              "Create right paragraph identity and move accepted suffix",
+              route,
+            );
+            return applied(
+              state,
+              "proposal-created",
+              `Created immutable ${proposal.id}; caret continues at the proposed right paragraph start.`,
+              route,
+            );
+          }
+          return refused(
+            state,
+            "unsupported-paragraph-split",
+            "Paragraph split requires a collapsed accepted-state point; Enter over a range is unsupported.",
+            route,
+          );
+        }
+
+        if (intent === "merge") {
+          if (selection === "paragraph-boundary") {
+            const proposal = createProposal(
+              state,
+              "paragraph merge",
+              "Retire right paragraph identity and rehome its accepted text",
+              route,
+            );
+            return applied(
+              state,
+              "proposal-created",
+              `Created immutable ${proposal.id} for one paragraph merge.`,
+              route,
+            );
+          }
+          return refused(
+            state,
+            "merge-requires-boundary",
+            "Paragraph merge requires the exact boundary between two accepted paragraphs.",
+            route,
+          );
+        }
+
+        if (intent === "paste-single") {
+          if (selection === "accepted-range") {
+            openDraft(
+              state,
+              "atomic replacement",
+              "Replace same-paragraph range with normalized clipboard content",
+              route,
+            );
+          } else if (
+            ["accepted-point", "boundary-accepted-side"].includes(selection)
+          ) {
+            openDraft(
+              state,
+              "insertion",
+              "Insert normalized one-paragraph clipboard content",
+              route,
+            );
+          } else if (selection === "local-draft" && state.draft !== null) {
+            state.draft.details += "; pasted normalized one-paragraph content";
+            return applied(
+              state,
+              "draft-mutated",
+              "Pasted supported content into the local draft.",
+              route,
+            );
+          } else {
+            return refused(
+              state,
+              "unsupported-paste-target",
+              "The destination cannot represent this paste truthfully.",
+              route,
+            );
+          }
+          state.selection = "local-draft";
+          return applied(
+            state,
+            "draft-started",
+            "Started a content-only clipboard draft with fresh local semantics.",
+            route,
+          );
+        }
+
+        if (intent === "paste-fragment") {
+          if (
+            ["accepted-point", "boundary-accepted-side"].includes(selection)
+          ) {
+            openDraft(
+              state,
+              "atomic document-fragment insertion",
+              "Insert normalized text-and-paragraph fragment atomically",
+              route,
+            );
+            state.selection = "local-draft";
+            return applied(
+              state,
+              "draft-started",
+              "Started one native atomic document-fragment insertion draft.",
+              route,
+            );
+          }
+          return refused(
+            state,
+            "unsupported-fragment-replacement",
+            "Paragraph-creating paste over a range is unsupported; version 3 has no fragment-replacement kind.",
+            route,
+          );
+        }
+
+        if (intent === "cut") {
+          if (selection === "accepted-range") {
+            openDraft(
+              state,
+              "deletion",
+              "Delete range after successful content-only clipboard write",
+              route,
+            );
+            state.selection = "local-draft";
+            return applied(
+              state,
+              "clipboard-written-draft-started",
+              "Clipboard preflight succeeded, then one local deletion draft began.",
+              route,
+            );
+          }
+          if (selection === "local-draft" && state.draft !== null) {
+            state.draft.details += "; locally cut supported draft content";
+            return applied(
+              state,
+              "clipboard-written-draft-mutated",
+              "Copied projected content, then changed only the local draft.",
+              route,
+            );
+          }
+          return refused(
+            state,
+            "unsupported-cut-target",
+            "Cut cannot truthfully change this target after a clipboard write.",
+            route,
+          );
+        }
+
+        return refused(
+          state,
+          "unknown-intent",
+          "The semantic service has no rule for this intention.",
+          route,
+        );
+      }
+
+      function reduce(previous, action) {
+        if (action.type === "RESET") {
+          return initialState();
+        }
+
+        const state = clone(previous);
+
+        if (action.type === "SET_SELECTION") {
+          state.selection = action.selection;
+          return informative(
+            state,
+            "selection-positioned",
+            SELECTIONS[action.selection],
+          );
+        }
+
+        if (action.type === "SET_PROJECTION") {
+          state.projection = action.projection;
+          return informative(
+            state,
+            "projection-changed",
+            `Showing ${PROJECTIONS[action.projection].toLowerCase()}; authoritative state is unchanged.`,
+          );
+        }
+
+        if (action.type === "INTENT") {
+          return evaluateIntent(state, action);
+        }
+
+        if (action.type === "SEED_PROPOSAL") {
+          const proposal = createProposal(
+            state,
+            "insertion",
+            "Exported insertion “pending” at accepted-state point",
+            "fixture",
+          );
+          state.selection = "exported-insertion";
+          return informative(
+            state,
+            "fixture-created",
+            `Seeded ${proposal.id} so exported-boundary behavior can be explored.`,
+          );
+        }
+
+        if (action.type === "EXPORT_DRAFT") {
+          if (state.composition !== null) {
+            return refused(
+              state,
+              "composition-active",
+              "Commit or cancel composition before export.",
+            );
+          }
+          if (state.draft === null) {
+            return refused(
+              state,
+              "no-draft",
+              "There is no local proposal draft to export.",
+            );
+          }
+          const draft = state.draft;
+          if (draft.replacementOf !== null) {
+            const original = state.proposals.find(
+              (proposal) => proposal.id === draft.replacementOf,
+            );
+            if (original !== undefined) {
+              original.status = "rejected";
+            }
+          }
+          const proposal = createProposal(
+            state,
+            draft.kind,
+            draft.details,
+            draft.sourceRoutes.at(-1) ?? "unknown",
+          );
+          const replaced = draft.replacementOf;
+          state.draft = null;
+          state.selection =
+            proposal.kind === "deletion"
+              ? "exported-deletion"
+              : ["insertion", "atomic document-fragment insertion"].includes(
+                    proposal.kind,
+                  )
+                ? "exported-insertion"
+                : "exported-other";
+          if (replaced !== null) {
+            return applied(
+              state,
+              "replacement-exported",
+              `Atomically rejected ${replaced} and created new immutable ${proposal.id}.`,
+            );
+          }
+          return applied(
+            state,
+            "draft-exported",
+            `Minted immutable ${proposal.id}; its target, kind, payload, and base semantics are now frozen.`,
+          );
+        }
+
+        if (action.type === "BEGIN_REPLACEMENT") {
+          if (state.composition !== null || state.draft !== null) {
+            return refused(
+              state,
+              "authoring-busy",
+              "Finish or discard the current local authoring session first.",
+            );
+          }
+          const proposal = pendingProposal(state);
+          if (proposal === null) {
+            return refused(
+              state,
+              "no-pending-proposal",
+              "There is no pending proposal to revise.",
+            );
+          }
+          openDraft(
+            state,
+            proposal.kind,
+            `Revised copy of ${proposal.id}: ${proposal.details}`,
+            "explicit-revision",
+            proposal.id,
+          );
+          state.selection = "local-draft";
+          return applied(
+            state,
+            "replacement-started",
+            `${proposal.id} remains pending and unchanged while a new local draft is authored.`,
+          );
+        }
+
+        if (action.type === "CANCEL_REPLACEMENT") {
+          if (state.draft === null || state.draft.replacementOf === null) {
+            return refused(
+              state,
+              "no-replacement-draft",
+              "There is no staged proposal revision to cancel.",
+            );
+          }
+          const original = state.draft.replacementOf;
+          state.draft = null;
+          state.selection = "exported-insertion";
+          return applied(
+            state,
+            "replacement-cancelled",
+            `Discarded local replacement intent; ${original} remains pending and unchanged.`,
+          );
+        }
+
+        if (action.type === "COMPOSITION_START") {
+          if (state.composition !== null) {
+            return refused(
+              state,
+              "composition-already-active",
+              "A composition session is already active.",
+              "ime",
+            );
+          }
+          if (isPreview(state)) {
+            return refused(
+              state,
+              "projection-read-only",
+              "Composition cannot begin in a preview projection.",
+              "ime",
+            );
+          }
+          if (
+            selectionIntersectsExported(state.selection) ||
+            [
+              "ambiguous-boundary",
+              "multi-paragraph",
+              "paragraph-boundary",
+            ].includes(state.selection)
+          ) {
+            return refused(
+              state,
+              "unsupported-composition-target",
+              "Composition cannot start on this proposal intersection or structural target.",
+              "ime",
+            );
+          }
+          state.composition = {
+            originalSelection: state.selection,
+            buffer: "",
+            intendedKind:
+              state.selection === "accepted-range"
+                ? "atomic replacement"
+                : "insertion",
+          };
+          return applied(
+            state,
+            "composition-started",
+            "Captured one semantic start target; interim DOM text is adapter-local.",
+            "ime",
+          );
+        }
+
+        if (action.type === "COMPOSITION_UPDATE") {
+          if (state.composition === null) {
+            return refused(
+              state,
+              "no-composition",
+              "Start an IME session before sending updates.",
+              "ime",
+            );
+          }
+          state.composition.buffer = action.text;
+          return informative(
+            state,
+            "composition-updated",
+            `Adapter buffer is now “${action.text}”; no proposal identity or accepted mutation exists.`,
+            "ime",
+          );
+        }
+
+        if (action.type === "COMPOSITION_CANCEL") {
+          if (state.composition === null) {
+            return refused(
+              state,
+              "no-composition",
+              "There is no active IME session to cancel.",
+              "ime",
+            );
+          }
+          const originalSelection = state.composition.originalSelection;
+          state.composition = null;
+          state.selection = originalSelection;
+          return applied(
+            state,
+            "composition-cancelled",
+            "Discarded adapter-local composition and restored the original semantic target.",
+            "ime",
+          );
+        }
+
+        if (action.type === "COMPOSITION_COMMIT") {
+          if (state.composition === null) {
+            return refused(
+              state,
+              "no-composition",
+              "There is no active IME session to commit.",
+              "ime",
+            );
+          }
+          if (state.composition.buffer === "") {
+            state.composition = null;
+            return informative(
+              state,
+              "empty-composition",
+              "The empty composition ended without creating a review interaction.",
+              "ime",
+            );
+          }
+          const composition = state.composition;
+          state.composition = null;
+          if (
+            state.draft !== null &&
+            composition.originalSelection === "local-draft"
+          ) {
+            state.draft.details += `; IME committed “${composition.buffer}”`;
+            state.draft.sourceRoutes.push("ime");
+            state.selection = "local-draft";
+            return applied(
+              state,
+              "draft-mutated",
+              "Folded the whole committed IME session into the existing local draft.",
+              "ime",
+            );
+          }
+          openDraft(
+            state,
+            composition.intendedKind,
+            `${composition.intendedKind} with committed IME text “${composition.buffer}”`,
+            "ime",
+          );
+          state.selection = "local-draft";
+          return applied(
+            state,
+            "composition-committed",
+            `Created at most one ${composition.intendedKind} draft from the committed session.`,
+            "ime",
+          );
+        }
+
+        if (action.type === "RESOLVE") {
+          if (state.composition !== null) {
+            return refused(
+              state,
+              "composition-active",
+              "Accept/reject waits for composition commit or cancel.",
+            );
+          }
+          if (state.draft !== null) {
+            return refused(
+              state,
+              "draft-freezes-resolution",
+              "Export or discard the local draft before accepted-state resolution.",
+            );
+          }
+          const proposal = pendingProposal(state);
+          if (proposal === null) {
+            return refused(
+              state,
+              "no-pending-proposal",
+              "There is no pending proposal to resolve.",
+            );
+          }
+          proposal.status =
+            action.decision === "accept" ? "accepted" : "rejected";
+          state.acceptedTransactions.push(
+            `${action.decision} ${proposal.id} (${proposal.kind})`,
+          );
+          return applied(
+            state,
+            `proposal-${proposal.status}`,
+            `${proposal.id} resolved from the authoritative ledger; ${PROJECTIONS[state.projection].toLowerCase()} was recomputed.`,
+          );
+        }
+
+        return refused(
+          state,
+          "unknown-action",
+          "The prototype reducer does not recognize this action.",
+        );
+      }
+
+      const WALKTHROUGHS = [
+        {
+          id: "routes",
+          title: "Route parity",
+          description:
+            "Compare browser and programmatic entry. The route trace changes, but the semantic draft does not.",
+          steps: [
+            ["Reset at one accepted point", [{ type: "RESET" }]],
+            [
+              "Insert through beforeinput",
+              [{ type: "INTENT", route: "beforeinput", intent: "insert" }],
+            ],
+            ["Reset the same accepted point", [{ type: "RESET" }]],
+            [
+              "Insert through a programmatic call",
+              [{ type: "INTENT", route: "programmatic", intent: "insert" }],
+            ],
+          ],
+        },
+        {
+          id: "authoring",
+          title: "Draft → exported",
+          description:
+            "Feel the boundary between mutable local authoring and immutable exported work.",
+          steps: [
+            ["Reset", [{ type: "RESET" }]],
+            [
+              "Type into accepted text",
+              [{ type: "INTENT", route: "beforeinput", intent: "insert" }],
+            ],
+            [
+              "Correct inside the local draft",
+              [
+                {
+                  type: "INTENT",
+                  route: "keyboard",
+                  intent: "delete-backward",
+                },
+              ],
+            ],
+            ["Export the draft", [{ type: "EXPORT_DRAFT" }]],
+            [
+              "Try typing inside the exported insertion",
+              [{ type: "INTENT", route: "beforeinput", intent: "insert" }],
+            ],
+            [
+              "Explicitly begin proposal revision",
+              [{ type: "BEGIN_REPLACEMENT" }],
+            ],
+            [
+              "Edit the replacement draft",
+              [{ type: "INTENT", route: "beforeinput", intent: "insert" }],
+            ],
+            ["Export the replacement", [{ type: "EXPORT_DRAFT" }]],
+          ],
+        },
+        {
+          id: "boundaries",
+          title: "Proposal boundaries",
+          description:
+            "The visible caret is not enough. Compare proposal-side, accepted-side, and ambiguous associations.",
+          steps: [
+            [
+              "Reset and seed an exported insertion",
+              [{ type: "RESET" }, { type: "SEED_PROPOSAL" }],
+            ],
+            [
+              "Target the proposal side and delete",
+              [
+                { type: "SET_SELECTION", selection: "boundary-proposal-side" },
+                {
+                  type: "INTENT",
+                  route: "keyboard",
+                  intent: "delete-backward",
+                },
+              ],
+            ],
+            [
+              "Target the accepted side and delete",
+              [
+                { type: "SET_SELECTION", selection: "boundary-accepted-side" },
+                {
+                  type: "INTENT",
+                  route: "keyboard",
+                  intent: "delete-backward",
+                },
+              ],
+            ],
+            [
+              "Discard the draft by resetting the fixture",
+              [{ type: "RESET" }, { type: "SEED_PROPOSAL" }],
+            ],
+            [
+              "Remove association and try insertion",
+              [
+                { type: "SET_SELECTION", selection: "ambiguous-boundary" },
+                { type: "INTENT", route: "beforeinput", intent: "insert" },
+              ],
+            ],
+          ],
+        },
+        {
+          id: "composition",
+          title: "IME critical section",
+          description:
+            "An IME may emit very different raw events, but only its committed semantic result enters local authoring.",
+          steps: [
+            [
+              "Reset, seed a proposal, and select accepted text",
+              [
+                { type: "RESET" },
+                { type: "SEED_PROPOSAL" },
+                { type: "SET_SELECTION", selection: "accepted-range" },
+              ],
+            ],
+            [
+              "Start composition over the accepted range",
+              [{ type: "COMPOSITION_START" }],
+            ],
+            [
+              "Receive interim text “に”",
+              [{ type: "COMPOSITION_UPDATE", text: "に" }],
+            ],
+            [
+              "Receive interim text “日本”",
+              [{ type: "COMPOSITION_UPDATE", text: "日本" }],
+            ],
+            [
+              "Try resolving a proposal mid-composition",
+              [{ type: "RESOLVE", decision: "accept" }],
+            ],
+            ["Commit the IME session", [{ type: "COMPOSITION_COMMIT" }]],
+            ["Export the one replacement draft", [{ type: "EXPORT_DRAFT" }]],
+          ],
+        },
+        {
+          id: "formatting",
+          title: "Formatting intent",
+          description:
+            "A collapsed toggle affects future input; a range action becomes an explicit desired-value proposal.",
+          steps: [
+            ["Reset", [{ type: "RESET" }]],
+            [
+              "Set bold at a collapsed point",
+              [{ type: "INTENT", route: "toolbar", intent: "format-bold" }],
+            ],
+            [
+              "Type bold local content",
+              [{ type: "INTENT", route: "beforeinput", intent: "insert" }],
+            ],
+            ["Export the insertion", [{ type: "EXPORT_DRAFT" }]],
+            [
+              "Select a separate accepted range",
+              [{ type: "SET_SELECTION", selection: "accepted-range" }],
+            ],
+            [
+              "Set bold through the toolbar",
+              [{ type: "INTENT", route: "toolbar", intent: "format-bold" }],
+            ],
+          ],
+        },
+        {
+          id: "structure",
+          title: "Paragraphs & paste",
+          description:
+            "Supported atomic structure stays atomic; unmodeled fragment replacement refuses without mutation.",
+          steps: [
+            ["Reset", [{ type: "RESET" }]],
+            [
+              "Paste a paragraph fragment at a point",
+              [
+                {
+                  type: "INTENT",
+                  route: "clipboard",
+                  intent: "paste-fragment",
+                },
+              ],
+            ],
+            ["Export the native fragment proposal", [{ type: "EXPORT_DRAFT" }]],
+            [
+              "Select an accepted range",
+              [{ type: "SET_SELECTION", selection: "accepted-range" }],
+            ],
+            [
+              "Try paragraph-fragment replacement",
+              [
+                {
+                  type: "INTENT",
+                  route: "clipboard",
+                  intent: "paste-fragment",
+                },
+              ],
+            ],
+            [
+              "Move to an accepted paragraph boundary",
+              [{ type: "SET_SELECTION", selection: "paragraph-boundary" }],
+            ],
+            [
+              "Merge the two paragraphs",
+              [{ type: "INTENT", route: "keyboard", intent: "merge" }],
+            ],
+          ],
+        },
+        {
+          id: "projection",
+          title: "Preview & resolution",
+          description:
+            "Preview content is read-only, while explicit proposal resolution still uses the authoritative ledger.",
+          steps: [
+            [
+              "Reset and seed an exported proposal",
+              [{ type: "RESET" }, { type: "SEED_PROPOSAL" }],
+            ],
+            [
+              "Switch to all-accepted preview",
+              [{ type: "SET_PROJECTION", projection: "all-accepted" }],
+            ],
+            [
+              "Try typing in the preview",
+              [
+                { type: "SET_SELECTION", selection: "accepted-point" },
+                { type: "INTENT", route: "beforeinput", intent: "insert" },
+              ],
+            ],
+            [
+              "Accept from the proposal ledger",
+              [{ type: "RESOLVE", decision: "accept" }],
+            ],
+            [
+              "Return to the review projection",
+              [{ type: "SET_PROJECTION", projection: "review" }],
+            ],
+          ],
+        },
+      ];
+
+      let state = initialState();
+      let activeWalkthrough = WALKTHROUGHS[0].id;
+      let walkthroughStep = 0;
+
+      const routeSelect = document.querySelector("#route-select");
+      const selectionSelect = document.querySelector("#selection-select");
+      const stateGrid = document.querySelector("#state-grid");
+      const proposalList = document.querySelector("#proposal-list");
+      const eventList = document.querySelector("#event-list");
+
+      function optionMarkup(entries) {
+        return Object.entries(entries)
+          .map(([value, label]) => `<option value="${value}">${label}</option>`)
+          .join("");
+      }
+
+      routeSelect.innerHTML = optionMarkup(ROUTES);
+      selectionSelect.innerHTML = optionMarkup(SELECTIONS);
+
+      document.querySelector("#intent-buttons").innerHTML = INTENTS.map(
+        ([intent, label]) =>
+          `<button data-intent="${intent}">${label}</button>`,
+      ).join("");
+
+      document.querySelector("#projection-buttons").innerHTML = Object.entries(
+        PROJECTIONS,
+      )
+        .map(
+          ([projection, label]) =>
+            `<button data-projection="${projection}">${label}</button>`,
+        )
+        .join("");
+
+      document.querySelector("#coverage-body").innerHTML = COVERAGE.map(
+        ([surface, context, contract, authority]) => `
+          <tr>
+            <td>${surface}</td>
+            <td>${context}</td>
+            <td>${contract}</td>
+            <td><span class="badge ${authority}">${authority.replace("-", " ")}</span></td>
+          </tr>`,
+      ).join("");
+
+      function dispatch(actions) {
+        const list = Array.isArray(actions) ? actions : [actions];
+        for (const action of list) {
+          state = reduce(state, action);
+        }
+        render();
+      }
+
+      function recordMarkup(record) {
+        return `<li class="${record.status}">
+          <strong>${record.id} · ${record.kind}</strong><br />
+          ${record.details}<br />
+          <span class="badge">${record.status}</span>
+          <span class="badge evidence-only">${ROUTES[record.sourceRoute] ?? record.sourceRoute}</span>
+        </li>`;
+      }
+
+      function renderState() {
+        const draft = state.draft
+          ? `<strong>${state.draft.kind}</strong><br />${state.draft.details}<br />Formatting: ${state.draft.formatting.join(", ") || "none"}${state.draft.replacementOf ? `<br />Replaces: ${state.draft.replacementOf}` : ""}`
+          : "None";
+        const composition = state.composition
+          ? `<strong>${state.composition.intendedKind}</strong><br />Buffer: “${state.composition.buffer}”<br />Start: ${SELECTIONS[state.composition.originalSelection]}`
+          : "None";
+        const outcomeClass = `status-${state.lastOutcome.status}`;
+
+        stateGrid.innerHTML = `
+          <div class="state-card wide">
+            <span class="label">Latest outcome</span>
+            <div class="value ${outcomeClass}"><strong>${state.lastOutcome.code}</strong><br />${state.lastOutcome.message}</div>
+          </div>
+          <div class="state-card">
+            <span class="label">Semantic target</span>
+            <div class="value">${SELECTIONS[state.selection]}</div>
+          </div>
+          <div class="state-card">
+            <span class="label">Projection</span>
+            <div class="value">${PROJECTIONS[state.projection]}</div>
+          </div>
+          <div class="state-card wide">
+            <span class="label">Accepted document state</span>
+            <div class="document">${state.acceptedDocument.map((paragraph, index) => `<div class="paragraph">¶${index + 1} ${paragraph}</div>`).join("")}</div>
+            <div class="value" style="margin-top: 8px">Resolved transactions: ${state.acceptedTransactions.join("; ") || "none"}</div>
+          </div>
+          <div class="state-card">
+            <span class="label">Local proposal draft</span>
+            <div class="value">${draft}</div>
+          </div>
+          <div class="state-card">
+            <span class="label">IME composition</span>
+            <div class="value">${composition}</div>
+          </div>
+          <div class="state-card wide">
+            <span class="label">Future local formatting</span>
+            <div class="value">${state.futureFormatting.join(", ") || "none"}</div>
+          </div>`;
+
+        proposalList.innerHTML = state.proposals.length
+          ? state.proposals.map(recordMarkup).join("")
+          : "<li>No immutable proposals.</li>";
+        eventList.innerHTML = state.events.length
+          ? state.events.map((event) => `<li>${event}</li>`).join("")
+          : "<li>No transitions yet.</li>";
+
+        selectionSelect.value = state.selection;
+        document.querySelectorAll("[data-projection]").forEach((button) => {
+          button.setAttribute(
+            "aria-pressed",
+            button.dataset.projection === state.projection ? "true" : "false",
+          );
+        });
+      }
+
+      function renderWalkthrough() {
+        const tabs = document.querySelector("#walkthrough-tabs");
+        tabs.innerHTML = WALKTHROUGHS.map(
+          (walkthrough) =>
+            `<button data-walkthrough="${walkthrough.id}" aria-pressed="${walkthrough.id === activeWalkthrough}">${walkthrough.title}</button>`,
+        ).join("");
+
+        const walkthrough = WALKTHROUGHS.find(
+          (item) => item.id === activeWalkthrough,
+        );
+        document.querySelector("#walkthrough").innerHTML = `
+          <div class="walkthrough">
+            <h3>${walkthrough.title}</h3>
+            <p class="section-copy">${walkthrough.description}</p>
+            <div class="walkthrough-steps">
+              ${walkthrough.steps
+                .map(
+                  ([label], index) =>
+                    `<button data-step="${index}" class="${index < walkthroughStep ? "done" : index === walkthroughStep ? "current" : ""}">${index + 1}. ${label}</button>`,
+                )
+                .join("")}
+            </div>
+          </div>`;
+      }
+
+      function render() {
+        renderState();
+        renderWalkthrough();
+      }
+
+      selectionSelect.addEventListener("change", () => {
+        dispatch({ type: "SET_SELECTION", selection: selectionSelect.value });
+      });
+
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (button === null) return;
+
+        if (button.dataset.intent) {
+          dispatch({
+            type: "INTENT",
+            route: routeSelect.value,
+            intent: button.dataset.intent,
+          });
+          return;
+        }
+
+        if (button.dataset.projection) {
+          dispatch({
+            type: "SET_PROJECTION",
+            projection: button.dataset.projection,
+          });
+          return;
+        }
+
+        if (button.dataset.walkthrough) {
+          activeWalkthrough = button.dataset.walkthrough;
+          walkthroughStep = 0;
+          dispatch({ type: "RESET" });
+          return;
+        }
+
+        if (button.dataset.step !== undefined) {
+          const walkthrough = WALKTHROUGHS.find(
+            (item) => item.id === activeWalkthrough,
+          );
+          const stepIndex = Number(button.dataset.step);
+          dispatch(walkthrough.steps[stepIndex][1]);
+          walkthroughStep = Math.max(walkthroughStep, stepIndex + 1);
+          renderWalkthrough();
+          return;
+        }
+
+        const actions = {
+          reset: { type: "RESET" },
+          "export-draft": { type: "EXPORT_DRAFT" },
+          "begin-replacement": { type: "BEGIN_REPLACEMENT" },
+          "cancel-replacement": { type: "CANCEL_REPLACEMENT" },
+          "accept-first": { type: "RESOLVE", decision: "accept" },
+          "reject-first": { type: "RESOLVE", decision: "reject" },
+          "seed-proposal": { type: "SEED_PROPOSAL" },
+          "composition-start": { type: "COMPOSITION_START" },
+          "composition-update": { type: "COMPOSITION_UPDATE", text: "に" },
+          "composition-update-2": { type: "COMPOSITION_UPDATE", text: "日本" },
+          "composition-commit": { type: "COMPOSITION_COMMIT" },
+          "composition-cancel": { type: "COMPOSITION_CANCEL" },
+        };
+
+        if (button.dataset.action && actions[button.dataset.action]) {
+          dispatch(actions[button.dataset.action]);
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
