@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Throwaway prototype: lexical-review v3 public API</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17201b;
+        --muted: #627067;
+        --paper: #f7f4ec;
+        --panel: #fffdf8;
+        --line: #d9d4c7;
+        --accent: #176b4d;
+        --accent-soft: #e3f0e9;
+        --danger: #9d3b32;
+        --danger-soft: #f8e9e6;
+        --code: #202722;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.5;
+      }
+
+      main {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 34px 0 64px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 900px;
+        margin-bottom: 10px;
+        font-size: clamp(2rem, 4vw, 3.7rem);
+        line-height: 1.04;
+        letter-spacing: -0.04em;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: 1.35rem;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 1rem;
+      }
+
+      code,
+      pre,
+      .mono {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-size: 0.77rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .lede {
+        max-width: 870px;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      .warning,
+      .recommendation {
+        margin: 22px 0;
+        padding: 15px 18px;
+        border: 1px solid var(--line);
+        border-left: 5px solid var(--accent);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+
+      .warning {
+        border-left-color: #b27b20;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        box-shadow: 0 8px 24px rgb(36 45 38 / 6%);
+      }
+
+      .panel-header {
+        padding: 18px 20px 0;
+      }
+
+      .panel-body {
+        padding: 18px 20px 20px;
+      }
+
+      .tabs,
+      .actions,
+      .walkthrough-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button {
+        border: 1px solid #bbb7ac;
+        border-radius: 7px;
+        background: #fff;
+        color: var(--ink);
+        padding: 8px 11px;
+        font: inherit;
+        font-size: 0.86rem;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      button:hover,
+      button:focus-visible {
+        border-color: var(--accent);
+        outline: 2px solid var(--accent-soft);
+      }
+
+      button.active,
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: white;
+      }
+
+      pre {
+        min-height: 430px;
+        max-height: 650px;
+        overflow: auto;
+        margin: 14px 0 0;
+        padding: 17px;
+        border-radius: 8px;
+        background: var(--code);
+        color: #eaf4ed;
+        font-size: 0.78rem;
+        line-height: 1.55;
+        white-space: pre;
+      }
+
+      .state-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+
+      .state-card {
+        min-height: 78px;
+        padding: 11px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .state-label {
+        display: block;
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      .state-value {
+        display: block;
+        margin-top: 5px;
+        font-weight: 720;
+      }
+
+      .outcome {
+        margin-top: 13px;
+        padding: 12px;
+        border-radius: 8px;
+        background: var(--accent-soft);
+        font-size: 0.88rem;
+      }
+
+      .outcome.refused,
+      .outcome.failed {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .outcome strong {
+        display: block;
+        margin-bottom: 3px;
+        text-transform: capitalize;
+      }
+
+      .actions {
+        margin-top: 18px;
+      }
+
+      .section {
+        margin-top: 24px;
+      }
+
+      .walkthrough {
+        display: none;
+        margin-top: 14px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+      }
+
+      .walkthrough.active {
+        display: block;
+      }
+
+      .walkthrough p {
+        color: var(--muted);
+      }
+
+      .walkthrough-actions button.done {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+
+      th,
+      td {
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .call-log {
+        max-height: 240px;
+        overflow: auto;
+        margin: 0;
+        padding-left: 22px;
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .call-log li + li {
+        margin-top: 6px;
+      }
+
+      @media (max-width: 850px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        pre {
+          min-height: 340px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Throwaway decision prototype · not production API</p>
+      <h1>Where should the v3 public boundary live?</h1>
+      <p class="lede">
+        This prototype tests whether one React-free authoring-session facade can
+        own proposal semantics, native serialization, projections, and WER v1
+        adapters while a thin client entrypoint owns Lexical event translation,
+        selection recovery, and React registration.
+      </p>
+
+      <div class="warning">
+        <strong>Question being tested:</strong> Is a narrow, state-owning
+        <code>ReviewSession</code> at <code>lexical-review</code>, paired with a
+        thin <code>lexical-review/client</code> adapter, sufficient for human
+        and complete programmatic intentions without leaking Lexical or WER into
+        the native authoring model?
+      </div>
+
+      <div class="recommendation">
+        <strong>Prototype recommendation:</strong> publish exactly two
+        entrypoints; keep review state opaque behind one session facade; use one
+        discriminated outcome vocabulary for every semantic mutation; keep
+        proposal inspection read-only and host-selected; and always return a
+        mapping report from WER import/export.
+      </div>
+
+      <section class="grid" aria-label="API contract and state explorer">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Proposed TypeScript surface</h2>
+            <div class="tabs" data-api-tabs>
+              <button class="active" data-api="root">React-free root</button>
+              <button data-api="client">Client / editor</button>
+              <button data-api="ownership">Ownership rules</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <pre id="api-code" aria-live="polite"></pre>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Observable authoring state</h2>
+            <p class="lede">
+              Click calls in any order. Every call shows the package-owned state
+              and typed outcome a host would receive.
+            </p>
+          </div>
+          <div class="panel-body">
+            <div class="state-grid" id="state-grid"></div>
+            <div id="outcome" class="outcome" aria-live="polite"></div>
+            <div class="actions" id="free-play"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel section">
+        <div class="panel-header">
+          <h2>Guided awkward cases</h2>
+          <div class="tabs" id="walkthrough-tabs"></div>
+        </div>
+        <div class="panel-body" id="walkthroughs"></div>
+      </section>
+
+      <section class="grid section">
+        <article class="panel">
+          <div class="panel-header"><h2>Package versus host policy</h2></div>
+          <div class="panel-body">
+            <table>
+              <thead>
+                <tr>
+                  <th>Package owns</th>
+                  <th>Host owns</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Proposal kinds, targets, payloads, lifecycle, and IDs</td>
+                  <td>Who may author or resolve proposals</td>
+                </tr>
+                <tr>
+                  <td>Atomic transitions, no-mutation refusals, validation</td>
+                  <td>Error presentation, telemetry, retries</td>
+                </tr>
+                <tr>
+                  <td>Review, accepted-state, and all-accepted projections</td>
+                  <td>Which preview or proposal the UI selects</td>
+                </tr>
+                <tr>
+                  <td>Native v3 document and WER v1 mapping outcomes</td>
+                  <td>Persistence, transport, concurrency, audit retention</td>
+                </tr>
+                <tr>
+                  <td>Lexical command normalization and selection recovery</td>
+                  <td>Toolbar, shortcuts, focus, navigation, workflow UI</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header"><h2>Call history</h2></div>
+          <div class="panel-body">
+            <ol class="call-log" id="call-log"></ol>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      // Portable prototype module: no DOM references inside this closure.
+      const PublicContract = (() => {
+        const clone = (value) => structuredClone(value);
+
+        const initialState = () => ({
+          inputRevision: "review-document@3/input-7",
+          inputFrozen: true,
+          successor: 0,
+          accepted: ["Alpha bravo.", "Charlie delta."],
+          draft: null,
+          proposals: [
+            {
+              id: "proposal-17",
+              kind: "insertion",
+              status: "pending",
+              summary: "Insert ‘careful ’ before bravo",
+            },
+            {
+              id: "proposal-18",
+              kind: "document-fragment-insertion",
+              status: "pending",
+              summary: "Insert two paragraphs after Alpha",
+            },
+          ],
+          projection: "review",
+          inspected: null,
+          selection: "accepted point after ‘Alpha’",
+          composing: false,
+          lastRoute: "none",
+          lastOutcome: {
+            status: "unchanged",
+            code: "session-opened",
+            message: "Validated one native v3 document and opened a session.",
+          },
+          history: ["openReviewSession(input-7) → unchanged/session-opened"],
+        });
+
+        const finish = (state, outcome, call) => {
+          const next = clone(state);
+          next.lastOutcome = outcome;
+          next.history.unshift(`${call} → ${outcome.status}/${outcome.code}`);
+          return next;
+        };
+
+        const changed = (code, message, value = null) => ({
+          status: "changed",
+          code,
+          message,
+          value,
+        });
+
+        const unchanged = (code, message, value = null) => ({
+          status: "unchanged",
+          code,
+          message,
+          value,
+        });
+
+        const refused = (code, message, value = null) => ({
+          status: "refused",
+          code,
+          message,
+          value,
+        });
+
+        const failed = (code, message, value = null) => ({
+          status: "failed",
+          code,
+          message,
+          value,
+        });
+
+        const invoke = (current, action) => {
+          if (action.type === "RESET") return initialState();
+          const state = clone(current);
+
+          if (action.type === "TYPE") {
+            state.lastRoute = action.route;
+            if (state.projection !== "review") {
+              return finish(
+                state,
+                refused(
+                  "read-only-projection",
+                  "Authoring is available only in the review projection.",
+                ),
+                `${action.route}.execute(insertText)`,
+              );
+            }
+            if (state.draft && state.draft.kind !== "insertion") {
+              return finish(
+                state,
+                refused(
+                  "active-draft-conflict",
+                  "Finalize or discard the active draft before separate authoring.",
+                ),
+                `${action.route}.execute(insertText)`,
+              );
+            }
+            state.draft ??= {
+              kind: "insertion",
+              text: "",
+              target: "accepted point after ‘Alpha’",
+            };
+            state.draft.text += " precise";
+            state.selection = "end of proposal-local draft content";
+            return finish(
+              state,
+              changed(
+                "draft-updated",
+                "One route-neutral insertion intention updated the active draft.",
+                { draft: state.draft },
+              ),
+              `${action.route}.execute(insertText)`,
+            );
+          }
+
+          if (action.type === "FINALIZE") {
+            if (state.composing) {
+              return finish(
+                state,
+                refused(
+                  "composition-active",
+                  "Finalization waits for composition to end or be cancelled.",
+                ),
+                "session.finalizeDraft()",
+              );
+            }
+            if (!state.draft) {
+              return finish(
+                state,
+                unchanged("no-active-draft", "There is no draft to finalize."),
+                "session.finalizeDraft()",
+              );
+            }
+            const proposal = {
+              id: `proposal-${19 + state.successor}`,
+              kind: state.draft.kind,
+              status: "pending",
+              summary: `Insert ‘${state.draft.text.trim()}’ after Alpha`,
+            };
+            state.proposals.push(proposal);
+            state.draft = null;
+            return finish(
+              state,
+              changed(
+                "proposal-finalized",
+                `${proposal.id} received new immutable semantic identity.`,
+                { proposal },
+              ),
+              "session.finalizeDraft()",
+            );
+          }
+
+          if (action.type === "INSPECT") {
+            const proposal = state.proposals.find(
+              (candidate) => candidate.status === "pending",
+            );
+            if (!proposal) {
+              return finish(
+                state,
+                unchanged("no-pending-proposal", "No pending proposal exists."),
+                "session.inspectProposal(next)",
+              );
+            }
+            state.inspected = proposal.id;
+            return finish(
+              state,
+              unchanged(
+                "proposal-inspected",
+                "Inspection returned an immutable proposal view; text selection did not move.",
+                { proposal },
+              ),
+              `session.inspectProposal(${proposal.id})`,
+            );
+          }
+
+          if (action.type === "RESOLVE") {
+            if (state.draft) {
+              return finish(
+                state,
+                refused(
+                  "active-draft",
+                  "Resolution is atomic and refuses while a proposal draft is active.",
+                ),
+                "session.resolve({ decision: 'accept' })",
+              );
+            }
+            const proposal = state.proposals.find(
+              (candidate) =>
+                candidate.id === (state.inspected || action.id) &&
+                candidate.status === "pending",
+            );
+            if (!proposal) {
+              return finish(
+                state,
+                unchanged(
+                  "proposal-not-pending",
+                  "The requested proposal is absent or already resolved.",
+                ),
+                "session.resolve({ decision: 'accept' })",
+              );
+            }
+            proposal.status = "accepted";
+            if (proposal.kind === "document-fragment-insertion") {
+              state.accepted.splice(
+                1,
+                0,
+                "New paragraph.",
+                "Another paragraph.",
+              );
+            }
+            const successorProposalId =
+              state.proposals.find(
+                (candidate) => candidate.status === "pending",
+              )?.id ?? null;
+            state.inspected = null;
+            state.selection = "equivalent live selection after resolution";
+            return finish(
+              state,
+              changed(
+                "proposal-resolved",
+                `${proposal.id} was accepted; inspection cleared and a successor hint was computed.`,
+                { successorProposalId },
+              ),
+              `session.resolve({ ids: ['${proposal.id}'], decision: 'accept' })`,
+            );
+          }
+
+          if (action.type === "RESOLVE_FRAGMENT") {
+            const fragment = state.proposals.find(
+              (proposal) =>
+                proposal.kind === "document-fragment-insertion" &&
+                proposal.status === "pending",
+            );
+            if (!fragment) {
+              return finish(
+                state,
+                unchanged(
+                  "fragment-not-pending",
+                  "The native fragment is not pending.",
+                ),
+                "session.resolve(fragment)",
+              );
+            }
+            state.inspected = fragment.id;
+            return invoke(state, { type: "RESOLVE" });
+          }
+
+          if (action.type === "PROJECTION") {
+            state.projection = action.mode;
+            return finish(
+              state,
+              unchanged(
+                "projection-derived",
+                `${action.mode} was derived without resolving proposals or advancing accepted state.`,
+              ),
+              `session.project('${action.mode}')`,
+            );
+          }
+
+          if (action.type === "EXPORT_WER") {
+            const unsupported = state.proposals.filter(
+              (proposal) =>
+                proposal.status === "pending" &&
+                proposal.kind === "document-fragment-insertion",
+            );
+            if (unsupported.length) {
+              return finish(
+                state,
+                refused(
+                  "unsupported",
+                  "WER v1 output was not created; native state is unchanged and the mapping report identifies the fragment proposal.",
+                  {
+                    document: null,
+                    report: {
+                      direction: "lexical-review-v3-to-wer-v1",
+                      outcome: "unsupported",
+                      proposalIds: unsupported.map((item) => item.id),
+                    },
+                  },
+                ),
+                "exportWerV1(session.snapshot())",
+              );
+            }
+            return finish(
+              state,
+              unchanged(
+                "wer-v1-exported",
+                "Canonical WER v1 output and a complete success report were returned.",
+                {
+                  document: "WerV1Document",
+                  report: {
+                    direction: "lexical-review-v3-to-wer-v1",
+                    outcome: "exact",
+                  },
+                },
+              ),
+              "exportWerV1(session.snapshot())",
+            );
+          }
+
+          if (action.type === "SAVE") {
+            state.successor += 1;
+            return finish(
+              state,
+              unchanged(
+                "successor-serialized",
+                `Saved review-document@3/successor-${state.successor}; the frozen input remains input-7.`,
+              ),
+              "session.serialize()",
+            );
+          }
+
+          if (action.type === "FAIL") {
+            return finish(
+              state,
+              failed(
+                "editor-reconciliation-failed",
+                "Semantic state was preserved; the client must rebuild the Lexical projection.",
+              ),
+              "client.reconcileProjection()",
+            );
+          }
+
+          return finish(
+            state,
+            failed(
+              "unknown-call",
+              "The prototype does not implement this call.",
+            ),
+            action.type,
+          );
+        };
+
+        return { initialState, invoke };
+      })();
+
+      const API = {
+        root: `// lexical-review — React-free, DOM-free public model boundary
+export type ReviewOutcome<T = void> =
+  | { status: "changed"; value: T; snapshot: ReviewSnapshot }
+  | { status: "unchanged"; value: T; snapshot: ReviewSnapshot }
+  | { status: "refused"; reason: ReviewRefusal; snapshot: ReviewSnapshot }
+  | { status: "failed"; error: ReviewOperationalError; snapshot: ReviewSnapshot };
+
+export type ReviewDocumentV3 = Readonly<{
+  version: 3;
+  accepted: AcceptedDocument;
+  proposals: readonly SerializedRevisionProposal[];
+  draft?: SerializedProposalDraft;
+}>;
+
+export interface ReviewSession {
+  snapshot(): ReviewSnapshot;
+  execute(intention: ReviewIntention): ReviewOutcome<AuthoringChange>;
+  finalizeDraft(): ReviewOutcome<RevisionProposal | null>;
+  discardDraft(): ReviewOutcome;
+  reauthor(proposalId: ProposalId): ReviewOutcome<ProposalDraft>;
+  resolve(request: ResolutionRequest): ReviewOutcome<ResolutionReceipt>;
+  inspectProposal(proposalId: ProposalId): ProposalInspection | null;
+  adjacentProposal(from: ProposalId | null, direction: "next" | "previous"):
+    ProposalId | null;
+  project(mode: "review" | "accepted-state" | "all-accepted"):
+    ReviewProjection;
+  serialize(): ReviewDocumentV3;
+  subscribe(listener: (event: ReviewSessionEvent) => void): () => void;
+}
+
+export function openReviewSession(
+  input: unknown,
+  options?: { createProposalId?: () => ProposalId },
+): ValidationResult<ReviewSession>;
+
+// WER is an adapter boundary, never the native authoring state.
+export function validateWerV1(input: unknown): ValidationResult<WerV1Document>;
+export function canonicalizeWerV1(document: WerV1Document): Uint8Array;
+export function fingerprintWerV1AcceptedState(document: WerV1Document): string;
+export function resolveWerV1(
+  document: WerV1Document,
+  request: WerV1ResolutionRequest,
+): WerV1ResolutionResult;
+export function importWerV1(document: WerV1Document): WerImportResult;
+export function exportWerV1(snapshot: ReviewSnapshot): WerExportResult;
+
+// Data/semantic problems return results. Throws are reserved for programmer
+// misuse and impossible package invariant violations.`,
+
+        client: `"use client";
+
+// lexical-review/client — Lexical and React integration only
+import type { LexicalEditor } from "lexical";
+import type { ReviewSession } from "lexical-review";
+
+export interface ReviewRegistration {
+  unregister(): void;
+  rebuildProjection(): void;
+}
+
+export type RegisterReviewOptions = Readonly<{
+  session: ReviewSession;
+  copyProjection?: "all-accepted" | "accepted-state";
+  allowLexicalClipboardPayload?: boolean;
+  onOutcome?: (outcome: ReviewOutcome) => void;
+}>;
+
+export function registerReview(
+  editor: LexicalEditor,
+  options: RegisterReviewOptions,
+): ReviewRegistration;
+
+export function ReviewPlugin(options: RegisterReviewOptions): null;
+
+// Typed commands let host UI invoke client actions. Browser, keyboard,
+// composition, clipboard, and commands normalize to ReviewIntention before
+// the shared ReviewSession changes semantic state.
+export const FINALIZE_PROPOSAL_DRAFT_COMMAND: LexicalCommand<void>;
+export const DISCARD_PROPOSAL_DRAFT_COMMAND: LexicalCommand<void>;
+export const REAUTHOR_PROPOSAL_COMMAND: LexicalCommand<ProposalId>;
+export const RESOLVE_PROPOSALS_COMMAND: LexicalCommand<ResolutionRequest>;
+export const SET_REVIEW_PROJECTION_COMMAND: LexicalCommand<ProjectionMode>;
+
+// The client owns transient selection mapping and duplicate-event claiming.
+// It never makes Lexical nodes, DOM, or EditorState authoritative review state.`,
+
+        ownership: `PACKAGE INVARIANTS
+──────────────────
+• One accepted document, any number of finalized proposals, zero or one draft.
+• Finalized semantic identity, kind, target, and payload are immutable.
+• Every mutation is atomic; refusal preserves state and logical selection.
+• Native review serialization is version 3 and distinct from WER v1.
+• Projections are derived, read-only views; previewing never resolves.
+• WER import/export always validates and always returns a mapping report.
+• The six portable kinds are supported; native document-fragment insertion
+  refuses WER v1 output with outcome "unsupported".
+• Editor routes normalize to the same complete semantic intentions.
+
+HOST POLICIES
+─────────────
+• Authorization, reviewer workflow, provenance fields, and attribution UI.
+• Persistence, transport, concurrent editing, merge, and audit retention.
+• Which proposal to inspect and whether to follow a successor hint.
+• Focus movement, keyboard bindings, toolbar design, and notifications.
+• Whether copy uses all-accepted or accepted-state content.
+• Whether trusted Lexical clipboard content is considered before HTML/text.
+
+CONFIGURATION ERRORS THAT THROW
+───────────────────────────────
+• Required v3 nodes are not registered with the Lexical editor.
+• A session is registered with two incompatible editor controllers.
+• Package code observes an internal invariant that public APIs cannot create.`,
+      };
+
+      const ACTIONS = [
+        ["reset", "Reset", { type: "RESET" }],
+        [
+          "keyboard-type",
+          "Type via keyboard",
+          { type: "TYPE", route: "client.keyboard" },
+        ],
+        ["api-type", "Insert via API", { type: "TYPE", route: "session" }],
+        ["finalize", "Finalize draft", { type: "FINALIZE" }],
+        ["inspect", "Inspect next", { type: "INSPECT" }],
+        ["accept", "Accept inspected", { type: "RESOLVE" }],
+        [
+          "accepted-preview",
+          "Accepted-state preview",
+          { type: "PROJECTION", mode: "accepted-state" },
+        ],
+        [
+          "review-preview",
+          "Return to review",
+          { type: "PROJECTION", mode: "review" },
+        ],
+        ["export", "Export WER v1", { type: "EXPORT_WER" }],
+        [
+          "accept-fragment",
+          "Accept native fragment",
+          { type: "RESOLVE_FRAGMENT" },
+        ],
+        ["save", "Serialize successor", { type: "SAVE" }],
+        ["fail", "Simulate client failure", { type: "FAIL" }],
+      ];
+
+      const WALKTHROUGHS = [
+        {
+          title: "One semantic route",
+          description:
+            "Compare keyboard and programmatic authoring. Both reach the same session method and return the same draft outcome; the route is observable only for diagnostics.",
+          steps: ["keyboard-type", "reset", "api-type", "finalize"],
+        },
+        {
+          title: "Draft blocks resolution",
+          description:
+            "Start continuous authoring, inspect existing work, then attempt resolution. The active draft makes the semantic request refuse without mutation.",
+          steps: ["keyboard-type", "inspect", "accept", "finalize", "accept"],
+        },
+        {
+          title: "WER boundary",
+          description:
+            "Native fragment insertion is valid v3 state but not WER v1-portable. Export refuses with a report; accepting the fragment removes that pending incompatibility and a later export succeeds.",
+          steps: ["export", "accept-fragment", "export"],
+        },
+        {
+          title: "Projection and recovery",
+          description:
+            "A preview is derived and read-only. An operational client failure preserves semantic state and tells the adapter to rebuild from the session snapshot.",
+          steps: [
+            "accepted-preview",
+            "keyboard-type",
+            "fail",
+            "review-preview",
+          ],
+        },
+      ];
+
+      let state = PublicContract.initialState();
+      let activeWalkthrough = 0;
+      let completedSteps = new Set();
+
+      const renderApi = (name) => {
+        document.getElementById("api-code").textContent = API[name];
+        document.querySelectorAll("[data-api]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.api === name);
+        });
+      };
+
+      const renderState = () => {
+        const pending = state.proposals.filter(
+          (item) => item.status === "pending",
+        );
+        const cards = [
+          ["Frozen input", state.inputRevision],
+          ["Successor saves", String(state.successor)],
+          [
+            "Active draft",
+            state.draft
+              ? `${state.draft.kind}: “${state.draft.text.trim()}”`
+              : "none",
+          ],
+          [
+            "Pending proposals",
+            `${pending.length} · ${pending.map((item) => item.id).join(", ") || "none"}`,
+          ],
+          ["Projection", state.projection],
+          ["Inspected proposal", state.inspected ?? "none (host-selected)"],
+          ["Live selection", state.selection],
+          ["Last input route", state.lastRoute],
+        ];
+        document.getElementById("state-grid").innerHTML = cards
+          .map(
+            ([label, value]) => `<div class="state-card">
+              <span class="state-label">${label}</span>
+              <span class="state-value">${value}</span>
+            </div>`,
+          )
+          .join("");
+
+        const outcome = state.lastOutcome;
+        const outcomeNode = document.getElementById("outcome");
+        outcomeNode.className = `outcome ${outcome.status}`;
+        outcomeNode.innerHTML = `<strong>${outcome.status} · ${outcome.code}</strong>${outcome.message}`;
+
+        document.getElementById("call-log").innerHTML = state.history
+          .map((entry) => `<li class="mono">${entry}</li>`)
+          .join("");
+      };
+
+      const runAction = (id, action, walkthroughStep = null) => {
+        state = PublicContract.invoke(state, action);
+        if (walkthroughStep !== null) completedSteps.add(walkthroughStep);
+        renderState();
+        renderWalkthroughs();
+      };
+
+      const renderActions = () => {
+        const container = document.getElementById("free-play");
+        ACTIONS.forEach(([id, label, action]) => {
+          const button = document.createElement("button");
+          button.textContent = label;
+          if (id === "keyboard-type") button.classList.add("primary");
+          button.addEventListener("click", () => runAction(id, action));
+          container.append(button);
+        });
+      };
+
+      const renderWalkthroughs = () => {
+        const tabs = document.getElementById("walkthrough-tabs");
+        const body = document.getElementById("walkthroughs");
+        tabs.innerHTML = "";
+        body.innerHTML = "";
+
+        WALKTHROUGHS.forEach((walkthrough, index) => {
+          const tab = document.createElement("button");
+          tab.textContent = walkthrough.title;
+          tab.classList.toggle("active", index === activeWalkthrough);
+          tab.addEventListener("click", () => {
+            activeWalkthrough = index;
+            completedSteps = new Set();
+            state = PublicContract.initialState();
+            renderState();
+            renderWalkthroughs();
+          });
+          tabs.append(tab);
+
+          const panel = document.createElement("div");
+          panel.className = `walkthrough ${index === activeWalkthrough ? "active" : ""}`;
+          panel.innerHTML = `<h3>${walkthrough.title}</h3><p>${walkthrough.description}</p>`;
+          const actions = document.createElement("div");
+          actions.className = "walkthrough-actions";
+          walkthrough.steps.forEach((actionId, stepIndex) => {
+            const found = ACTIONS.find(([id]) => id === actionId);
+            const button = document.createElement("button");
+            button.textContent = `${stepIndex + 1}. ${found[1]}`;
+            button.classList.toggle("done", completedSteps.has(stepIndex));
+            button.addEventListener("click", () =>
+              runAction(found[0], found[2], stepIndex),
+            );
+            actions.append(button);
+          });
+          panel.append(actions);
+          body.append(panel);
+        });
+      };
+
+      document.querySelectorAll("[data-api]").forEach((button) => {
+        button.addEventListener("click", () => renderApi(button.dataset.api));
+      });
+
+      renderApi("root");
+      renderActions();
+      renderState();
+      renderWalkthroughs();
+    </script>
+  </body>
+</html>
