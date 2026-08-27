@@ -1,0 +1,1514 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Post-resolution selection behavior prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #18201d;
+        --muted: #5f6c66;
+        --paper: #f5f3ec;
+        --panel: #fffdf7;
+        --line: #d9d5ca;
+        --accent: #236b53;
+        --accent-soft: #dceee6;
+        --warning: #9a5b17;
+        --danger: #9b3434;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      main {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0 80px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 820px;
+        margin-bottom: 12px;
+        font-size: clamp(2rem, 5vw, 4.25rem);
+        line-height: 0.98;
+        letter-spacing: -0.045em;
+      }
+
+      h2 {
+        font-size: 1.08rem;
+        letter-spacing: -0.01em;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 0.94rem;
+      }
+
+      .lede {
+        max-width: 820px;
+        color: var(--muted);
+        font-size: 1.08rem;
+        line-height: 1.62;
+      }
+
+      .question,
+      .hypothesis {
+        max-width: 1000px;
+        margin: 24px 0;
+        padding: 18px 20px;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 10px;
+        background: var(--panel);
+        line-height: 1.55;
+      }
+
+      .hypothesis {
+        border-left-color: var(--warning);
+      }
+
+      .principles {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 24px 0 32px;
+      }
+
+      .principle,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+      }
+
+      .principle {
+        padding: 16px;
+      }
+
+      .principle strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .principle p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.18fr) minmax(340px, 0.82fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .panel > :last-child {
+        margin-bottom: 0;
+      }
+
+      .section-copy {
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      .control-group + .control-group {
+        margin-top: 22px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button {
+        padding: 9px 12px;
+        border: 1px solid #b8b3a7;
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.88rem;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: white;
+      }
+
+      button.danger {
+        border-color: #d8abab;
+        color: var(--danger);
+      }
+
+      button[aria-pressed="true"] {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .state-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .state-card {
+        min-height: 92px;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+      }
+
+      .state-card.wide {
+        grid-column: 1 / -1;
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.73rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .value {
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .status-ok {
+        color: var(--accent);
+      }
+
+      .status-refused {
+        color: var(--danger);
+      }
+
+      .document {
+        display: grid;
+        gap: 7px;
+      }
+
+      .paragraph {
+        padding: 8px 10px;
+        border-radius: 7px;
+        background: #f7f6f1;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.84rem;
+      }
+
+      .proposal-list,
+      .events {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .proposal-list li,
+      .events li {
+        padding: 9px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        font-size: 0.84rem;
+        line-height: 1.45;
+      }
+
+      .proposal-list li.active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .events li:first-child {
+        border-color: #b7d7ca;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+      }
+
+      th,
+      td {
+        padding: 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+        line-height: 1.4;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.72rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .walkthrough-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+
+      .walkthrough {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+      }
+
+      .walkthrough-steps {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .walkthrough-steps button {
+        text-align: left;
+      }
+
+      .walkthrough-steps button.done {
+        border-color: #b7d7ca;
+        background: var(--accent-soft);
+      }
+
+      .note {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.5;
+      }
+
+      code {
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
+        background: #ece9df;
+        font-size: 0.88em;
+      }
+
+      @media (max-width: 900px) {
+        .principles,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .principles {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 560px) {
+        main {
+          width: min(100% - 20px, 1180px);
+          padding-top: 28px;
+        }
+
+        .principles,
+        .state-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .state-card.wide {
+          grid-column: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Where should the selection go?</h1>
+      <p class="lede">
+        A throwaway version 3 model for feeling how editor selection and
+        proposal navigation behave after creation, refusal, preview, selective
+        resolution, and batch resolution.
+      </p>
+
+      <div class="question">
+        <strong>Question:</strong> does one route-neutral selection bookmark,
+        remapped through the same semantic transaction as the document, keep
+        every proposal kind predictable without treating Lexical node keys or a
+        proposal card as selection authority?
+      </div>
+
+      <div class="hypothesis">
+        <strong>Candidate contract:</strong> the package snapshots both logical
+        selection endpoints before a semantic transaction and returns their
+        remapped successors afterward. It collapses only when the editing intent
+        says to collapse or when accepted content containing both endpoints is
+        removed. Proposal inspection is separate. Resolution never
+        auto-advances; a host explicitly invokes deterministic next/previous
+        navigation if it wants that workflow.
+      </div>
+
+      <section class="principles" aria-label="Candidate principles">
+        <article class="principle">
+          <strong>Bookmark, not node key</strong>
+          <p>
+            Accepted-state points carry paragraph identity, offset, and boundary
+            association. Visible proposal content may use a proposal-local
+            point.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Remap both endpoints</strong>
+          <p>
+            Forward/backward range orientation survives. A range collapses only
+            when its semantic successors become the same point.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Inspection is separate</strong>
+          <p>
+            The inspected proposal may change without moving text selection or
+            stealing DOM focus. Resolution clears it and exposes a successor
+            hint.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Routes normalize first</strong>
+          <p>
+            Keyboard, <code>beforeinput</code>, toolbar, and programmatic
+            callers produce the same semantic intent and post-selection
+            disposition.
+          </p>
+        </article>
+      </section>
+
+      <div class="grid">
+        <div class="stack">
+          <section class="panel">
+            <h2>Free play</h2>
+            <p class="section-copy">
+              Load a proposal-creation outcome, move the logical selection, then
+              preview or resolve it. Every action renders the full model state.
+            </p>
+
+            <div class="control-group">
+              <h3>Load a creation outcome</h3>
+              <div class="button-row">
+                <button data-action="load-insert">Insertion</button>
+                <button data-action="load-delete-backward">
+                  Deletion · backward continuation
+                </button>
+                <button data-action="load-delete-forward">
+                  Deletion · forward continuation
+                </button>
+                <button data-action="load-replace">Atomic replacement</button>
+                <button data-action="load-format">Formatting</button>
+                <button data-action="load-split">Paragraph split</button>
+                <button data-action="load-merge">Paragraph merge</button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <h3>Move selection or inspect proposals</h3>
+              <div class="button-row">
+                <button data-action="select-inside">
+                  Select inside change
+                </button>
+                <button data-action="select-outside">
+                  Place caret outside
+                </button>
+                <button data-action="reverse-selection">
+                  Reverse range orientation
+                </button>
+                <button data-action="load-navigation">
+                  Load three proposals
+                </button>
+                <button data-action="inspect-previous">Inspect previous</button>
+                <button data-action="inspect-next" class="primary">
+                  Inspect next
+                </button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <h3>Preview or refuse</h3>
+              <div class="button-row">
+                <button data-action="preview-review">Review projection</button>
+                <button data-action="preview-accepted">
+                  Accepted-state preview
+                </button>
+                <button data-action="preview-all-accepted">
+                  All-accepted preview
+                </button>
+                <button data-action="refuse" class="danger">
+                  Attempt unsupported interaction
+                </button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <h3>Resolve</h3>
+              <div class="button-row">
+                <button data-action="accept-first" class="primary">
+                  Accept first pending
+                </button>
+                <button data-action="reject-first">Reject first pending</button>
+                <button data-action="accept-inspected" class="primary">
+                  Accept inspected
+                </button>
+                <button data-action="reject-inspected">Reject inspected</button>
+                <button data-action="accept-all">Accept all atomically</button>
+                <button data-action="reject-all">Reject all atomically</button>
+                <button data-action="reset" class="danger">Reset</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Guided walkthroughs</h2>
+            <div id="walkthrough-tabs" class="walkthrough-tabs"></div>
+            <div id="walkthrough"></div>
+          </section>
+
+          <section class="panel">
+            <h2>Candidate creation matrix</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Proposal kind</th>
+                  <th>Post-creation logical selection</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Insertion</td>
+                  <td>Collapsed at the end of new proposal-local content</td>
+                  <td>Typing or paste can continue at the authored edge.</td>
+                </tr>
+                <tr>
+                  <td>Deletion</td>
+                  <td>Collapsed at the normalized continuation boundary</td>
+                  <td>
+                    Backward continues before the marked range; forward
+                    continues after it. A range command defaults to its
+                    document-order start.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Atomic replacement</td>
+                  <td>Collapsed at the end of replacement-local content</td>
+                  <td>
+                    Matches replacement authoring without selecting old content.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Formatting</td>
+                  <td>Preserve both endpoints and orientation</td>
+                  <td>The formatted content remains present and selected.</td>
+                </tr>
+                <tr>
+                  <td>Paragraph split</td>
+                  <td>
+                    Collapsed at the start of the proposed right paragraph
+                  </td>
+                  <td>Enter continues in the paragraph it just created.</td>
+                </tr>
+                <tr>
+                  <td>Paragraph merge</td>
+                  <td>Collapsed at the former paragraph boundary</td>
+                  <td>Backspace/Delete continues at the joined edge.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="note">
+              The native atomic document-fragment insertion inherits insertion’s
+              end-of-new-content rule. It is shown here only as that rule’s
+              consistency check; its proposal kind and WER v1 boundary were
+              decided elsewhere.
+            </p>
+          </section>
+        </div>
+
+        <aside class="stack">
+          <section class="panel">
+            <h2>Current state</h2>
+            <div class="state-grid">
+              <div class="state-card wide">
+                <span class="label">Accepted document state</span>
+                <div id="document" class="document"></div>
+              </div>
+              <div class="state-card">
+                <span class="label">Logical selection bookmark</span>
+                <div id="bookmark" class="value"></div>
+              </div>
+              <div class="state-card">
+                <span class="label">Visible projection mapping</span>
+                <div id="projected-selection" class="value"></div>
+              </div>
+              <div class="state-card">
+                <span class="label">Preview</span>
+                <div id="preview" class="value"></div>
+              </div>
+              <div class="state-card">
+                <span class="label">Inspection cursor</span>
+                <div id="inspection" class="value"></div>
+              </div>
+              <div class="state-card wide">
+                <span class="label">Last outcome</span>
+                <div id="outcome" class="value"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Pending proposals</h2>
+            <ul id="proposals" class="proposal-list"></ul>
+          </section>
+
+          <section class="panel">
+            <h2>Recent transitions</h2>
+            <ul id="events" class="events"></ul>
+          </section>
+        </aside>
+      </div>
+
+      <p class="note">
+        Throwaway prototype: this file models the contract in plain data. It
+        does not use Lexical, persist state, define the final TypeScript API, or
+        ship as package UI.
+      </p>
+    </main>
+
+    <script>
+      // Pure post-resolution selection model. The DOM shell below only dispatches
+      // actions and renders returned state.
+      const SelectionContract = (() => {
+        const clone = (value) => JSON.parse(JSON.stringify(value));
+
+        const acceptedPoint = (paragraphId, offset, association = "after") => ({
+          space: "accepted",
+          paragraphId,
+          offset,
+          association,
+        });
+
+        const proposalPoint = (proposalId, offset, association = "after") => ({
+          space: "proposal",
+          proposalId,
+          offset,
+          association,
+        });
+
+        const selection = (anchor, focus = anchor) => ({
+          anchor: clone(anchor),
+          focus: clone(focus),
+        });
+
+        const initialDocument = () => [
+          { id: "p1", text: "Alpha beta gamma." },
+          { id: "p2", text: "Delta epsilon." },
+          { id: "p3", text: "Zeta eta." },
+        ];
+
+        const initialState = () => ({
+          document: initialDocument(),
+          proposals: [],
+          bookmark: selection(acceptedPoint("p1", 5, "after")),
+          preview: "review",
+          inspection: {
+            activeId: null,
+            resumeAfterOrder: null,
+            successorHint: null,
+          },
+          nextProposal: 1,
+          outcome: {
+            status: "ok",
+            message:
+              "Ready. Load a proposal-creation outcome or a walkthrough.",
+          },
+          events: [
+            "Reset. Text selection and proposal inspection start as separate state.",
+          ],
+        });
+
+        const pointLabel = (point) => {
+          if (point.space === "proposal") {
+            return `${point.proposalId} local offset ${point.offset} (${point.association})`;
+          }
+          return `${point.paragraphId}@${point.offset} (${point.association})`;
+        };
+
+        const samePoint = (left, right) =>
+          JSON.stringify(left) === JSON.stringify(right);
+
+        const bookmarkLabel = (bookmark) => {
+          if (samePoint(bookmark.anchor, bookmark.focus)) {
+            return `collapsed · ${pointLabel(bookmark.anchor)}`;
+          }
+          return `range · anchor ${pointLabel(bookmark.anchor)} → focus ${pointLabel(bookmark.focus)}`;
+        };
+
+        const addEvent = (state, message, status = "ok") => ({
+          ...state,
+          outcome: { status, message },
+          events: [message, ...state.events].slice(0, 7),
+        });
+
+        const proposalSummary = (proposal) => {
+          const target = proposal.target;
+          if (target.type === "point") {
+            return `${proposal.kind} · ${target.paragraphId}@${target.offset}`;
+          }
+          if (target.type === "range") {
+            return `${proposal.kind} · ${target.paragraphId}@${target.start}–${target.end}`;
+          }
+          return `${proposal.kind} · ${target.leftParagraphId} ↔ ${target.rightParagraphId}`;
+        };
+
+        const makeProposal = (state, kind, overrides = {}) => {
+          const id = `proposal-${state.nextProposal}`;
+          const order = overrides.order ?? state.nextProposal;
+          const base = { id, kind, order, status: "pending" };
+          switch (kind) {
+            case "insert":
+              return {
+                ...base,
+                target: { type: "point", paragraphId: "p1", offset: 6 },
+                payload: "swift ",
+              };
+            case "delete":
+              return {
+                ...base,
+                target: {
+                  type: "range",
+                  paragraphId: "p1",
+                  start: 6,
+                  end: 10,
+                },
+                payload: "beta",
+              };
+            case "replace":
+              return {
+                ...base,
+                target: {
+                  type: "range",
+                  paragraphId: "p1",
+                  start: 6,
+                  end: 10,
+                },
+                payload: "BETA",
+              };
+            case "format":
+              return {
+                ...base,
+                target: {
+                  type: "range",
+                  paragraphId: "p1",
+                  start: 6,
+                  end: 10,
+                },
+                payload: "bold",
+              };
+            case "split":
+              return {
+                ...base,
+                target: { type: "point", paragraphId: "p1", offset: 11 },
+                newRightParagraphId: "p4",
+                payload: "paragraph boundary",
+              };
+            case "merge":
+              return {
+                ...base,
+                target: {
+                  type: "boundary",
+                  leftParagraphId: "p1",
+                  rightParagraphId: "p2",
+                },
+                payload: "paragraph boundary",
+              };
+            default:
+              throw new Error(`Unknown proposal kind: ${kind}`);
+          }
+        };
+
+        const creationBookmark = (proposal, continuation = "range-start") => {
+          const target = proposal.target;
+          switch (proposal.kind) {
+            case "insert":
+            case "replace":
+              return selection(
+                proposalPoint(proposal.id, proposal.payload.length, "after"),
+              );
+            case "delete": {
+              const offset =
+                continuation === "forward" ? target.end : target.start;
+              const association =
+                continuation === "forward" ? "after" : "before";
+              return selection(
+                acceptedPoint(target.paragraphId, offset, association),
+              );
+            }
+            case "format":
+              return selection(
+                acceptedPoint(target.paragraphId, target.start, "before"),
+                acceptedPoint(target.paragraphId, target.end, "after"),
+              );
+            case "split":
+              return selection(proposalPoint(proposal.id, 0, "after"));
+            case "merge": {
+              const left = initialDocument().find(
+                (paragraph) => paragraph.id === target.leftParagraphId,
+              );
+              return selection(
+                acceptedPoint(left.id, left.text.length, "after"),
+              );
+            }
+          }
+        };
+
+        const loadSingle = (state, kind, continuation) => {
+          const reset = initialState();
+          const proposal = makeProposal(reset, kind);
+          return addEvent(
+            {
+              ...reset,
+              proposals: [proposal],
+              nextProposal: 2,
+              bookmark: creationBookmark(proposal, continuation),
+            },
+            `Created ${proposalSummary(proposal)}. The semantic intent supplied its post-selection disposition.`,
+          );
+        };
+
+        const mapAcceptedPoint = (point, proposal, decision, document) => {
+          if (point.space !== "accepted" || decision === "reject") return point;
+          const next = clone(point);
+          const target = proposal.target;
+
+          if (
+            ["insert", "delete", "replace"].includes(proposal.kind) &&
+            point.paragraphId === target.paragraphId
+          ) {
+            if (proposal.kind === "insert") {
+              if (
+                point.offset > target.offset ||
+                (point.offset === target.offset &&
+                  point.association === "after")
+              ) {
+                next.offset += proposal.payload.length;
+              }
+            } else if (proposal.kind === "delete") {
+              if (point.offset >= target.end) {
+                next.offset -= target.end - target.start;
+              } else if (point.offset > target.start) {
+                next.offset = target.start;
+              }
+            } else {
+              const removed = target.end - target.start;
+              const added = proposal.payload.length;
+              if (point.offset >= target.end) {
+                next.offset += added - removed;
+              } else if (point.offset > target.start) {
+                next.offset =
+                  point.association === "after"
+                    ? target.start + added
+                    : target.start;
+              }
+            }
+          }
+
+          if (
+            proposal.kind === "split" &&
+            point.paragraphId === target.paragraphId &&
+            (point.offset > target.offset ||
+              (point.offset === target.offset && point.association === "after"))
+          ) {
+            next.paragraphId = proposal.newRightParagraphId;
+            next.offset -= target.offset;
+          }
+
+          if (
+            proposal.kind === "merge" &&
+            point.paragraphId === target.rightParagraphId
+          ) {
+            const left = document.find(
+              (paragraph) => paragraph.id === target.leftParagraphId,
+            );
+            next.paragraphId = target.leftParagraphId;
+            next.offset += left.text.length;
+          }
+
+          return next;
+        };
+
+        const mapProposalPoint = (point, proposal, decision) => {
+          if (point.space !== "proposal" || point.proposalId !== proposal.id) {
+            return point;
+          }
+          const target = proposal.target;
+          if (proposal.kind === "insert") {
+            return acceptedPoint(
+              target.paragraphId,
+              decision === "accept"
+                ? target.offset + point.offset
+                : target.offset,
+              point.association,
+            );
+          }
+          if (proposal.kind === "replace") {
+            const offset =
+              decision === "accept"
+                ? target.start + Math.min(point.offset, proposal.payload.length)
+                : target.start +
+                  Math.min(point.offset, target.end - target.start);
+            return acceptedPoint(target.paragraphId, offset, point.association);
+          }
+          if (proposal.kind === "split") {
+            return decision === "accept"
+              ? acceptedPoint(
+                  proposal.newRightParagraphId,
+                  point.offset,
+                  "after",
+                )
+              : acceptedPoint(target.paragraphId, target.offset, "after");
+          }
+          return acceptedPoint("p1", 0, point.association);
+        };
+
+        const remapBookmark = (bookmark, proposal, decision, document) => {
+          const remap = (point) =>
+            mapAcceptedPoint(
+              mapProposalPoint(point, proposal, decision),
+              proposal,
+              decision,
+              document,
+            );
+          return {
+            anchor: remap(bookmark.anchor),
+            focus: remap(bookmark.focus),
+          };
+        };
+
+        const applyAccepted = (document, proposal) => {
+          const next = clone(document);
+          const target = proposal.target;
+          if (["insert", "delete", "replace"].includes(proposal.kind)) {
+            const paragraph = next.find(
+              (item) => item.id === target.paragraphId,
+            );
+            if (proposal.kind === "insert") {
+              paragraph.text =
+                paragraph.text.slice(0, target.offset) +
+                proposal.payload +
+                paragraph.text.slice(target.offset);
+            } else if (proposal.kind === "delete") {
+              paragraph.text =
+                paragraph.text.slice(0, target.start) +
+                paragraph.text.slice(target.end);
+            } else {
+              paragraph.text =
+                paragraph.text.slice(0, target.start) +
+                proposal.payload +
+                paragraph.text.slice(target.end);
+            }
+          }
+          if (proposal.kind === "split") {
+            const index = next.findIndex(
+              (item) => item.id === target.paragraphId,
+            );
+            const source = next[index];
+            next.splice(
+              index,
+              1,
+              { ...source, text: source.text.slice(0, target.offset) },
+              {
+                id: proposal.newRightParagraphId,
+                text: source.text.slice(target.offset),
+              },
+            );
+          }
+          if (proposal.kind === "merge") {
+            const leftIndex = next.findIndex(
+              (item) => item.id === target.leftParagraphId,
+            );
+            const rightIndex = next.findIndex(
+              (item) => item.id === target.rightParagraphId,
+            );
+            next[leftIndex].text += next[rightIndex].text;
+            next.splice(rightIndex, 1);
+          }
+          return next;
+        };
+
+        const resolveOne = (state, proposalId, decision, batch = false) => {
+          const proposal = state.proposals.find(
+            (item) => item.id === proposalId,
+          );
+          if (!proposal) {
+            return addEvent(
+              state,
+              "No matching pending proposal to resolve.",
+              "refused",
+            );
+          }
+          const order = proposal.order;
+          const bookmark = remapBookmark(
+            state.bookmark,
+            proposal,
+            decision,
+            state.document,
+          );
+          const document =
+            decision === "accept"
+              ? applyAccepted(state.document, proposal)
+              : state.document;
+          const proposals = state.proposals.filter(
+            (item) => item.id !== proposalId,
+          );
+          const successor = proposals
+            .filter((item) => item.order > order)
+            .sort((left, right) => left.order - right.order)[0];
+          const next = {
+            ...state,
+            document,
+            proposals,
+            bookmark,
+            inspection: {
+              activeId: null,
+              resumeAfterOrder: order,
+              successorHint: successor?.id ?? null,
+            },
+          };
+          if (batch) return next;
+          return addEvent(
+            next,
+            `${decision === "accept" ? "Accepted" : "Rejected"} ${proposal.id}. The package remapped both selection endpoints, cleared inspection, and did not auto-advance${successor ? `; ${successor.id} is only a successor hint` : ""}.`,
+          );
+        };
+
+        const resolveBatch = (state, decision) => {
+          if (state.proposals.length === 0) {
+            return addEvent(
+              state,
+              "There are no pending proposals.",
+              "refused",
+            );
+          }
+          const beforeCount = state.proposals.length;
+          const ordered = [...state.proposals].sort(
+            (left, right) => right.order - left.order,
+          );
+          let next = state;
+          for (const proposal of ordered) {
+            next = resolveOne(next, proposal.id, decision, true);
+          }
+          next = {
+            ...next,
+            inspection: {
+              activeId: null,
+              resumeAfterOrder: null,
+              successorHint: null,
+            },
+          };
+          return addEvent(
+            next,
+            `${decision === "accept" ? "Accepted" : "Rejected"} ${beforeCount} proposals in one modeled transaction. One composed remap produced the final selection; navigation did not run between items.`,
+          );
+        };
+
+        const loadNavigation = () => {
+          const state = initialState();
+          const first = {
+            ...makeProposal(state, "insert", { order: 1 }),
+            id: "proposal-1",
+            target: { type: "point", paragraphId: "p1", offset: 6 },
+          };
+          const second = {
+            ...makeProposal({ ...state, nextProposal: 2 }, "format", {
+              order: 2,
+            }),
+            id: "proposal-2",
+            target: {
+              type: "range",
+              paragraphId: "p2",
+              start: 0,
+              end: 5,
+            },
+          };
+          const third = {
+            ...makeProposal({ ...state, nextProposal: 3 }, "delete", {
+              order: 3,
+            }),
+            id: "proposal-3",
+            target: {
+              type: "range",
+              paragraphId: "p3",
+              start: 5,
+              end: 8,
+            },
+            payload: "eta",
+          };
+          return addEvent(
+            {
+              ...state,
+              proposals: [first, second, third],
+              nextProposal: 4,
+              bookmark: selection(acceptedPoint("p1", 0, "before")),
+            },
+            "Loaded three document-ordered proposals. The text caret stayed at p1@0 and nothing is inspected yet.",
+          );
+        };
+
+        const navigate = (state, direction) => {
+          const ordered = [...state.proposals].sort(
+            (left, right) => left.order - right.order,
+          );
+          if (ordered.length === 0) {
+            return addEvent(
+              state,
+              "No pending proposal is available to inspect.",
+              "refused",
+            );
+          }
+          let candidate;
+          if (state.inspection.activeId) {
+            const index = ordered.findIndex(
+              (item) => item.id === state.inspection.activeId,
+            );
+            candidate = ordered[index + direction];
+          } else if (state.inspection.resumeAfterOrder !== null) {
+            candidate =
+              direction > 0
+                ? ordered.find(
+                    (item) => item.order > state.inspection.resumeAfterOrder,
+                  )
+                : [...ordered]
+                    .reverse()
+                    .find(
+                      (item) => item.order < state.inspection.resumeAfterOrder,
+                    );
+          } else {
+            candidate = direction > 0 ? ordered[0] : ordered.at(-1);
+          }
+          if (!candidate) {
+            return addEvent(
+              state,
+              `Reached the ${direction > 0 ? "end" : "start"} of pending proposals. Navigation does not wrap implicitly.`,
+            );
+          }
+          return addEvent(
+            {
+              ...state,
+              inspection: {
+                activeId: candidate.id,
+                resumeAfterOrder: candidate.order,
+                successorHint: null,
+              },
+            },
+            `Inspection moved to ${candidate.id}. The logical text selection remained ${bookmarkLabel(state.bookmark)}.`,
+          );
+        };
+
+        const selectInside = (state) => {
+          const proposal = state.proposals[0];
+          if (!proposal) {
+            return addEvent(
+              state,
+              "Load a proposal before selecting inside it.",
+              "refused",
+            );
+          }
+          const target = proposal.target;
+          let bookmark;
+          if (["insert", "replace"].includes(proposal.kind)) {
+            bookmark = selection(
+              proposalPoint(proposal.id, 1, "before"),
+              proposalPoint(
+                proposal.id,
+                Math.max(1, proposal.payload.length - 1),
+                "after",
+              ),
+            );
+          } else if (["delete", "format"].includes(proposal.kind)) {
+            bookmark = selection(
+              acceptedPoint(target.paragraphId, target.start + 1, "before"),
+              acceptedPoint(target.paragraphId, target.end - 1, "after"),
+            );
+          } else if (proposal.kind === "split") {
+            bookmark = selection(proposalPoint(proposal.id, 0, "after"));
+          } else {
+            bookmark = selection(
+              acceptedPoint(target.rightParagraphId, 0, "before"),
+            );
+          }
+          return addEvent(
+            { ...state, bookmark },
+            `Moved the logical selection inside ${proposal.id} without changing the inspection cursor.`,
+          );
+        };
+
+        const projectedPoint = (point, state) => {
+          if (point.space === "accepted") {
+            return `${point.paragraphId}@${point.offset} in ${state.preview}`;
+          }
+          const proposal = state.proposals.find(
+            (item) => item.id === point.proposalId,
+          );
+          if (!proposal) return `resolved proposal fallback`;
+          if (
+            state.preview === "accepted-state" &&
+            ["insert", "replace", "split"].includes(proposal.kind)
+          ) {
+            const target = proposal.target;
+            return `nearest visible accepted boundary at ${target.paragraphId}@${target.offset ?? target.start}`;
+          }
+          return `${proposal.id} local offset ${point.offset} in ${state.preview}`;
+        };
+
+        const projectedBookmarkLabel = (state) => {
+          const anchor = projectedPoint(state.bookmark.anchor, state);
+          const focus = projectedPoint(state.bookmark.focus, state);
+          return samePoint(state.bookmark.anchor, state.bookmark.focus)
+            ? `collapsed · ${anchor}`
+            : `range · ${anchor} → ${focus}`;
+        };
+
+        const dispatch = (state, action) => {
+          switch (action.type) {
+            case "reset":
+              return initialState();
+            case "load-insert":
+              return loadSingle(state, "insert");
+            case "load-delete-backward":
+              return loadSingle(state, "delete", "backward");
+            case "load-delete-forward":
+              return loadSingle(state, "delete", "forward");
+            case "load-replace":
+              return loadSingle(state, "replace");
+            case "load-format":
+              return loadSingle(state, "format");
+            case "load-split":
+              return loadSingle(state, "split");
+            case "load-merge":
+              return loadSingle(state, "merge");
+            case "load-navigation":
+              return loadNavigation();
+            case "select-inside":
+              return selectInside(state);
+            case "select-outside":
+              return addEvent(
+                {
+                  ...state,
+                  bookmark: selection(acceptedPoint("p3", 2, "after")),
+                },
+                "Placed the text caret outside pending work. Inspection was unchanged.",
+              );
+            case "reverse-selection":
+              return addEvent(
+                {
+                  ...state,
+                  bookmark: {
+                    anchor: state.bookmark.focus,
+                    focus: state.bookmark.anchor,
+                  },
+                },
+                "Reversed anchor and focus. The range still names the same content, but orientation is now explicit.",
+              );
+            case "preview-review":
+            case "preview-accepted":
+            case "preview-all-accepted": {
+              const preview = action.type.replace("preview-", "");
+              return addEvent(
+                { ...state, preview },
+                `Changed only the visible projection to ${preview}. The logical bookmark was not rewritten.`,
+              );
+            }
+            case "refuse": {
+              const before = JSON.stringify(state.bookmark);
+              const next = addEvent(
+                state,
+                "Refused unsupported cross-paragraph replacement. Document, proposals, projection mode, logical selection, and inspection remained unchanged.",
+                "refused",
+              );
+              if (before !== JSON.stringify(next.bookmark)) {
+                throw new Error("No-mutation refusal changed the bookmark");
+              }
+              return next;
+            }
+            case "inspect-next":
+              return navigate(state, 1);
+            case "inspect-previous":
+              return navigate(state, -1);
+            case "accept-first":
+            case "reject-first": {
+              const proposal = state.proposals[0];
+              return proposal
+                ? resolveOne(
+                    state,
+                    proposal.id,
+                    action.type.startsWith("accept") ? "accept" : "reject",
+                  )
+                : addEvent(
+                    state,
+                    "There is no first pending proposal.",
+                    "refused",
+                  );
+            }
+            case "accept-inspected":
+            case "reject-inspected":
+              return state.inspection.activeId
+                ? resolveOne(
+                    state,
+                    state.inspection.activeId,
+                    action.type.startsWith("accept") ? "accept" : "reject",
+                  )
+                : addEvent(
+                    state,
+                    "Inspect a proposal before resolving the inspection target.",
+                    "refused",
+                  );
+            case "accept-all":
+              return resolveBatch(state, "accept");
+            case "reject-all":
+              return resolveBatch(state, "reject");
+            default:
+              return addEvent(
+                state,
+                `Unknown action: ${action.type}`,
+                "refused",
+              );
+          }
+        };
+
+        return {
+          bookmarkLabel,
+          initialState,
+          pointLabel,
+          projectedBookmarkLabel,
+          proposalSummary,
+          dispatch,
+        };
+      })();
+
+      const walkthroughs = [
+        {
+          name: "Six creation outcomes",
+          description:
+            "Compare the post-creation destination for every portable proposal kind. Loading a kind resets the same accepted document so only the selection rule changes.",
+          steps: [
+            ["Load insertion", "load-insert"],
+            ["Load backward deletion", "load-delete-backward"],
+            ["Load forward deletion", "load-delete-forward"],
+            ["Load atomic replacement", "load-replace"],
+            ["Load formatting", "load-format"],
+            ["Load paragraph split", "load-split"],
+            ["Load paragraph merge", "load-merge"],
+          ],
+        },
+        {
+          name: "Preview and refusal",
+          description:
+            "A preview may hide proposal-local content, but only its projected fallback changes. A no-mutation refusal preserves the logical bookmark exactly.",
+          steps: [
+            ["Load insertion", "load-insert"],
+            ["Select inside inserted content", "select-inside"],
+            ["Show accepted-state preview", "preview-accepted"],
+            ["Return to review projection", "preview-review"],
+            ["Attempt unsupported interaction", "refuse"],
+          ],
+        },
+        {
+          name: "Selective remapping",
+          description:
+            "Select inside content whose outcome changes, then accept or reject it. The package remaps both endpoints; it never asks the browser where the caret happened to land.",
+          steps: [
+            ["Load deletion", "load-delete-forward"],
+            ["Select inside the deletion", "select-inside"],
+            ["Accept deletion", "accept-first"],
+            ["Load replacement", "load-replace"],
+            ["Select inside replacement", "select-inside"],
+            ["Reject replacement", "reject-first"],
+          ],
+        },
+        {
+          name: "Navigation stays explicit",
+          description:
+            "Inspection advances only when asked. Resolving an inspected proposal clears it and exposes a successor hint while preserving the text caret.",
+          steps: [
+            ["Load three proposals", "load-navigation"],
+            ["Inspect next", "inspect-next"],
+            ["Accept inspected", "accept-inspected"],
+            ["Explicitly inspect next", "inspect-next"],
+            ["Reject inspected", "reject-inspected"],
+            ["Explicitly inspect next again", "inspect-next"],
+          ],
+        },
+        {
+          name: "Batch is one transaction",
+          description:
+            "A batch operation composes every accepted-state transform and produces one final selection. It does not navigate or expose intermediate selection states.",
+          steps: [
+            ["Load three proposals", "load-navigation"],
+            ["Place caret outside proposals", "select-outside"],
+            ["Accept all atomically", "accept-all"],
+          ],
+        },
+      ];
+
+      let state = SelectionContract.initialState();
+      let activeWalkthrough = 0;
+      let completedSteps = new Set();
+
+      const byId = (id) => document.getElementById(id);
+
+      const render = () => {
+        byId("document").innerHTML = state.document
+          .map(
+            (paragraph) =>
+              `<div class="paragraph"><strong>${paragraph.id}</strong> · ${paragraph.text}</div>`,
+          )
+          .join("");
+
+        byId("bookmark").textContent = SelectionContract.bookmarkLabel(
+          state.bookmark,
+        );
+        byId("projected-selection").textContent =
+          SelectionContract.projectedBookmarkLabel(state);
+        byId("preview").textContent = state.preview;
+        byId("inspection").textContent = state.inspection.activeId
+          ? `${state.inspection.activeId} is inspected`
+          : state.inspection.successorHint
+            ? `none · successor hint ${state.inspection.successorHint}`
+            : "none";
+        byId("outcome").className = `value status-${state.outcome.status}`;
+        byId("outcome").textContent = state.outcome.message;
+
+        byId("proposals").innerHTML = state.proposals.length
+          ? state.proposals
+              .sort((left, right) => left.order - right.order)
+              .map(
+                (proposal) =>
+                  `<li class="${proposal.id === state.inspection.activeId ? "active" : ""}"><strong>${proposal.id}</strong><br />${SelectionContract.proposalSummary(proposal)}</li>`,
+              )
+              .join("")
+          : "<li>No pending proposals.</li>";
+
+        byId("events").innerHTML = state.events
+          .map((event) => `<li>${event}</li>`)
+          .join("");
+
+        document
+          .querySelectorAll('[data-action^="preview-"]')
+          .forEach((button) => {
+            button.setAttribute(
+              "aria-pressed",
+              String(
+                button.dataset.action.replace("preview-", "") === state.preview,
+              ),
+            );
+          });
+
+        renderWalkthrough();
+      };
+
+      const renderWalkthrough = () => {
+        const tabs = byId("walkthrough-tabs");
+        tabs.innerHTML = walkthroughs
+          .map(
+            (walkthrough, index) =>
+              `<button data-walkthrough="${index}" aria-pressed="${index === activeWalkthrough}">${walkthrough.name}</button>`,
+          )
+          .join("");
+
+        const walkthrough = walkthroughs[activeWalkthrough];
+        byId("walkthrough").innerHTML = `
+          <div class="walkthrough">
+            <h3>${walkthrough.name}</h3>
+            <p class="section-copy">${walkthrough.description}</p>
+            <div class="walkthrough-steps">
+              ${walkthrough.steps
+                .map(
+                  ([label, action], index) =>
+                    `<button data-guided-action="${action}" data-step="${index}" class="${completedSteps.has(index) ? "done" : ""}">${index + 1}. ${label}</button>`,
+                )
+                .join("")}
+            </div>
+          </div>`;
+      };
+
+      const act = (action) => {
+        state = SelectionContract.dispatch(state, { type: action });
+        render();
+      };
+
+      document.addEventListener("click", (event) => {
+        const actionButton = event.target.closest("[data-action]");
+        if (actionButton) {
+          act(actionButton.dataset.action);
+          return;
+        }
+
+        const tab = event.target.closest("[data-walkthrough]");
+        if (tab) {
+          activeWalkthrough = Number(tab.dataset.walkthrough);
+          completedSteps = new Set();
+          state = SelectionContract.initialState();
+          render();
+          return;
+        }
+
+        const guided = event.target.closest("[data-guided-action]");
+        if (guided) {
+          act(guided.dataset.guidedAction);
+          completedSteps.add(Number(guided.dataset.step));
+          render();
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>
