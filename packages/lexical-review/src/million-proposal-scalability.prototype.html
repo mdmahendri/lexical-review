@@ -1,0 +1,1214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Million-proposal scalability prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17211d;
+        --muted: #5e6b65;
+        --paper: #f2f0e8;
+        --panel: #fffdf7;
+        --line: #d8d3c7;
+        --accent: #225f55;
+        --accent-soft: #dcece7;
+        --warn: #945c18;
+        --warn-soft: #fff0d4;
+        --danger: #993d3d;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      main {
+        width: min(1240px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 42px 0 76px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 920px;
+        margin-bottom: 14px;
+        font-size: clamp(2.1rem, 5vw, 4.5rem);
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+      }
+
+      h2 {
+        font-size: 1.12rem;
+      }
+
+      h3 {
+        margin-bottom: 7px;
+        font-size: 0.94rem;
+      }
+
+      .lede {
+        max-width: 920px;
+        color: var(--muted);
+        font-size: 1.06rem;
+        line-height: 1.62;
+      }
+
+      .callout {
+        max-width: 1100px;
+        margin: 20px 0;
+        padding: 16px 19px;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 10px;
+        background: var(--panel);
+        line-height: 1.55;
+      }
+
+      .callout.warn {
+        border-left-color: var(--warn);
+      }
+
+      .callout p:last-child {
+        margin-bottom: 0;
+      }
+
+      .principles {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 26px 0;
+      }
+
+      .principle,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+      }
+
+      .principle {
+        padding: 15px;
+      }
+
+      .principle strong {
+        display: block;
+        margin-bottom: 7px;
+      }
+
+      .principle p,
+      .section-copy,
+      .fine-print {
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+
+      .principle p {
+        margin: 0;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(350px, 0.95fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .panel > :last-child {
+        margin-bottom: 0;
+      }
+
+      .control-grid,
+      .state-grid,
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      select {
+        width: 100%;
+        padding: 9px 10px;
+        border: 1px solid #b8b3a7;
+        border-radius: 8px;
+        background: white;
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.9rem;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+
+      .control-group + .control-group {
+        margin-top: 19px;
+        padding-top: 17px;
+        border-top: 1px solid var(--line);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button {
+        padding: 9px 12px;
+        border: 1px solid #b8b3a7;
+        border-radius: 8px;
+        background: white;
+        color: var(--ink);
+        font: inherit;
+        font-size: 0.86rem;
+        cursor: pointer;
+      }
+
+      button:hover:not(:disabled) {
+        border-color: var(--accent);
+      }
+
+      button.primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: white;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.48;
+      }
+
+      button[aria-selected="true"] {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .state-card,
+      .metric {
+        min-height: 84px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: white;
+      }
+
+      .state-card.wide,
+      .metric.wide {
+        grid-column: 1 / -1;
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .value {
+        overflow-wrap: anywhere;
+        font-size: 0.91rem;
+        line-height: 1.4;
+      }
+
+      .value.big {
+        font-size: 1.2rem;
+        font-weight: 750;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .status::before {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #87918c;
+        content: "";
+      }
+
+      .status.ready::before {
+        background: var(--accent);
+      }
+
+      .status.busy::before {
+        background: var(--warn);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+      }
+
+      th,
+      td {
+        padding: 9px 7px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.7rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      td:nth-child(2),
+      td:nth-child(3) {
+        white-space: nowrap;
+      }
+
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-bottom: 16px;
+      }
+
+      .walkthrough {
+        display: none;
+      }
+
+      .walkthrough.active {
+        display: block;
+      }
+
+      .steps {
+        display: grid;
+        gap: 9px;
+        margin-top: 14px;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+      }
+
+      .step-number {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.8rem;
+        font-weight: 800;
+      }
+
+      .step button {
+        width: 100%;
+        text-align: left;
+      }
+
+      .decision-list {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .decision-list li + li {
+        margin-top: 7px;
+      }
+
+      code {
+        padding: 0.08em 0.3em;
+        border-radius: 4px;
+        background: #ece9df;
+        font-size: 0.86em;
+      }
+
+      @media (max-width: 900px) {
+        .principles,
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .principles,
+        .control-grid,
+        .state-grid,
+        .metric-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .state-card.wide,
+        .metric.wide {
+          grid-column: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Can one review document carry a million pending proposals?</h1>
+      <p class="lede">
+        This throwaway benchmark explores which version 3 scalability
+        constraints belong in the specification. It exercises a candidate
+        indexed review-state representation; it is not the version 3
+        implementation or serialization schema.
+      </p>
+
+      <section class="callout">
+        <strong>The question.</strong> Can adding and finalizing a draft near
+        the beginning, reconciling a relevant projection, native load/save, and
+        WER v1 export remain predictable with up to 1,000,000 independently
+        pending proposals, while proposal-only changes reuse the accepted-state
+        fingerprint?
+      </section>
+
+      <section class="callout warn">
+        <strong>What this can and cannot prove.</strong> Relative growth and
+        main-thread isolation are meaningful here. Absolute timings and heap
+        figures describe this browser and this candidate shape only. The
+        million-proposal run is intentionally heavy; serialization temporarily
+        retains a large JSON string in memory.
+      </section>
+
+      <section class="principles" aria-label="Candidate constraints">
+        <article class="principle">
+          <strong>Local work is local</strong>
+          <p>
+            Draft finalization and relevant projection cost should not grow with
+            the total proposal count.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Global work says so</strong>
+          <p>
+            Native load/save and WER export may be linear, but must remain
+            outside the editor's interactive path.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Accepted content is stable</strong>
+          <p>
+            Proposal-only changes and WER export read, but never rebuild, the
+            accepted-state fingerprint.
+          </p>
+        </article>
+        <article class="principle">
+          <strong>Evidence before ceilings</strong>
+          <p>
+            Memory and throughput ceilings remain open until the
+            million-proposal run produces evidence.
+          </p>
+        </article>
+      </section>
+
+      <div class="grid">
+        <div class="stack">
+          <section class="panel">
+            <h2>Free play</h2>
+            <p class="section-copy">
+              Every operation runs in a worker so the page remains responsive.
+              Start small, then repeat with one million proposals.
+            </p>
+
+            <div class="control-group control-grid">
+              <label>
+                Pending proposals
+                <select id="proposal-count">
+                  <option value="10000">10,000 — quick check</option>
+                  <option value="100000">100,000 — medium check</option>
+                  <option value="1000000">1,000,000 — boundary case</option>
+                </select>
+              </label>
+              <div>
+                <span class="label">Dataset</span>
+                <div class="button-row">
+                  <button class="primary" data-action="build">
+                    Build review document
+                  </button>
+                  <button data-action="reset">Reset</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <h3>Interactive authoring and projection</h3>
+              <div class="button-row">
+                <button data-action="startDraft">
+                  Start draft near beginning
+                </button>
+                <button data-action="finalizeDraft">
+                  Finalize active draft
+                </button>
+                <button data-action="reconcile">
+                  Reconcile first 40 blocks
+                </button>
+                <button data-action="sampleInteractive">
+                  Sample interactive path × 50
+                </button>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <h3>Serialization boundaries</h3>
+              <div class="button-row">
+                <button data-action="nativeSave">Native save</button>
+                <button data-action="nativeLoad">Native load</button>
+                <button data-action="werExport">WER v1 export traversal</button>
+              </div>
+              <p class="fine-print">
+                Native save materializes candidate JSON so native load can parse
+                it. WER export generates exact per-proposal JSON but counts
+                bytes instead of retaining the whole export; native atomic
+                document-fragment insertions are reported as unsupported.
+              </p>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Measured operations</h2>
+            <p class="section-copy">
+              Throughput is useful for global operations; p95 is useful for
+              repeated interactive work.
+            </p>
+            <div style="overflow-x: auto">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Operation</th>
+                    <th>Duration</th>
+                    <th>Throughput / p95</th>
+                    <th>Evidence</th>
+                  </tr>
+                </thead>
+                <tbody id="metrics-body">
+                  <tr>
+                    <td colspan="4">No measurements yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="panel">
+            <h2>Current state</h2>
+            <div class="state-grid">
+              <div class="state-card">
+                <span class="label">Worker</span>
+                <div id="status" class="value status">Idle</div>
+              </div>
+              <div class="state-card">
+                <span class="label">Pending proposals</span>
+                <div id="proposal-total" class="value big">0</div>
+              </div>
+              <div class="state-card">
+                <span class="label">Accepted blocks</span>
+                <div id="block-total" class="value">0</div>
+              </div>
+              <div class="state-card">
+                <span class="label">Active draft</span>
+                <div id="draft-state" class="value">None</div>
+              </div>
+              <div class="state-card">
+                <span class="label">Fingerprint builds / reads</span>
+                <div id="fingerprint-state" class="value">0 / 0</div>
+              </div>
+              <div class="state-card">
+                <span class="label">Relevant projection</span>
+                <div id="projection-state" class="value">Not reconciled</div>
+              </div>
+              <div class="state-card">
+                <span class="label">Native snapshot</span>
+                <div id="snapshot-state" class="value">None</div>
+              </div>
+              <div class="state-card">
+                <span class="label">Observed worker heap</span>
+                <div id="heap-state" class="value">Unavailable</div>
+              </div>
+              <div class="state-card wide">
+                <span class="label">Last outcome</span>
+                <div id="last-outcome" class="value">
+                  Build a dataset to begin.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Guided walkthroughs</h2>
+            <div class="tabs" role="tablist">
+              <button role="tab" aria-selected="true" data-tab="interactive">
+                Interactive path
+              </button>
+              <button role="tab" aria-selected="false" data-tab="serialization">
+                Global boundaries
+              </button>
+              <button role="tab" aria-selected="false" data-tab="invariant">
+                Fingerprint invariant
+              </button>
+              <button role="tab" aria-selected="false" data-tab="million">
+                Million boundary
+              </button>
+            </div>
+
+            <div id="walkthrough-interactive" class="walkthrough active">
+              <p class="section-copy">
+                Check whether localized indexing keeps authoring and a 40-block
+                projection independent of total proposals.
+              </p>
+              <div class="steps">
+                <div class="step">
+                  <span class="step-number">1</span
+                  ><button data-step-action="build" data-count="10000">
+                    Build 10,000 proposals
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">2</span
+                  ><button data-step-action="sampleInteractive">
+                    Run 50 draft/finalize/reconcile samples
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">3</span
+                  ><button data-step-action="build" data-count="100000">
+                    Build 100,000 proposals
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">4</span
+                  ><button data-step-action="sampleInteractive">
+                    Repeat the 50-sample path
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="walkthrough-serialization" class="walkthrough">
+              <p class="section-copy">
+                Observe which operations necessarily visit every proposal and
+                compare their throughput.
+              </p>
+              <div class="steps">
+                <div class="step">
+                  <span class="step-number">1</span
+                  ><button data-step-action="build" data-count="100000">
+                    Build 100,000 proposals
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">2</span
+                  ><button data-step-action="nativeSave">
+                    Materialize native JSON
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">3</span
+                  ><button data-step-action="nativeLoad">
+                    Parse native JSON as a new session
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">4</span
+                  ><button data-step-action="werExport">
+                    Traverse WER v1 export
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="walkthrough-invariant" class="walkthrough">
+              <p class="section-copy">
+                Proposal-only work must leave fingerprint-build count unchanged.
+                WER export may read the cached value.
+              </p>
+              <div class="steps">
+                <div class="step">
+                  <span class="step-number">1</span
+                  ><button data-step-action="build" data-count="10000">
+                    Start one authoring session
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">2</span
+                  ><button data-step-action="startDraft">
+                    Start a proposal draft
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">3</span
+                  ><button data-step-action="finalizeDraft">Finalize it</button>
+                </div>
+                <div class="step">
+                  <span class="step-number">4</span
+                  ><button data-step-action="werExport">
+                    Export using the cached fingerprint
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="walkthrough-million" class="walkthrough">
+              <p class="section-copy">
+                This is the actual boundary check. Watch heap, p95 interactive
+                latency, native JSON size, and global throughput.
+              </p>
+              <div class="steps">
+                <div class="step">
+                  <span class="step-number">1</span
+                  ><button data-step-action="build" data-count="1000000">
+                    Build 1,000,000 proposals
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">2</span
+                  ><button data-step-action="sampleInteractive">
+                    Sample interactive work × 50
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">3</span
+                  ><button data-step-action="nativeSave">
+                    Measure native save
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">4</span
+                  ><button data-step-action="nativeLoad">
+                    Measure native load
+                  </button>
+                </div>
+                <div class="step">
+                  <span class="step-number">5</span
+                  ><button data-step-action="werExport">
+                    Measure WER export traversal
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Decision prompts</h2>
+            <ul class="decision-list">
+              <li>
+                Should v3 require p95 draft finalization and relevant
+                reconciliation within one 16 ms frame at one million proposals?
+              </li>
+              <li>
+                Should native load/save and WER export be specified as linear,
+                asynchronous, cancellable work with progress reporting instead
+                of given a device-specific time ceiling?
+              </li>
+              <li>
+                What heap and serialized-size ceiling is acceptable for the
+                million-proposal release gate?
+              </li>
+              <li>
+                Does the native JSON peak justify a streaming or chunked
+                serialization seam in the public API?
+              </li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <script id="worker-source" type="text/plain">
+      const KINDS = [
+        "insert",
+        "delete",
+        "replace",
+        "format",
+        "paragraph-split",
+        "paragraph-merge",
+        "document-fragment-insert",
+      ];
+
+      let review = null;
+      let nativeSnapshot = null;
+      let nativeSnapshotBytes = 0;
+      let metrics = [];
+      let fingerprintBuilds = 0;
+      let fingerprintReads = 0;
+      let lastProjectionCount = 0;
+      let lastOutcome = "Build a dataset to begin.";
+
+      const now = () => performance.now();
+      const heap = () =>
+        performance.memory && Number.isFinite(performance.memory.usedJSHeapSize)
+          ? performance.memory.usedJSHeapSize
+          : null;
+
+      function percentile(values, fraction) {
+        const ordered = [...values].sort((a, b) => a - b);
+        return ordered[Math.min(ordered.length - 1, Math.ceil(ordered.length * fraction) - 1)] || 0;
+      }
+
+      function fingerprint(blocks) {
+        fingerprintBuilds += 1;
+        let hash = 2166136261;
+        for (const block of blocks) {
+          const input = `${block.id}:${block.text}|`;
+          for (let index = 0; index < input.length; index += 1) {
+            hash ^= input.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+          }
+        }
+        return `accepted-fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+      }
+
+      function makeProposal(index, blockCount) {
+        const kind = KINDS[index % KINDS.length];
+        const start = (index * 13) % 42;
+        return {
+          id: `proposal-${index.toString(36).padStart(6, "0")}`,
+          kind,
+          block: index % blockCount,
+          start,
+          end: start + (kind === "insert" || kind === "paragraph-split" ? 0 : 1),
+          payload: kind === "document-fragment-insert" ? "x\ny" : kind === "format" ? "bold=true" : "x",
+        };
+      }
+
+      function indexProposals(proposals, blockCount) {
+        const byBlock = Array.from({ length: blockCount }, () => []);
+        for (let index = 0; index < proposals.length; index += 1) {
+          byBlock[proposals[index].block].push(index);
+        }
+        return byBlock;
+      }
+
+      function metric(operation, duration, details = {}) {
+        metrics.unshift({ operation, duration, ...details });
+        metrics = metrics.slice(0, 12);
+      }
+
+      function summarize(status = "ready") {
+        return {
+          status,
+          proposalCount: review ? review.proposals.length : 0,
+          blockCount: review ? review.blocks.length : 0,
+          draft: review && review.draft ? `${review.draft.kind} at block ${review.draft.block}` : "None",
+          fingerprint: review ? review.acceptedFingerprint : null,
+          fingerprintBuilds,
+          fingerprintReads,
+          lastProjectionCount,
+          nativeSnapshotBytes,
+          heapBytes: heap(),
+          metrics,
+          lastOutcome,
+        };
+      }
+
+      function build(count) {
+        const started = now();
+        const heapBefore = heap();
+        fingerprintBuilds = 0;
+        fingerprintReads = 0;
+        const blockCount = Math.max(100, Math.ceil(count / 100));
+        const blocks = Array.from({ length: blockCount }, (_, index) => ({
+          id: `block-${index.toString(36)}`,
+          type: "paragraph",
+          text: `Accepted paragraph ${index}: predictable review content for scalability evidence.`,
+        }));
+        const proposals = new Array(count);
+        for (let index = 0; index < count; index += 1) {
+          proposals[index] = makeProposal(index, blockCount);
+        }
+        review = {
+          blocks,
+          proposals,
+          byBlock: indexProposals(proposals, blockCount),
+          draft: null,
+          acceptedFingerprint: fingerprint(blocks),
+          nextIdentity: count,
+        };
+        nativeSnapshot = null;
+        nativeSnapshotBytes = 0;
+        lastProjectionCount = 0;
+        const duration = now() - started;
+        const heapAfter = heap();
+        metric("Build indexed review state", duration, {
+          throughput: count / Math.max(duration / 1000, 0.001),
+          evidence: heapBefore !== null && heapAfter !== null ? `heap +${Math.max(0, heapAfter - heapBefore)} bytes` : `${blockCount} block buckets`,
+        });
+        lastOutcome = `Built ${count.toLocaleString()} pending proposals across ${blockCount.toLocaleString()} accepted blocks.`;
+      }
+
+      function requireReview() {
+        if (!review) throw new Error("Build a review document first.");
+      }
+
+      function startDraft(record = true) {
+        requireReview();
+        const started = now();
+        if (review.draft) throw new Error("A proposal draft is already active.");
+        review.draft = { kind: "insert", block: 1, start: 5, end: 5, payload: "review" };
+        const duration = now() - started;
+        if (record) metric("Start draft near beginning", duration, { evidence: "no proposal scan" });
+        lastOutcome = "Started one mutable insertion draft near the beginning; finalized proposals were untouched.";
+        return duration;
+      }
+
+      function finalizeDraft(record = true) {
+        requireReview();
+        const started = now();
+        if (!review.draft) throw new Error("Start a proposal draft first.");
+        const index = review.proposals.length;
+        const proposal = {
+          id: `proposal-${review.nextIdentity.toString(36).padStart(6, "0")}`,
+          ...review.draft,
+        };
+        review.nextIdentity += 1;
+        review.proposals.push(proposal);
+        review.byBlock[proposal.block].push(index);
+        review.draft = null;
+        nativeSnapshot = null;
+        nativeSnapshotBytes = 0;
+        const duration = now() - started;
+        if (record) metric("Finalize draft near beginning", duration, { evidence: "one append + one bucket update" });
+        lastOutcome = "Finalized one immutable proposal without scanning proposals or rebuilding the accepted-state fingerprint.";
+        return duration;
+      }
+
+      function reconcile(record = true) {
+        requireReview();
+        const started = now();
+        const visibleBlocks = Math.min(40, review.blocks.length);
+        let relevant = 0;
+        let checksum = 0;
+        for (let block = 0; block < visibleBlocks; block += 1) {
+          checksum ^= review.blocks[block].text.length;
+          const proposalIndexes = review.byBlock[block];
+          relevant += proposalIndexes.length;
+          for (const proposalIndex of proposalIndexes) {
+            const proposal = review.proposals[proposalIndex];
+            checksum = Math.imul(checksum ^ proposal.start ^ proposal.end, 16777619);
+          }
+        }
+        lastProjectionCount = relevant;
+        const duration = now() - started;
+        if (record) metric("Reconcile first 40 blocks", duration, { throughput: relevant / Math.max(duration / 1000, 0.001), evidence: `${relevant.toLocaleString()} relevant proposals; checksum ${checksum >>> 0}` });
+        lastOutcome = `Reconciled 40 blocks by visiting ${relevant.toLocaleString()} relevant proposals, not the whole document.`;
+        return duration;
+      }
+
+      function sampleInteractive() {
+        requireReview();
+        if (review.draft) throw new Error("Finalize or reset the active draft before sampling.");
+        const finalizations = [];
+        const reconciliations = [];
+        const fingerprintBefore = fingerprintBuilds;
+        const started = now();
+        for (let sample = 0; sample < 50; sample += 1) {
+          startDraft(false);
+          finalizations.push(finalizeDraft(false));
+          reconciliations.push(reconcile(false));
+        }
+        const duration = now() - started;
+        metric("Interactive path × 50", duration, {
+          p95: percentile([...finalizations, ...reconciliations], 0.95),
+          evidence: `finalize p95 ${percentile(finalizations, 0.95).toFixed(3)} ms; reconcile p95 ${percentile(reconciliations, 0.95).toFixed(3)} ms; fingerprint builds +${fingerprintBuilds - fingerprintBefore}`,
+        });
+        lastOutcome = "Sampled 50 localized finalizations and reconciliations. Compare p95 after rebuilding at larger proposal counts.";
+      }
+
+      function nativeSave() {
+        requireReview();
+        const started = now();
+        nativeSnapshot = JSON.stringify({
+          version: 3,
+          editorState: { root: { type: "root", children: review.blocks } },
+          reviewState: { proposals: review.proposals, draft: review.draft },
+        });
+        nativeSnapshotBytes = nativeSnapshot.length;
+        const duration = now() - started;
+        metric("Native save", duration, {
+          throughput: review.proposals.length / Math.max(duration / 1000, 0.001),
+          evidence: `${nativeSnapshotBytes} ASCII JSON bytes materialized`,
+        });
+        lastOutcome = "Serialized the full candidate native review document. This necessarily visited every proposal.";
+      }
+
+      function nativeLoad() {
+        if (!nativeSnapshot) throw new Error("Run native save before native load.");
+        const started = now();
+        const parsed = JSON.parse(nativeSnapshot);
+        const blocks = parsed.editorState.root.children;
+        const proposals = parsed.reviewState.proposals;
+        review = {
+          blocks,
+          proposals,
+          byBlock: indexProposals(proposals, blocks.length),
+          draft: parsed.reviewState.draft,
+          acceptedFingerprint: fingerprint(blocks),
+          nextIdentity: proposals.length,
+        };
+        lastProjectionCount = 0;
+        const duration = now() - started;
+        metric("Native load + index", duration, {
+          throughput: proposals.length / Math.max(duration / 1000, 0.001),
+          evidence: "new session: parse + full proposal index + one accepted fingerprint build",
+        });
+        lastOutcome = "Loaded a successor authoring session, rebuilt the proposal index, and built its accepted-state fingerprint once.";
+      }
+
+      function werProposalJson(proposal) {
+        const kind = proposal.kind === "replace" ? "atomic-replacement" : proposal.kind;
+        return JSON.stringify({
+          id: proposal.id,
+          kind,
+          payload: proposal.payload,
+          target: {
+            blockId: `block-${proposal.block.toString(36)}`,
+            end: proposal.end,
+            start: proposal.start,
+          },
+        });
+      }
+
+      function werExport() {
+        requireReview();
+        const started = now();
+        fingerprintReads += 1;
+        const accepted = JSON.stringify({
+          fingerprint: review.acceptedFingerprint,
+          paragraphs: review.blocks.map((block) => ({ id: block.id, text: block.text })),
+        });
+        let bytes = (`{"accepted":${accepted},"modelVersion":"1","proposals":[`).length + 2;
+        let portable = 0;
+        let unsupported = 0;
+        let checksum = 0;
+        for (const proposal of review.proposals) {
+          if (proposal.kind === "document-fragment-insert") {
+            unsupported += 1;
+            continue;
+          }
+          const encoded = werProposalJson(proposal);
+          bytes += encoded.length + (portable === 0 ? 0 : 1);
+          checksum = Math.imul(checksum ^ encoded.length, 16777619);
+          portable += 1;
+        }
+        const duration = now() - started;
+        metric("WER v1 export traversal", duration, {
+          throughput: review.proposals.length / Math.max(duration / 1000, 0.001),
+          evidence: `${portable.toLocaleString()} portable; ${unsupported.toLocaleString()} unsupported; ${bytes} counted bytes; checksum ${checksum >>> 0}`,
+        });
+        lastOutcome = "Traversed every proposal, reused the accepted-state fingerprint, and reported native fragment insertions as unsupported without mutation.";
+      }
+
+      function reset() {
+        review = null;
+        nativeSnapshot = null;
+        nativeSnapshotBytes = 0;
+        metrics = [];
+        fingerprintBuilds = 0;
+        fingerprintReads = 0;
+        lastProjectionCount = 0;
+        lastOutcome = "Reset complete. Build a dataset to begin.";
+      }
+
+      const actions = { build, startDraft, finalizeDraft, reconcile, sampleInteractive, nativeSave, nativeLoad, werExport, reset };
+
+      self.onmessage = ({ data }) => {
+        const { action, count } = data;
+        self.postMessage({ type: "state", state: summarize("busy") });
+        try {
+          actions[action](count);
+        } catch (error) {
+          lastOutcome = `Refused: ${error.message}`;
+        }
+        self.postMessage({ type: "state", state: summarize("ready") });
+      };
+
+      self.postMessage({ type: "state", state: summarize("idle") });
+    </script>
+
+    <script>
+      const workerSource = document.querySelector("#worker-source").textContent;
+      const worker = new Worker(
+        URL.createObjectURL(
+          new Blob([workerSource], { type: "text/javascript" }),
+        ),
+      );
+      const countSelect = document.querySelector("#proposal-count");
+      const actionButtons = [
+        ...document.querySelectorAll("[data-action], [data-step-action]"),
+      ];
+
+      function formatNumber(value) {
+        return Number(value || 0).toLocaleString();
+      }
+
+      function formatBytes(value) {
+        if (!Number.isFinite(value) || value <= 0) return "None";
+        const units = ["B", "KiB", "MiB", "GiB"];
+        let amount = value;
+        let unit = 0;
+        while (amount >= 1024 && unit < units.length - 1) {
+          amount /= 1024;
+          unit += 1;
+        }
+        return `${amount.toFixed(unit < 2 ? 0 : 1)} ${units[unit]}`;
+      }
+
+      function formatDuration(value) {
+        if (!Number.isFinite(value)) return "—";
+        return value < 1 ? `${value.toFixed(3)} ms` : `${value.toFixed(1)} ms`;
+      }
+
+      function formatThroughput(value) {
+        if (!Number.isFinite(value)) return "—";
+        return `${Math.round(value).toLocaleString()}/s`;
+      }
+
+      function renderMetrics(metrics) {
+        const body = document.querySelector("#metrics-body");
+        if (!metrics.length) {
+          body.innerHTML = '<tr><td colspan="4">No measurements yet.</td></tr>';
+          return;
+        }
+        body.replaceChildren(
+          ...metrics.map((metric) => {
+            const row = document.createElement("tr");
+            const secondary = Number.isFinite(metric.p95)
+              ? `p95 ${formatDuration(metric.p95)}`
+              : formatThroughput(metric.throughput);
+            for (const value of [
+              metric.operation,
+              formatDuration(metric.duration),
+              secondary,
+              metric.evidence || "—",
+            ]) {
+              const cell = document.createElement("td");
+              cell.textContent = value;
+              row.append(cell);
+            }
+            return row;
+          }),
+        );
+      }
+
+      function render(state) {
+        const status = document.querySelector("#status");
+        status.textContent =
+          state.status === "busy"
+            ? "Working… page remains responsive"
+            : state.status === "ready"
+              ? "Ready"
+              : "Idle";
+        status.className = `value status ${state.status}`;
+        document.querySelector("#proposal-total").textContent = formatNumber(
+          state.proposalCount,
+        );
+        document.querySelector("#block-total").textContent = formatNumber(
+          state.blockCount,
+        );
+        document.querySelector("#draft-state").textContent = state.draft;
+        document.querySelector("#fingerprint-state").textContent =
+          `${state.fingerprintBuilds} / ${state.fingerprintReads}${state.fingerprint ? ` · ${state.fingerprint}` : ""}`;
+        document.querySelector("#projection-state").textContent =
+          state.lastProjectionCount
+            ? `${formatNumber(state.lastProjectionCount)} relevant proposals`
+            : "Not reconciled";
+        document.querySelector("#snapshot-state").textContent = formatBytes(
+          state.nativeSnapshotBytes,
+        );
+        document.querySelector("#heap-state").textContent = state.heapBytes
+          ? formatBytes(state.heapBytes)
+          : "Unavailable in this browser";
+        document.querySelector("#last-outcome").textContent = state.lastOutcome;
+        actionButtons.forEach((button) => {
+          button.disabled = state.status === "busy";
+        });
+        countSelect.disabled = state.status === "busy";
+        renderMetrics(state.metrics);
+      }
+
+      function dispatch(action, explicitCount) {
+        if (explicitCount) countSelect.value = String(explicitCount);
+        worker.postMessage({
+          action,
+          count: Number(explicitCount || countSelect.value),
+        });
+      }
+
+      document.addEventListener("click", (event) => {
+        const actionButton = event.target.closest(
+          "[data-action], [data-step-action]",
+        );
+        if (actionButton) {
+          dispatch(
+            actionButton.dataset.action || actionButton.dataset.stepAction,
+            actionButton.dataset.count,
+          );
+          return;
+        }
+
+        const tab = event.target.closest("[data-tab]");
+        if (!tab) return;
+        document.querySelectorAll("[data-tab]").forEach((item) => {
+          item.setAttribute("aria-selected", String(item === tab));
+        });
+        document.querySelectorAll(".walkthrough").forEach((walkthrough) => {
+          walkthrough.classList.toggle(
+            "active",
+            walkthrough.id === `walkthrough-${tab.dataset.tab}`,
+          );
+        });
+      });
+
+      worker.onmessage = ({ data }) => {
+        if (data.type === "state") render(data.state);
+      };
+    </script>
+  </body>
+</html>
