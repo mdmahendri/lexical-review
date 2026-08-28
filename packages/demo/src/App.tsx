@@ -2,9 +2,19 @@ import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { TextNode } from "lexical";
 import { $createReviewTextNode, ReviewTextNode } from "lexical-review";
 import "./index.css";
+import CapabilityDemoPrototype from "./capability-demo.prototype/CapabilityDemoPrototype";
 import ReviewEditor from "./ReviewEditor";
 
 function App() {
+  const isCapabilityDemoPrototype =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("prototype") ===
+      "capability-demo";
+
+  if (isCapabilityDemoPrototype) {
+    return <CapabilityDemoPrototype />;
+  }
+
   const initialConfig = {
     namespace: "demo",
     onError(error: Error) {
