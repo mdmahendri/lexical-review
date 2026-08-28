@@ -309,19 +309,19 @@
       </p>
 
       <div class="warning">
-        <strong>Question being tested:</strong> Is a narrow, state-owning
-        <code>ReviewSession</code> at <code>lexical-review</code>, paired with a
-        thin <code>lexical-review/client</code> adapter, sufficient for human
-        and complete programmatic intentions without leaking Lexical or WER into
-        the native authoring model?
+        <strong>Question being tested:</strong> Can Lexical
+        <code>EditorState</code> remain the sole live snapshot mechanism while a
+        narrow <code>ReviewSession</code> facade owns semantic operations and a
+        thin <code>lexical-review/client</code> adapter owns browser input?
       </div>
 
       <div class="recommendation">
         <strong>Prototype recommendation:</strong> publish exactly two
-        entrypoints; keep review state opaque behind one session facade; use one
-        discriminated outcome vocabulary for every semantic mutation; keep
-        proposal inspection read-only and host-selected; and always return a
-        mapping report from WER import/export.
+        entrypoints; extend Lexical snapshots through package-controlled nodes
+        and <code>NodeState</code> instead of creating a parallel review
+        snapshot; use one discriminated outcome vocabulary; let hosts map
+        explicit rejection commands to their preferred gestures; and always
+        return a mapping report from WER import/export.
       </div>
 
       <section class="grid" aria-label="API contract and state explorer">
@@ -341,10 +341,10 @@
 
         <article class="panel">
           <div class="panel-header">
-            <h2>Observable authoring state</h2>
+            <h2>Current Lexical snapshot</h2>
             <p class="lede">
-              Click calls in any order. Every call shows the package-owned state
-              and typed outcome a host would receive.
+              Click calls in any order. Every semantic change represents a new
+              immutable EditorState; no proposal owns its own document snapshot.
             </p>
           </div>
           <div class="panel-body">
@@ -587,6 +587,7 @@
           }
 
           if (action.type === "RESOLVE") {
+            const decision = action.decision ?? "accept";
             if (state.draft) {
               return finish(
                 state,
@@ -594,7 +595,7 @@
                   "active-draft",
                   "Resolution is atomic and refuses while a proposal draft is active.",
                 ),
-                "session.resolve({ decision: 'accept' })",
+                `session.resolve({ decision: '${decision}' })`,
               );
             }
             const proposal = state.proposals.find(
@@ -609,11 +610,14 @@
                   "proposal-not-pending",
                   "The requested proposal is absent or already resolved.",
                 ),
-                "session.resolve({ decision: 'accept' })",
+                `session.resolve({ decision: '${decision}' })`,
               );
             }
-            proposal.status = "accepted";
-            if (proposal.kind === "document-fragment-insertion") {
+            proposal.status = decision === "accept" ? "accepted" : "rejected";
+            if (
+              decision === "accept" &&
+              proposal.kind === "document-fragment-insertion"
+            ) {
               state.accepted.splice(
                 1,
                 0,
@@ -631,10 +635,10 @@
               state,
               changed(
                 "proposal-resolved",
-                `${proposal.id} was accepted; inspection cleared and a successor hint was computed.`,
+                `${proposal.id} was ${proposal.status}; inspection cleared and a successor hint was computed.`,
                 { successorProposalId },
               ),
-              `session.resolve({ ids: ['${proposal.id}'], decision: 'accept' })`,
+              `session.resolve({ ids: ['${proposal.id}'], decision: '${decision}' })`,
             );
           }
 
@@ -655,7 +659,7 @@
               );
             }
             state.inspected = fragment.id;
-            return invoke(state, { type: "RESOLVE" });
+            return invoke(state, { type: "RESOLVE", decision: "accept" });
           }
 
           if (action.type === "PROJECTION") {
@@ -691,7 +695,7 @@
                     },
                   },
                 ),
-                "exportWerV1(session.snapshot())",
+                "exportWerV1(session.getEditorState())",
               );
             }
             return finish(
@@ -707,7 +711,7 @@
                   },
                 },
               ),
-              "exportWerV1(session.snapshot())",
+              "exportWerV1(session.getEditorState())",
             );
           }
 
@@ -750,20 +754,27 @@
       const API = {
         root: `// lexical-review — React-free, DOM-free public model boundary
 export type ReviewOutcome<T = void> =
-  | { status: "changed"; value: T; snapshot: ReviewSnapshot }
-  | { status: "unchanged"; value: T; snapshot: ReviewSnapshot }
-  | { status: "refused"; reason: ReviewRefusal; snapshot: ReviewSnapshot }
-  | { status: "failed"; error: ReviewOperationalError; snapshot: ReviewSnapshot };
+  | { status: "changed"; value: T }
+  | { status: "unchanged"; value: T }
+  | { status: "refused"; reason: ReviewRefusal }
+  | { status: "failed"; error: ReviewOperationalError };
 
 export type ReviewDocumentV3 = Readonly<{
   version: 3;
+  editorState: SerializedEditorState;
+}>;
+
+// A read-only semantic view extracted from one Lexical EditorState. It is not
+// an additional store, a serialized document, or a per-proposal snapshot.
+export type ReviewStateView = Readonly<{
   accepted: AcceptedDocument;
-  proposals: readonly SerializedRevisionProposal[];
-  draft?: SerializedProposalDraft;
+  proposals: readonly RevisionProposal[];
+  draft: ProposalDraft | null;
 }>;
 
 export interface ReviewSession {
-  snapshot(): ReviewSnapshot;
+  getEditorState(): EditorState;
+  readState(editorState?: EditorState): ReviewStateView;
   execute(intention: ReviewIntention): ReviewOutcome<AuthoringChange>;
   finalizeDraft(): ReviewOutcome<RevisionProposal | null>;
   discardDraft(): ReviewOutcome;
@@ -779,6 +790,7 @@ export interface ReviewSession {
 }
 
 export function openReviewSession(
+  editor: LexicalEditor,
   input: unknown,
   options?: { createProposalId?: () => ProposalId },
 ): ValidationResult<ReviewSession>;
@@ -792,10 +804,11 @@ export function resolveWerV1(
   request: WerV1ResolutionRequest,
 ): WerV1ResolutionResult;
 export function importWerV1(document: WerV1Document): WerImportResult;
-export function exportWerV1(snapshot: ReviewSnapshot): WerExportResult;
+export function exportWerV1(editorState: EditorState): WerExportResult;
 
 // Data/semantic problems return results. Throws are reserved for programmer
-// misuse and impossible package invariant violations.`,
+// misuse and impossible package invariant violations. Lexical EditorState is
+// the only live snapshot mechanism.`,
 
         client: `"use client";
 
@@ -829,14 +842,19 @@ export const FINALIZE_PROPOSAL_DRAFT_COMMAND: LexicalCommand<void>;
 export const DISCARD_PROPOSAL_DRAFT_COMMAND: LexicalCommand<void>;
 export const REAUTHOR_PROPOSAL_COMMAND: LexicalCommand<ProposalId>;
 export const RESOLVE_PROPOSALS_COMMAND: LexicalCommand<ResolutionRequest>;
+export const REJECT_PROPOSALS_COMMAND: LexicalCommand<readonly ProposalId[]>;
 export const SET_REVIEW_PROJECTION_COMMAND: LexicalCommand<ProjectionMode>;
 
 // The client owns transient selection mapping and duplicate-event claiming.
-// It never makes Lexical nodes, DOM, or EditorState authoritative review state.`,
+// Hosts choose which toolbar or keyboard gesture dispatches explicit rejection.
+// The client never creates a parallel state store beside EditorState.`,
 
         ownership: `PACKAGE INVARIANTS
 ──────────────────
 • One accepted document, any number of finalized proposals, zero or one draft.
+• Lexical EditorState is the sole live snapshot and transaction mechanism.
+• Package-controlled nodes and NodeState may carry semantic review data.
+• No proposal owns a document snapshot; segments do not define proposal identity.
 • Finalized semantic identity, kind, target, and payload are immutable.
 • Every mutation is atomic; refusal preserves state and logical selection.
 • Native review serialization is version 3 and distinct from WER v1.
@@ -852,6 +870,7 @@ HOST POLICIES
 • Persistence, transport, concurrent editing, merge, and audit retention.
 • Which proposal to inspect and whether to follow a successor hint.
 • Focus movement, keyboard bindings, toolbar design, and notifications.
+• Which explicit gesture dispatches REJECT_PROPOSALS_COMMAND.
 • Whether copy uses all-accepted or accepted-state content.
 • Whether trusted Lexical clipboard content is considered before HTML/text.
 
@@ -872,7 +891,12 @@ CONFIGURATION ERRORS THAT THROW
         ["api-type", "Insert via API", { type: "TYPE", route: "session" }],
         ["finalize", "Finalize draft", { type: "FINALIZE" }],
         ["inspect", "Inspect next", { type: "INSPECT" }],
-        ["accept", "Accept inspected", { type: "RESOLVE" }],
+        ["accept", "Accept inspected", { type: "RESOLVE", decision: "accept" }],
+        [
+          "reject-shortcut",
+          "Reject inspected (host shortcut)",
+          { type: "RESOLVE", decision: "reject" },
+        ],
         [
           "accepted-preview",
           "Accepted-state preview",
@@ -905,6 +929,12 @@ CONFIGURATION ERRORS THAT THROW
           description:
             "Start continuous authoring, inspect existing work, then attempt resolution. The active draft makes the semantic request refuse without mutation.",
           steps: ["keyboard-type", "inspect", "accept", "finalize", "accept"],
+        },
+        {
+          title: "Custom rejection gesture",
+          description:
+            "The host maps any deliberate shortcut to the typed rejection command. Plain Delete and Backspace keep their editing meaning; the semantic service receives an explicit proposal ID and reject decision.",
+          steps: ["inspect", "reject-shortcut"],
         },
         {
           title: "WER boundary",
