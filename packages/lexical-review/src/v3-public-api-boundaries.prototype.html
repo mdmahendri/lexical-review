@@ -316,12 +316,13 @@
       </div>
 
       <div class="recommendation">
-        <strong>Prototype recommendation:</strong> publish exactly two
-        entrypoints; extend Lexical snapshots through package-controlled nodes
-        and <code>NodeState</code> instead of creating a parallel review
-        snapshot; use one discriminated outcome vocabulary; let hosts map
-        explicit rejection commands to their preferred gestures; and always
-        return a mapping report from WER import/export.
+        <strong>Prototype recommendation:</strong> publish three entrypoints;
+        extend Lexical snapshots through package-controlled nodes and
+        <code>NodeState</code> instead of creating a parallel review snapshot;
+        make native import/export a validated root contract; isolate
+        version-selected interchange behind <code>lexical-review/wer</code>; use
+        one discriminated outcome vocabulary; and let hosts map explicit
+        rejection commands to their preferred gestures.
       </div>
 
       <section class="grid" aria-label="API contract and state explorer">
@@ -331,6 +332,7 @@
             <div class="tabs" data-api-tabs>
               <button class="active" data-api="root">React-free root</button>
               <button data-api="client">Client / editor</button>
+              <button data-api="wer">WER interchange</button>
               <button data-api="ownership">Ownership rules</button>
             </div>
           </div>
@@ -715,6 +717,55 @@
             );
           }
 
+          if (action.type === "EXPORT_NATIVE") {
+            state.nativeBuffer = {
+              accepted: clone(state.accepted),
+              draft: clone(state.draft),
+              proposals: clone(state.proposals),
+              reviewVersion: 3,
+            };
+            return finish(
+              state,
+              unchanged(
+                "native-review-document-exported",
+                "The current EditorState was validated and serialized with v3 review metadata on the root node.",
+              ),
+              "exportReviewDocument(session.getEditorState())",
+            );
+          }
+
+          if (action.type === "IMPORT_NATIVE") {
+            if (!state.nativeBuffer) {
+              return finish(
+                state,
+                refused(
+                  "missing-native-document",
+                  "Export a native review document before opening it in a new session.",
+                ),
+                "importReviewDocument(editor, input)",
+              );
+            }
+            const sameSemantics =
+              JSON.stringify(state.nativeBuffer.accepted) ===
+                JSON.stringify(state.accepted) &&
+              JSON.stringify(state.nativeBuffer.draft) ===
+                JSON.stringify(state.draft) &&
+              JSON.stringify(state.nativeBuffer.proposals) ===
+                JSON.stringify(state.proposals);
+            return finish(
+              state,
+              unchanged(
+                sameSemantics
+                  ? "native-round-trip-proven"
+                  : "native-successor-normalized",
+                sameSemantics
+                  ? "A new editor parsed the document and exposed equivalent accepted state, proposals, and draft."
+                  : "The imported document is valid but represents an earlier successor than the current editor.",
+              ),
+              "importReviewDocument(newEditor, nativeDocument)",
+            );
+          }
+
           if (action.type === "SAVE") {
             state.successor += 1;
             return finish(
@@ -759,10 +810,12 @@ export type ReviewOutcome<T = void> =
   | { status: "refused"; reason: ReviewRefusal }
   | { status: "failed"; error: ReviewOperationalError };
 
-export type ReviewDocumentV3 = Readonly<{
-  version: 3;
-  editorState: SerializedEditorState;
-}>;
+// A validated SerializedEditorState whose root NodeState contains the v3
+// review envelope. No outer runtime wrapper or EditorState subclass is needed.
+export declare const reviewDocumentV3Brand: unique symbol;
+export type ReviewDocumentV3 = SerializedEditorState & {
+  readonly [reviewDocumentV3Brand]: true;
+};
 
 // A read-only semantic view extracted from one Lexical EditorState. It is not
 // an additional store, a serialized document, or a per-proposal snapshot.
@@ -795,16 +848,16 @@ export function openReviewSession(
   options?: { createProposalId?: () => ProposalId },
 ): ValidationResult<ReviewSession>;
 
-// WER is an adapter boundary, never the native authoring state.
-export function validateWerV1(input: unknown): ValidationResult<WerV1Document>;
-export function canonicalizeWerV1(document: WerV1Document): Uint8Array;
-export function fingerprintWerV1AcceptedState(document: WerV1Document): string;
-export function resolveWerV1(
-  document: WerV1Document,
-  request: WerV1ResolutionRequest,
-): WerV1ResolutionResult;
-export function importWerV1(document: WerV1Document): WerImportResult;
-export function exportWerV1(editorState: EditorState): WerExportResult;
+export function exportReviewDocument(
+  editorState: EditorState,
+): ValidationResult<ReviewDocumentV3>;
+
+// Parses and validates without mutating the live editor. The host or
+// openReviewSession installs the returned state only after success.
+export function importReviewDocument(
+  editor: LexicalEditor,
+  input: unknown,
+): ValidationResult<EditorState>;
 
 // Data/semantic problems return results. Throws are reserved for programmer
 // misuse and impossible package invariant violations. Lexical EditorState is
@@ -849,6 +902,41 @@ export const SET_REVIEW_PROJECTION_COMMAND: LexicalCommand<ProjectionMode>;
 // Hosts choose which toolbar or keyboard gesture dispatches explicit rejection.
 // The client never creates a parallel state store beside EditorState.`,
 
+        wer: `// lexical-review/wer — React-free, editor-free interchange boundary
+import type { ReviewDocumentV3 } from "lexical-review";
+
+export type WerModelVersion = "1";
+
+export interface WerAdapter<V extends WerModelVersion> {
+  readonly modelVersion: V;
+  validate(input: unknown): ValidationResult<WerDocument<V>>;
+  canonicalize(document: WerDocument<V>): Uint8Array;
+  fingerprintAcceptedState(document: WerDocument<V>): string;
+  resolve(
+    document: WerDocument<V>,
+    request: WerResolutionRequest<V>,
+  ): WerResolutionResult<V>;
+
+  // These are serialized-document mappings. They never accept a live editor,
+  // ReviewSession, EditorState, DOM, or selection.
+  importToReviewDocument(
+    document: WerDocument<V>,
+  ): WerImportResult<ReviewDocumentV3>;
+  exportFromReviewDocument(
+    document: ReviewDocumentV3,
+  ): WerExportResult<WerDocument<V>>;
+}
+
+export function createWerAdapter<V extends WerModelVersion>(options: {
+  modelVersion: V;
+}): WerAdapter<V>;
+
+const wer = createWerAdapter({ modelVersion: "1" });
+const portable = wer.exportFromReviewDocument(nativeReviewDocument);
+
+// A future model adds one registry implementation and WerModelVersion member;
+// callers select it once rather than passing a version to every operation.`,
+
         ownership: `PACKAGE INVARIANTS
 ──────────────────
 • One accepted document, any number of finalized proposals, zero or one draft.
@@ -858,6 +946,7 @@ export const SET_REVIEW_PROJECTION_COMMAND: LexicalCommand<ProjectionMode>;
 • Finalized semantic identity, kind, target, and payload are immutable.
 • Every mutation is atomic; refusal preserves state and logical selection.
 • Native review serialization is version 3 and distinct from WER v1.
+• Native EditorState import/export validates before installation or serialization.
 • Projections are derived, read-only views; previewing never resolves.
 • WER import/export always validates and always returns a mapping report.
 • The six portable kinds are supported; native document-fragment insertion
@@ -871,6 +960,7 @@ HOST POLICIES
 • Which proposal to inspect and whether to follow a successor hint.
 • Focus movement, keyboard bindings, toolbar design, and notifications.
 • Which explicit gesture dispatches REJECT_PROPOSALS_COMMAND.
+• Which WER model version to request from lexical-review/wer.
 • Whether copy uses all-accepted or accepted-state content.
 • Whether trusted Lexical clipboard content is considered before HTML/text.
 
@@ -897,6 +987,8 @@ CONFIGURATION ERRORS THAT THROW
           "Reject inspected (host shortcut)",
           { type: "RESOLVE", decision: "reject" },
         ],
+        ["export-native", "Export native document", { type: "EXPORT_NATIVE" }],
+        ["import-native", "Import in new editor", { type: "IMPORT_NATIVE" }],
         [
           "accepted-preview",
           "Accepted-state preview",
@@ -929,6 +1021,12 @@ CONFIGURATION ERRORS THAT THROW
           description:
             "Start continuous authoring, inspect existing work, then attempt resolution. The active draft makes the semantic request refuse without mutation.",
           steps: ["keyboard-type", "inspect", "accept", "finalize", "accept"],
+        },
+        {
+          title: "Native round trip",
+          description:
+            "Export the current immutable EditorState, then parse and validate it in a new editor. Accepted state, proposal records, and the optional draft survive; transient selection and UI state do not.",
+          steps: ["export-native", "import-native"],
         },
         {
           title: "Custom rejection gesture",
