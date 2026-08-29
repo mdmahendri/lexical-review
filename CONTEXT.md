@@ -41,12 +41,16 @@ A period of editing during which session-local review state evolves from a seria
 _Avoid_: Editor instance, review document
 
 **Proposal draft**:
-A mutable candidate change within review state before it receives stable proposal identity. It may be edited or discarded without proposal resolution.
+A live-only mutable candidate change within review state before it receives stable proposal identity. It may be edited or discarded without proposal resolution and is never part of a native review document or WER interchange document.
 _Avoid_: Revision proposal, pending proposal
 
 **Proposal finalization**:
-The local authoring transition that validates one proposal draft, assigns immutable semantic identity, and makes it a revision proposal within review state. It does not serialize a review document or produce a WER interchange document.
+The local authoring transition that validates one proposal draft, assigns immutable semantic identity, and makes it a revision proposal within review state. It may be requested explicitly or by draft settlement before another state-changing semantic operation. It does not itself serialize a review document or produce a WER interchange document.
 _Avoid_: Proposal draft export, WER export, proposal resolution, commit
+
+**Draft settlement**:
+The common preflight applied before a state-changing semantic operation when a proposal draft exists. Compatible authoring continues the draft; explicit discard removes it; otherwise the draft is finalized before the requested operation proceeds, and both changes commit atomically. Caret, selection, focus, navigation, preview, and content-only copy do not invoke draft settlement.
+_Avoid_: Blur commit, caret finalization, implicit export
 
 **Text composition**:
 A native editor-input session with provisional intermediate text. Each completed session is normalized by the editor integration into zero or one insertion, deletion, or replacement intention; it is neither a proposal draft nor a revision proposal.
@@ -57,12 +61,20 @@ An explicit flow that uses a pending revision proposal as the starting point for
 _Avoid_: Proposal replacement, proposal revision, edit proposal, mutate proposal
 
 **Revision proposal**:
-An independently reviewable lifecycle record whose semantic identity, kind, target, and payload are immutable after finalization.
+An independently reviewable lifecycle record whose semantic identity, kind, payload, and semantic attachment are immutable after finalization. Its stored target locator and base reference may be deterministically remapped to a successor accepted document state without changing that attachment.
 _Avoid_: Edit operation, history entry, review segment
 
+**Semantic attachment**:
+The stable meaning of where a revision proposal applies across accepted document state transitions, independent of remappable target coordinates or base references.
+_Avoid_: Immutable coordinates, selection bookmark
+
 **Review document**:
-Lexical Review's native, Lexical-shaped serialization of review state. It is distinct from a WER interchange document and need not satisfy the WER schema.
+Lexical Review's native, Lexical-shaped serialization of accepted content and finalized revision proposals. It excludes the live proposal draft, is distinct from a WER interchange document, and need not satisfy the WER schema.
 _Avoid_: WER interchange document, review projection, accepted document state
+
+**Native review extension**:
+A stable URI-identified, versioned data envelope at document or revision-proposal scope that adds metadata without changing the core semantics of a review document version.
+_Avoid_: Unknown field, WER extension
 
 **Review state**:
 The mutable working representation of accepted content, revision proposals, and zero or one active proposal draft during an authoring session. It is distinct from both its visible projection and serialized forms.
@@ -101,7 +113,7 @@ A portable artifact conforming to a WER model, containing one accepted document 
 _Avoid_: Review document, review state, editor serialization
 
 **Interchange adapter**:
-A direction-specific mapping between Lexical Review's native review document or review state and a WER interchange document. It validates the boundary and reports normalization, synthesis, refusal, or loss under a declared mapping profile.
+A direction-specific mapping between a serialized Lexical Review native review document and a WER interchange document. It never receives live review state or an active proposal draft, and it validates the boundary and reports normalization, synthesis, refusal, or loss under a declared mapping profile.
 _Avoid_: Universal converter, native model
 
 **Capability demo**:
