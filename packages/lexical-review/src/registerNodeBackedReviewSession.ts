@@ -3,6 +3,7 @@ import {
   $getRoot,
   $getSelection,
   $isElementNode,
+  $isParagraphNode,
   $isRangeSelection,
   $isTextNode,
   BEFORE_INPUT_COMMAND,
@@ -25,6 +26,7 @@ import {
   type ElementNode,
   type LexicalEditor,
   type LexicalNode,
+  type ParagraphNode,
   type PointType,
   type RangeSelection,
   type TextNode,
@@ -200,13 +202,8 @@ function failed(cause: unknown, message: string): ReviewNodeOutcome {
   };
 }
 
-function isParagraph(node: LexicalNode | null): node is ElementNode {
-  return (
-    node !== null &&
-    $isElementNode(node) &&
-    node.getType() === "paragraph" &&
-    node.getParent() === $getRoot()
-  );
+function isRootParagraph(node: LexicalNode | null): node is ParagraphNode {
+  return $isParagraphNode(node) && node.getParent() === $getRoot();
 }
 
 function isReviewElementNode(
@@ -454,7 +451,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       );
     }
     const parentNode: LexicalNode | null = node.getParent();
-    if (isParagraph(parentNode)) {
+    if (isRootParagraph(parentNode)) {
       const structure = validateParagraphStructure(parentNode);
       if (structure !== null) {
         return { reason: structure, status: "refused" };
@@ -479,7 +476,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
     }
     if (
       isReviewElementNode(parentNode) &&
-      isParagraph(parentNode.getParent())
+      isRootParagraph(parentNode.getParent())
     ) {
       const parent = parentNode;
       const paragraph = parent.getParent();
@@ -531,7 +528,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       "The element selection point has an invalid child offset.",
     );
   }
-  if (isReviewElementNode(node) && isParagraph(node.getParent())) {
+  if (isReviewElementNode(node) && isRootParagraph(node.getParent())) {
     const children = getTextChildren(node);
     if (children === null || point.offset > children.length) {
       return refusal(
@@ -572,7 +569,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       },
     };
   }
-  if (isParagraph(node)) {
+  if (isRootParagraph(node)) {
     const structure = validateParagraphStructure(node);
     if (structure !== null) {
       return { reason: structure, status: "refused" };
