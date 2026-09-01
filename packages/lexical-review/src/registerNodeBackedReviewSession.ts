@@ -98,7 +98,7 @@ type AcceptedPoint = Readonly<{
   childIndex: number;
   node: TextNode | null;
   offset: number;
-  paragraph: ElementNode;
+  paragraph: ParagraphNode;
 }>;
 
 type ProposalPoint = Readonly<{
@@ -107,7 +107,7 @@ type ProposalPoint = Readonly<{
   kind: ProposalKind;
   node: TextNode | null;
   offset: number;
-  paragraph: ElementNode;
+  paragraph: ParagraphNode;
   wrapper: ReviewElementNode;
 }>;
 
@@ -139,7 +139,7 @@ type ProposalMapEntry = Readonly<{
 type ProposalMap = Readonly<{
   entries: readonly ProposalMapEntry[];
   kind: ProposalKind;
-  paragraph: ElementNode;
+  paragraph: ParagraphNode;
   total: number;
   wrappers: readonly ReviewElementNode[];
   proposalId: string;
@@ -160,7 +160,7 @@ type AcceptedMapEntry = Readonly<{
 
 type AcceptedMap = Readonly<{
   entries: readonly AcceptedMapEntry[];
-  paragraph: ElementNode;
+  paragraph: ParagraphNode;
   total: number;
 }>;
 
@@ -210,6 +210,33 @@ function isReviewElementNode(
   node: LexicalNode | null | undefined,
 ): node is ReviewElementNode {
   return $isReviewDeletionNode(node) || $isReviewInsertionNode(node);
+}
+
+type RootProposalContext = Readonly<{
+  paragraph: ParagraphNode;
+  wrapper: ReviewElementNode;
+}>;
+
+function getRootProposalContext(
+  node: LexicalNode | null | undefined,
+): RootProposalContext | null {
+  if (!isReviewElementNode(node)) {
+    return null;
+  }
+  const paragraph = node.getParent();
+  return isRootParagraph(paragraph) ? { paragraph, wrapper: node } : null;
+}
+
+function isSameProposalNode(
+  node: LexicalNode | null | undefined,
+  kind: ProposalKind,
+  proposalId: string,
+): node is ReviewElementNode {
+  return (
+    isReviewElementNode(node) &&
+    node.getProposalKind() === kind &&
+    node.getProposalId() === proposalId
+  );
 }
 
 function snapshotPoint(point: PointType): PointSnapshot {
@@ -325,7 +352,7 @@ function getTextChildren(wrapper: ReviewElementNode): TextNode[] | null {
 }
 
 function validateParagraphStructure(
-  paragraph: ElementNode,
+  paragraph: ParagraphNode,
 ): ReviewNodeRefusal | null {
   for (const child of paragraph.getChildren()) {
     if ($isTextNode(child)) {
@@ -474,24 +501,22 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
         },
       };
     }
-    if (
-      isReviewElementNode(parentNode) &&
-      isRootParagraph(parentNode.getParent())
-    ) {
-      const parent = parentNode;
-      const paragraph = parent.getParent();
-      if (paragraph === null) {
-        return refusal(
-          "invalid-structural-target",
-          "The selected proposal wrapper has no paragraph parent.",
-        );
-      }
+    const proposal = getRootProposalContext(parentNode);
+    if (proposal !== null) {
+      const { paragraph, wrapper: parent } = proposal;
       const structure = validateParagraphStructure(paragraph);
       if (structure !== null) {
         return { reason: structure, status: "refused" };
       }
       const childIndex = getChildIndex(paragraph, parent);
-      if (childIndex === null || getTextChildren(parent) === null) {
+      if (childIndex === null) {
+        return refusal(
+          "invalid-structural-target",
+          "The selected proposal wrapper is not attached to its paragraph.",
+        );
+      }
+      const textChildren = getTextChildren(parent);
+      if (textChildren === null) {
         return refusal(
           "invalid-structural-target",
           "The selected proposal wrapper has unsupported live children.",
@@ -528,19 +553,14 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       "The element selection point has an invalid child offset.",
     );
   }
-  if (isReviewElementNode(node) && isRootParagraph(node.getParent())) {
-    const children = getTextChildren(node);
-    if (children === null || point.offset > children.length) {
+  const proposal = getRootProposalContext(node);
+  if (proposal !== null) {
+    const { paragraph, wrapper } = proposal;
+    const textChildren = getTextChildren(wrapper);
+    if (textChildren === null || point.offset > textChildren.length) {
       return refusal(
         "invalid-structural-target",
         "The proposal element point does not identify a supported child boundary.",
-      );
-    }
-    const paragraph = node.getParent();
-    if (paragraph === null) {
-      return refusal(
-        "invalid-structural-target",
-        "The selected proposal wrapper has no paragraph parent.",
       );
     }
     const structure = validateParagraphStructure(paragraph);
@@ -559,13 +579,13 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       value: {
         association: "proposal",
         childIndex,
-        kind: node.getProposalKind(),
+        kind: wrapper.getProposalKind(),
         node: null,
-        offset: children
+        offset: textChildren
           .slice(0, point.offset)
           .reduce((total, child) => total + child.getTextContentSize(), 0),
         paragraph,
-        wrapper: node,
+        wrapper,
       },
     };
   }
@@ -583,10 +603,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
     }
     const left = children[point.offset - 1];
     const right = children[point.offset];
-    if (
-      isReviewElementNode(left ?? null) ||
-      isReviewElementNode(right ?? null)
-    ) {
+    if (isReviewElementNode(left) || isReviewElementNode(right)) {
       return refusal(
         "ambiguous-boundary",
         "A paragraph boundary next to proposal content does not identify one editing side.",
@@ -646,13 +663,12 @@ function inspectSelection(): Preparation<SelectionInspection> {
 function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
   return (
     left.paragraph === right.paragraph &&
-    left.kind === right.kind &&
-    left.wrapper.getProposalId() === right.wrapper.getProposalId()
+    isSameProposalNode(left.wrapper, right.kind, right.wrapper.getProposalId())
   );
 }
 
 function buildProposalMap(
-  paragraph: ElementNode,
+  paragraph: ParagraphNode,
   startWrapper: ReviewElementNode,
   endWrapper: ReviewElementNode,
 ): Preparation<ProposalMap> {
@@ -672,11 +688,7 @@ function buildProposalMap(
   const children = paragraph.getChildren();
   for (let index = startIndex; index <= endIndex; index += 1) {
     const child = children[index];
-    if (
-      !isReviewElementNode(child) ||
-      child.getProposalKind() !== kind ||
-      child.getProposalId() !== proposalId
-    ) {
+    if (!isSameProposalNode(child, kind, proposalId)) {
       return refusal(
         "unsafe-proposal-intersection",
         "The selection intersects accepted content or another proposal identity.",
@@ -725,10 +737,7 @@ function buildProposalMapAroundPoint(
   const proposalId = point.wrapper.getProposalId();
   const isSameWrapper = (
     child: LexicalNode | undefined,
-  ): child is ReviewElementNode =>
-    isReviewElementNode(child) &&
-    child.getProposalKind() === kind &&
-    child.getProposalId() === proposalId;
+  ): child is ReviewElementNode => isSameProposalNode(child, kind, proposalId);
 
   while (startIndex > 0 && isSameWrapper(children[startIndex - 1])) {
     startIndex -= 1;
@@ -819,7 +828,7 @@ function buildProposalSpan(
   return { status: "ready", value: { end, map: map.value, start } };
 }
 
-function buildAcceptedMap(paragraph: ElementNode): Preparation<AcceptedMap> {
+function buildAcceptedMap(paragraph: ParagraphNode): Preparation<AcceptedMap> {
   const entries: AcceptedMapEntry[] = [];
   let offset = 0;
   for (const [childIndex, child] of paragraph.getChildren().entries()) {
@@ -983,7 +992,7 @@ function getAcceptedSelectedNodes(span: AcceptedSpan): TextNode[] | null {
 }
 
 function placeCaretAfterWrapper(
-  paragraph: ElementNode,
+  paragraph: ParagraphNode,
   wrapper: ReviewElementNode,
 ): void {
   const wrapperIndex = getChildIndex(paragraph, wrapper);
