@@ -115,6 +115,40 @@ function open(
 }
 
 describe("node-backed review session targeting", () => {
+  it.each(["review-insertion", "review-deletion"] as const)(
+    "merges adjacent %s wrappers sharing one proposal identity",
+    async (kind) => {
+      const editor = createReviewEditor();
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            proposal(kind, "shared", "A"),
+            proposal(kind, "shared", "B", 1),
+          ]),
+        ]),
+      );
+      await Promise.resolve();
+
+      editor.getEditorState().read(() => {
+        const children = firstParagraph().getChildren();
+        expect(children).toHaveLength(1);
+        const wrapper = children[0];
+        expect($isElementNode(wrapper)).toBe(true);
+        if (!$isElementNode(wrapper)) {
+          return;
+        }
+        expect(wrapper.getTextContent()).toBe("AB");
+        expect(
+          wrapper
+            .getChildren()
+            .map((child) => ($isTextNode(child) ? child.getFormat() : null)),
+        ).toEqual([0, 1]);
+      });
+      unregister();
+    },
+  );
+
   it.each([0, 2])(
     "continues an insertion at its proposal boundary offset %s",
     async (offset) => {
@@ -780,7 +814,7 @@ describe("node-backed review session targeting", () => {
     },
   );
 
-  it("allows a selection across adjacent nodes sharing one proposal identity", async () => {
+  it("allows a selection across formatted nodes sharing one proposal identity", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewNodeOutcome[] = [];
     const { unregister } = open(
@@ -788,20 +822,22 @@ describe("node-backed review session targeting", () => {
       reviewDocument([
         paragraph([
           proposal("review-insertion", "shared", "A"),
-          proposal("review-insertion", "shared", "B"),
+          proposal("review-insertion", "shared", "B", 1),
         ]),
       ]),
       outcomes,
     );
     await update(editor, () => {
       const paragraphNode = firstParagraph();
-      const first = paragraphNode.getChildAtIndex(0);
-      const second = paragraphNode.getChildAtIndex(1);
-      if (!$isElementNode(first) || !$isElementNode(second)) {
-        throw new Error("Expected adjacent proposal wrappers.");
+      const wrapper = paragraphNode.getChildAtIndex(0);
+      if (!$isElementNode(wrapper)) {
+        throw new Error("Expected one proposal wrapper.");
       }
-      const firstNode = firstText(first);
-      const secondNode = firstText(second);
+      const firstNode = wrapper.getChildAtIndex(0);
+      const secondNode = wrapper.getChildAtIndex(1);
+      if (!$isTextNode(firstNode) || !$isTextNode(secondNode)) {
+        throw new Error("Expected formatted proposal text nodes.");
+      }
       firstNode.select(0, 0);
       const selection = $getSelection();
       if (!$isRangeSelection(selection)) {

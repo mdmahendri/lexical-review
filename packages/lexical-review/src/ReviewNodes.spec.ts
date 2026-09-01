@@ -8,6 +8,7 @@ import {
   type LexicalEditor,
 } from "lexical";
 import {
+  $canReviewElementNodesBeMerged,
   $createReviewDeletionNode,
   $createReviewInsertionNode,
   $isReviewDeletionNode,
@@ -58,7 +59,9 @@ describe("review proposal element nodes", () => {
       expect($isReviewInsertionNode(deletion)).toBe(false);
 
       expect(insertion.getProposalId()).toBe("proposal-a");
+      expect(insertion.getProposalKind()).toBe("insertion");
       expect(deletion.getProposalId()).toBe("proposal-b");
+      expect(deletion.getProposalKind()).toBe("deletion");
     });
   });
 
@@ -175,6 +178,26 @@ describe("review proposal element nodes", () => {
 
       expect(insertion.getKey()).not.toBe(secondInsertion.getKey());
       expect(insertion.getProposalId()).toBe(secondInsertion.getProposalId());
+    });
+  });
+
+  it("identifies review element nodes sharing proposal kind and identity", async () => {
+    const editor = createReviewEditor();
+
+    await update(editor, () => {
+      const first = $createReviewDeletionNode("shared-proposal");
+      const second = $createReviewDeletionNode("shared-proposal");
+      const otherProposal = $createReviewDeletionNode("other-proposal");
+      const otherKind = $createReviewInsertionNode("shared-proposal");
+      const otherWrapperState = $createReviewDeletionNode("shared-proposal");
+      otherWrapperState.setDirection("rtl");
+
+      expect($canReviewElementNodesBeMerged(first, second)).toBe(true);
+      expect($canReviewElementNodesBeMerged(first, otherProposal)).toBe(false);
+      expect($canReviewElementNodesBeMerged(first, otherKind)).toBe(false);
+      expect($canReviewElementNodesBeMerged(first, otherWrapperState)).toBe(
+        true,
+      );
     });
   });
 

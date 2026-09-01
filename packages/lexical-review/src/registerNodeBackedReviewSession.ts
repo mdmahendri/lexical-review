@@ -32,19 +32,25 @@ import {
 import { mergeRegister } from "@lexical/utils";
 import { isValidProposalId } from "./ProposalIdentity";
 import {
+  $canReviewElementNodesBeMerged,
   $createReviewDeletionNode,
   $createReviewInsertionNode,
   $isReviewDeletionNode,
   $isReviewInsertionNode,
   ReviewDeletionNode,
+  ReviewElementNode,
   ReviewInsertionNode,
+  type ProposalKind,
 } from "./ReviewNodes";
 import type { ReviewSession } from "./ReviewSession";
 
-type ProposalKind = "deletion" | "insertion";
-type ReviewWrapper = ReviewDeletionNode | ReviewInsertionNode;
-
 const SUPPORTED_TEXT_FORMAT_MASK = 0b1111;
+
+type PointSnapshot = Readonly<{
+  key: string;
+  offset: number;
+  type: "element" | "text";
+}>;
 
 export type ReviewNodeRefusalCode =
   | "ambiguous-boundary"
@@ -100,7 +106,7 @@ type ProposalPoint = Readonly<{
   node: TextNode | null;
   offset: number;
   paragraph: ElementNode;
-  wrapper: ReviewWrapper;
+  wrapper: ReviewElementNode;
 }>;
 
 type SelectionPoint = AcceptedPoint | ProposalPoint;
@@ -125,7 +131,7 @@ type ProposalMapEntry = Readonly<{
   end: number;
   node: TextNode;
   start: number;
-  wrapper: ReviewWrapper;
+  wrapper: ReviewElementNode;
 }>;
 
 type ProposalMap = Readonly<{
@@ -133,7 +139,7 @@ type ProposalMap = Readonly<{
   kind: ProposalKind;
   paragraph: ElementNode;
   total: number;
-  wrappers: readonly ReviewWrapper[];
+  wrappers: readonly ReviewElementNode[];
   proposalId: string;
 }>;
 
@@ -203,14 +209,102 @@ function isParagraph(node: LexicalNode | null): node is ElementNode {
   );
 }
 
-function isReviewWrapper(
+function isReviewElementNode(
   node: LexicalNode | null | undefined,
-): node is ReviewWrapper {
+): node is ReviewElementNode {
   return $isReviewDeletionNode(node) || $isReviewInsertionNode(node);
 }
 
-function getProposalKind(wrapper: ReviewWrapper): ProposalKind {
-  return $isReviewDeletionNode(wrapper) ? "deletion" : "insertion";
+function snapshotPoint(point: PointType): PointSnapshot {
+  return { key: point.key, offset: point.offset, type: point.type };
+}
+
+function restorePointAfterReviewElementMerge(
+  point: PointType,
+  snapshot: PointSnapshot,
+  left: ReviewElementNode,
+  right: ReviewElementNode,
+  parent: ElementNode,
+  leftChildCount: number,
+  rightIndex: number,
+): void {
+  if (snapshot.type === "element" && snapshot.key === right.getKey()) {
+    point.set(left.getKey(), leftChildCount + snapshot.offset, "element");
+    return;
+  }
+  if (snapshot.type === "element" && snapshot.key === parent.getKey()) {
+    if (snapshot.offset === rightIndex) {
+      point.set(left.getKey(), leftChildCount, "element");
+    } else if (snapshot.offset > rightIndex) {
+      point.set(parent.getKey(), snapshot.offset - 1, "element");
+    } else {
+      point.set(parent.getKey(), snapshot.offset, "element");
+    }
+    return;
+  }
+  point.set(snapshot.key, snapshot.offset, snapshot.type);
+}
+
+function mergeReviewElementNodes(
+  left: ReviewElementNode,
+  right: ReviewElementNode,
+): void {
+  const parent = left.getParent();
+  const rightIndex = right.getIndexWithinParent();
+  if (!$isElementNode(parent) || rightIndex < 0) {
+    return;
+  }
+  const leftChildCount = left.getChildrenSize();
+  const selection = $getSelection();
+  const anchor = $isRangeSelection(selection)
+    ? snapshotPoint(selection.anchor)
+    : null;
+  const focus = $isRangeSelection(selection)
+    ? snapshotPoint(selection.focus)
+    : null;
+
+  left.append(...right.getChildren());
+  right.remove();
+
+  if ($isRangeSelection(selection) && anchor !== null && focus !== null) {
+    restorePointAfterReviewElementMerge(
+      selection.anchor,
+      anchor,
+      left,
+      right,
+      parent,
+      leftChildCount,
+      rightIndex,
+    );
+    restorePointAfterReviewElementMerge(
+      selection.focus,
+      focus,
+      left,
+      right,
+      parent,
+      leftChildCount,
+      rightIndex,
+    );
+    selection.dirty = true;
+  }
+}
+
+function normalizeReviewElementNode(node: ReviewElementNode): void {
+  if (!node.isAttached()) {
+    return;
+  }
+  const previous = node.getPreviousSibling();
+  if (
+    isReviewElementNode(previous) &&
+    $canReviewElementNodesBeMerged(previous, node)
+  ) {
+    mergeReviewElementNodes(previous, node);
+    return;
+  }
+  const next = node.getNextSibling();
+  if (isReviewElementNode(next) && $canReviewElementNodesBeMerged(node, next)) {
+    mergeReviewElementNodes(node, next);
+  }
 }
 
 function getChildIndex(parent: ElementNode, node: LexicalNode): number | null {
@@ -220,7 +314,7 @@ function getChildIndex(parent: ElementNode, node: LexicalNode): number | null {
   return index === -1 ? null : index;
 }
 
-function getTextChildren(wrapper: ReviewWrapper): TextNode[] | null {
+function getTextChildren(wrapper: ReviewElementNode): TextNode[] | null {
   const children = wrapper.getChildren();
   if (
     children.length === 0 ||
@@ -247,7 +341,7 @@ function validateParagraphStructure(
       }
       continue;
     }
-    if (isReviewWrapper(child)) {
+    if (isReviewElementNode(child)) {
       const textChildren = getTextChildren(child);
       if (textChildren === null) {
         return {
@@ -383,7 +477,10 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
         },
       };
     }
-    if (isReviewWrapper(parentNode) && isParagraph(parentNode.getParent())) {
+    if (
+      isReviewElementNode(parentNode) &&
+      isParagraph(parentNode.getParent())
+    ) {
       const parent = parentNode;
       const paragraph = parent.getParent();
       if (paragraph === null) {
@@ -408,7 +505,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
         value: {
           association: "proposal",
           childIndex,
-          kind: getProposalKind(parent),
+          kind: parent.getProposalKind(),
           node,
           offset: point.offset,
           paragraph,
@@ -434,7 +531,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       "The element selection point has an invalid child offset.",
     );
   }
-  if (isReviewWrapper(node) && isParagraph(node.getParent())) {
+  if (isReviewElementNode(node) && isParagraph(node.getParent())) {
     const children = getTextChildren(node);
     if (children === null || point.offset > children.length) {
       return refusal(
@@ -465,7 +562,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       value: {
         association: "proposal",
         childIndex,
-        kind: getProposalKind(node),
+        kind: node.getProposalKind(),
         node: null,
         offset: children
           .slice(0, point.offset)
@@ -489,7 +586,10 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
     }
     const left = children[point.offset - 1];
     const right = children[point.offset];
-    if (isReviewWrapper(left ?? null) || isReviewWrapper(right ?? null)) {
+    if (
+      isReviewElementNode(left ?? null) ||
+      isReviewElementNode(right ?? null)
+    ) {
       return refusal(
         "ambiguous-boundary",
         "A paragraph boundary next to proposal content does not identify one editing side.",
@@ -556,8 +656,8 @@ function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
 
 function buildProposalMap(
   paragraph: ElementNode,
-  startWrapper: ReviewWrapper,
-  endWrapper: ReviewWrapper,
+  startWrapper: ReviewElementNode,
+  endWrapper: ReviewElementNode,
 ): Preparation<ProposalMap> {
   const startIndex = getChildIndex(paragraph, startWrapper);
   const endIndex = getChildIndex(paragraph, endWrapper);
@@ -567,17 +667,17 @@ function buildProposalMap(
       "The proposal selection wrappers are not ordered in one paragraph.",
     );
   }
-  const kind = getProposalKind(startWrapper);
+  const kind = startWrapper.getProposalKind();
   const proposalId = startWrapper.getProposalId();
-  const wrappers: ReviewWrapper[] = [];
+  const wrappers: ReviewElementNode[] = [];
   const entries: ProposalMapEntry[] = [];
   let offset = 0;
   const children = paragraph.getChildren();
   for (let index = startIndex; index <= endIndex; index += 1) {
     const child = children[index];
     if (
-      !isReviewWrapper(child) ||
-      getProposalKind(child) !== kind ||
+      !isReviewElementNode(child) ||
+      child.getProposalKind() !== kind ||
       child.getProposalId() !== proposalId
     ) {
       return refusal(
@@ -628,9 +728,9 @@ function buildProposalMapAroundPoint(
   const proposalId = point.wrapper.getProposalId();
   const isSameWrapper = (
     child: LexicalNode | undefined,
-  ): child is ReviewWrapper =>
-    isReviewWrapper(child) &&
-    getProposalKind(child) === kind &&
+  ): child is ReviewElementNode =>
+    isReviewElementNode(child) &&
+    child.getProposalKind() === kind &&
     child.getProposalId() === proposalId;
 
   while (startIndex > 0 && isSameWrapper(children[startIndex - 1])) {
@@ -887,7 +987,7 @@ function getAcceptedSelectedNodes(span: AcceptedSpan): TextNode[] | null {
 
 function placeCaretAfterWrapper(
   paragraph: ElementNode,
-  wrapper: ReviewWrapper,
+  wrapper: ReviewElementNode,
 ): void {
   const wrapperIndex = getChildIndex(paragraph, wrapper);
   if (wrapperIndex === null) {
@@ -1052,7 +1152,7 @@ function getUniqueProposalId(
       continue;
     }
     for (const child of paragraph.getChildren()) {
-      if (isReviewWrapper(child)) {
+      if (isReviewElementNode(child)) {
         existing.add(child.getProposalId());
       }
     }
@@ -1580,7 +1680,24 @@ export function registerNodeBackedReviewSession(
     return handleDeletion(false);
   };
 
+  const normalizationRegistrations: Array<() => void> = [];
+  if (editor.hasNode(ReviewInsertionNode)) {
+    normalizationRegistrations.push(
+      editor.registerNodeTransform(ReviewInsertionNode, (node) => {
+        normalizeReviewElementNode(node);
+      }),
+    );
+  }
+  if (editor.hasNode(ReviewDeletionNode)) {
+    normalizationRegistrations.push(
+      editor.registerNodeTransform(ReviewDeletionNode, (node) => {
+        normalizeReviewElementNode(node);
+      }),
+    );
+  }
+
   return mergeRegister(
+    ...normalizationRegistrations,
     editor.registerCommand(
       BEFORE_INPUT_COMMAND,
       handleBeforeInput,

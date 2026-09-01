@@ -10,13 +10,16 @@ export {
 } from "./LegacyReviewSession";
 export {
   ReviewDeletionNode,
+  ReviewElementNode,
   ReviewInsertionNode,
+  $canReviewElementNodesBeMerged,
   $createReviewDeletionNode,
   $createReviewInsertionNode,
   $isReviewDeletionNode,
   $isReviewInsertionNode,
   type SerializedReviewDeletionNode,
   type SerializedReviewInsertionNode,
+  type ProposalKind,
 } from "./ReviewNodes";
 export {
   exportReviewDocument,

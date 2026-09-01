@@ -19,6 +19,8 @@ type SerializedReviewElementNode = Spread<
   SerializedElementNode
 >;
 
+export type ProposalKind = "deletion" | "insertion";
+
 export type SerializedReviewInsertionNode = SerializedReviewElementNode & {
   type: "review-insertion";
 };
@@ -27,7 +29,7 @@ export type SerializedReviewDeletionNode = SerializedReviewElementNode & {
   type: "review-deletion";
 };
 
-abstract class ReviewElementNode extends ElementNode {
+export abstract class ReviewElementNode extends ElementNode {
   __proposalId: string;
 
   constructor(proposalId: string, key?: NodeKey) {
@@ -54,6 +56,8 @@ abstract class ReviewElementNode extends ElementNode {
   getProposalId(): string {
     return this.getLatest().__proposalId;
   }
+
+  abstract getProposalKind(): ProposalKind;
 
   override canInsertTextBefore(): false {
     return false;
@@ -117,6 +121,10 @@ export class ReviewInsertionNode extends ReviewElementNode {
     return "ins";
   }
 
+  override getProposalKind(): "insertion" {
+    return "insertion";
+  }
+
   override exportJSON(): SerializedReviewInsertionNode {
     return {
       ...super.exportJSON(),
@@ -146,6 +154,10 @@ export class ReviewDeletionNode extends ReviewElementNode {
 
   protected override getReviewTag(): "del" {
     return "del";
+  }
+
+  override getProposalKind(): "deletion" {
+    return "deletion";
   }
 
   override exportJSON(): SerializedReviewDeletionNode {
@@ -180,4 +192,14 @@ export function $isReviewDeletionNode(
   node: LexicalNode | null | undefined,
 ): node is ReviewDeletionNode {
   return node instanceof ReviewDeletionNode;
+}
+
+export function $canReviewElementNodesBeMerged(
+  node1: ReviewElementNode,
+  node2: ReviewElementNode,
+): boolean {
+  return (
+    node1.getType() === node2.getType() &&
+    node1.getProposalId() === node2.getProposalId()
+  );
 }
