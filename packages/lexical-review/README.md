@@ -26,7 +26,8 @@ iOS Safari.
 ## Entrypoints
 
 - React-free core entrypoint: `import { ReviewInsertionNode } from "lexical-review"`.
-- Client/editor integration remains available through explicitly named legacy exports while the node-backed v3 routes are implemented.
+- Client/editor integration is available through the node-backed v3 session
+  registration and explicitly named legacy exports.
 
 Core nodes, helpers, and types are exported only from the root entrypoint. The root entrypoint does not import React or `@lexical/react`, so it is suitable for server-side model and serialization code; DOM rendering and editor registration require a client environment.
 
@@ -46,9 +47,18 @@ resolution history. Accepted-state targets and payloads are derived when a
 serialized native document crosses the WER adapter boundary, not maintained as
 live coordinates for ordinary editing.
 
-The v3 foundation currently exposes validation, import, pure export, and the
-proposal-bearing insertion/deletion node classes. Client interaction routes are
-added separately as their node-backed contracts are completed.
+The v3 client route registers the session against the live Lexical tree:
+
+```tsx
+import { ReviewSessionPlugin } from "lexical-review/client";
+
+<ReviewSessionPlugin session={session} />
+```
+
+It keeps accepted-side and proposal-side targeting distinct, edits compatible
+pending insertion/deletion nodes in place, and reports ambiguous, mixed, and
+structurally unsafe targets as no-mutation refusals. The lower-level
+`registerReviewSession` export is available for hosts that do not use React.
 
 ## Legacy editor-wide review mode
 

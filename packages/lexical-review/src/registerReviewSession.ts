@@ -33,9 +33,14 @@ import {
   type ReviewOutcome,
   type ReviewRefusal,
   type ReviewRefusalCode,
-  type ReviewSession,
+  type ReviewSession as LegacyReviewSession,
   type ReviewStateView,
 } from "./LegacyReviewSession";
+import {
+  registerNodeBackedReviewSession,
+  type NodeBackedReviewSessionRegistrationOptions,
+} from "./registerNodeBackedReviewSession";
+import type { ReviewSession as NodeBackedReviewSession } from "./ReviewSession";
 
 type SelectionSnapshot = Readonly<{
   anchor: Readonly<{ key: string; offset: number; type: "element" | "text" }>;
@@ -434,9 +439,9 @@ export type ReviewSessionRegistrationOptions = Readonly<{
   onOutcome?: (outcome: ReviewOutcome<ReviewStateView>) => void;
 }>;
 
-export function registerReviewSession(
+function registerLegacyReviewSession(
   editor: LexicalEditor,
-  session: ReviewSession,
+  session: LegacyReviewSession,
   options: ReviewSessionRegistrationOptions = {},
 ): () => void {
   const report = (outcome: ReviewOutcome<ReviewStateView>): void => {
@@ -640,5 +645,42 @@ export function registerReviewSession(
       },
       COMMAND_PRIORITY_HIGH,
     ),
+  );
+}
+
+function isLegacyReviewSession(
+  session: LegacyReviewSession | NodeBackedReviewSession,
+): session is LegacyReviewSession {
+  return "readState" in session && typeof session.readState === "function";
+}
+
+export function registerReviewSession(
+  editor: LexicalEditor,
+  session: LegacyReviewSession,
+  options?: ReviewSessionRegistrationOptions,
+): () => void;
+export function registerReviewSession(
+  editor: LexicalEditor,
+  session: NodeBackedReviewSession,
+  options?: NodeBackedReviewSessionRegistrationOptions,
+): () => void;
+export function registerReviewSession(
+  editor: LexicalEditor,
+  session: LegacyReviewSession | NodeBackedReviewSession,
+  options:
+    | ReviewSessionRegistrationOptions
+    | NodeBackedReviewSessionRegistrationOptions = {},
+): () => void {
+  if (isLegacyReviewSession(session)) {
+    return registerLegacyReviewSession(
+      editor,
+      session,
+      options as ReviewSessionRegistrationOptions,
+    );
+  }
+  return registerNodeBackedReviewSession(
+    editor,
+    session,
+    options as NodeBackedReviewSessionRegistrationOptions,
   );
 }

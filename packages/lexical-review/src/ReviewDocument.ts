@@ -257,12 +257,21 @@ function validateParagraphNode(
     value.direction !== null ||
     value.format !== "" ||
     value.indent !== 0 ||
-    value.textFormat !== 0 ||
     value.textStyle !== ""
   ) {
     return unsupported(
       path,
-      "Paragraph direction, formatting, indentation, and styles are unsupported.",
+      "Paragraph direction, block formatting, indentation, and styles are unsupported.",
+    );
+  }
+  if (
+    !Number.isInteger(value.textFormat) ||
+    (value.textFormat as number) < 0 ||
+    ((value.textFormat as number) & ~SUPPORTED_TEXT_FORMAT_MASK) !== 0
+  ) {
+    return unsupported(
+      `${path}.textFormat`,
+      "Only bold, italic, strikethrough, and underline text formatting are supported.",
     );
   }
   if (!Array.isArray(value.children)) {

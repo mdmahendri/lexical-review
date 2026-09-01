@@ -24,13 +24,13 @@ function text(text: string, format = 0) {
   };
 }
 
-function paragraph(children: unknown[]) {
+function paragraph(children: unknown[], textFormat = 0) {
   return {
     children,
     direction: null,
     format: "",
     indent: 0,
-    textFormat: 0,
+    textFormat,
     textStyle: "",
     type: "paragraph",
     version: 1,
@@ -168,6 +168,20 @@ describe("node-backed ReviewDocumentV3", () => {
       expect((first as ReviewInsertionNode).getProposalId()).toBe("shared");
       expect((second as ReviewInsertionNode).getProposalId()).toBe("shared");
     });
+  });
+
+  it("round-trips formatted accepted text with non-BMP content", () => {
+    const input = reviewDocument([paragraph([text("A😀B", 1)], 1)]);
+    const editor = createReviewEditor();
+    const opened = openReviewSession(editor, input);
+
+    expect(opened.status).toBe("valid");
+    if (opened.status === "valid") {
+      expect(opened.value.exportDocument()).toMatchObject({
+        status: "valid",
+        value: input,
+      });
+    }
   });
 
   it.each([
