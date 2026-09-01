@@ -665,12 +665,7 @@ function getProposalOffset(
     }
     if (wrapper.getKey() === point.wrapper.getKey()) {
       if (point.node === null) {
-        return (
-          offset +
-          children
-            .slice(0, point.offset)
-            .reduce((total, child) => total + child.getTextContentSize(), 0)
-        );
+        return offset + point.offset;
       }
       for (const child of children) {
         if (child.getKey() === point.node.getKey()) {
@@ -751,10 +746,14 @@ function getAcceptedOffset(
   map: AcceptedMap,
 ): number | null {
   let offset = 0;
-  for (const child of map.paragraph.getChildren()) {
-    const childIndex = getChildIndex(map.paragraph, child);
-    if (childIndex === null || childIndex > point.childIndex) {
+  const children = map.paragraph.getChildren();
+  for (let childIndex = 0; childIndex < children.length; childIndex += 1) {
+    if (childIndex > point.childIndex) {
       break;
+    }
+    const child = children[childIndex];
+    if (child === undefined) {
+      return null;
     }
     if (childIndex === point.childIndex) {
       if (point.node === null) {
@@ -1362,16 +1361,8 @@ function performInsertion(
 function performDeletion(
   editor: LexicalEditor,
   backward: boolean,
-  granularity: "character" | "word",
   options: NodeBackedReviewSessionRegistrationOptions,
 ): ReviewNodeOutcome {
-  if (granularity !== "character") {
-    return refused({
-      code: "unsupported-target",
-      message:
-        "Node-backed review deletion currently supports character intentions only.",
-    });
-  }
   const inspection = inspectSelection();
   if (inspection.status !== "ready") {
     return refused(inspection.reason);
@@ -1495,25 +1486,25 @@ export function registerNodeBackedReviewSession(
   session: ReviewSession,
   options: NodeBackedReviewSessionRegistrationOptions = {},
 ): () => void {
-  void session;
-  const handleDeletion = (
-    backward: boolean,
-    granularity: "character" | "word",
-    event?: Event | null,
-  ): boolean => {
+  if (session.getEditorState() !== editor.getEditorState()) {
+    throw new Error(
+      "A node-backed review session must be registered with the same Lexical editor that opened it.",
+    );
+  }
+  const handleDeletion = (backward: boolean, event?: Event | null): boolean => {
     event?.preventDefault();
     const outcome = safePerform(() =>
-      performDeletion(editor, backward, granularity, options),
+      performDeletion(editor, backward, options),
     );
     reportOutcome(options, outcome, "deletion");
     return true;
   };
   const handleBeforeInput = (event: InputEvent): boolean => {
     if (event.inputType === "deleteContentBackward") {
-      return handleDeletion(true, "character", event);
+      return handleDeletion(true, event);
     }
     if (event.inputType === "deleteContentForward") {
-      return handleDeletion(false, "character", event);
+      return handleDeletion(false, event);
     }
     return false;
   };
@@ -1525,6 +1516,17 @@ export function registerNodeBackedReviewSession(
         "Formatting authoring is not supported by the node-backed review session yet.",
       ),
       null,
+    );
+    return true;
+  };
+  const refuseDeletionGranularity = (): boolean => {
+    reportOutcome(
+      options,
+      unsupportedOutcome(
+        "unsupported-target",
+        "Node-backed review deletion currently supports character intentions only.",
+      ),
+      "deletion",
     );
     return true;
   };
@@ -1551,6 +1553,32 @@ export function registerNodeBackedReviewSession(
     );
     return true;
   };
+  const handleRemoval = (event: InputEvent | null): boolean => {
+    if (event !== null) {
+      if (
+        event.inputType === "deleteByCut" ||
+        event.inputType === "deleteByDrag"
+      ) {
+        return refuseTransfer(event);
+      }
+      event.preventDefault();
+      reportOutcome(
+        options,
+        unsupportedOutcome(
+          "unsupported-input",
+          "This native text-removal route is not supported by the node-backed review session.",
+        ),
+        "deletion",
+      );
+      return true;
+    }
+    const selection = $getSelection();
+    if ($isRangeSelection(selection) && selection.isCollapsed()) {
+      reportOutcome(options, unchanged(), "deletion");
+      return true;
+    }
+    return handleDeletion(false);
+  };
 
   return mergeRegister(
     editor.registerCommand(
@@ -1561,6 +1589,15 @@ export function registerNodeBackedReviewSession(
     editor.registerCommand(
       CONTROLLED_TEXT_INSERTION_COMMAND,
       (eventOrText) => {
+        if (
+          typeof eventOrText !== "string" &&
+          (eventOrText.dataTransfer != null ||
+            eventOrText.inputType === "insertFromDrop" ||
+            eventOrText.inputType === "insertFromYank" ||
+            eventOrText.inputType === "insertReplacementText")
+        ) {
+          return refuseTransfer(eventOrText);
+        }
         const text =
           typeof eventOrText === "string" ? eventOrText : eventOrText.data;
         if (text == null) {
@@ -1576,32 +1613,32 @@ export function registerNodeBackedReviewSession(
     ),
     editor.registerCommand(
       DELETE_CHARACTER_COMMAND,
-      (backward) => handleDeletion(backward, "character"),
+      (backward) => handleDeletion(backward),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       DELETE_WORD_COMMAND,
-      (backward) => handleDeletion(backward, "word"),
+      refuseDeletionGranularity,
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       REMOVE_TEXT_COMMAND,
-      (event) => handleDeletion(false, "character", event),
+      handleRemoval,
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       KEY_BACKSPACE_COMMAND,
-      (event) => handleDeletion(true, "character", event),
+      (event) => handleDeletion(true, event),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       KEY_DELETE_COMMAND,
-      (event) => handleDeletion(false, "character", event),
+      (event) => handleDeletion(false, event),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       DELETE_LINE_COMMAND,
-      () => handleDeletion(true, "word"),
+      refuseDeletionGranularity,
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(

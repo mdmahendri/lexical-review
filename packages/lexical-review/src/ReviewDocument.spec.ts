@@ -11,62 +11,12 @@ import {
   ReviewInsertionNode,
   validateReviewDocument,
 } from "./index";
-
-function text(text: string, format = 0) {
-  return {
-    detail: 0,
-    format,
-    mode: "normal",
-    style: "",
-    text,
-    type: "text",
-    version: 1,
-  };
-}
-
-function paragraph(children: unknown[], textFormat = 0) {
-  return {
-    children,
-    direction: null,
-    format: "",
-    indent: 0,
-    textFormat,
-    textStyle: "",
-    type: "paragraph",
-    version: 1,
-  };
-}
-
-function reviewNode(
-  type: "review-deletion" | "review-insertion",
-  proposalId: string,
-  children: unknown[],
-) {
-  return {
-    children,
-    direction: null,
-    extensions: [],
-    format: "",
-    indent: 0,
-    proposalId,
-    type,
-    version: 1,
-  };
-}
-
-function reviewDocument(children: unknown[]) {
-  return {
-    root: {
-      $: { "lexical-review": { extensions: [], version: 3 } },
-      children,
-      direction: null,
-      format: "",
-      indent: 0,
-      type: "root",
-      version: 1,
-    },
-  };
-}
+import {
+  paragraph,
+  reviewDocument,
+  reviewNode,
+  text,
+} from "./ReviewDocument.test-fixtures";
 
 function createReviewEditor() {
   return createEditor({

@@ -7,6 +7,7 @@ import {
   CONTROLLED_TEXT_INSERTION_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
+  REMOVE_TEXT_COMMAND,
   createEditor,
   type ElementNode,
   type LexicalEditor,
@@ -19,31 +20,12 @@ import {
 } from "./index";
 import { registerReviewSession } from "./registerReviewSession";
 import type { ReviewNodeOutcome } from "./registerNodeBackedReviewSession";
-
-function text(value: string, format = 0) {
-  return {
-    detail: 0,
-    format,
-    mode: "normal",
-    style: "",
-    text: value,
-    type: "text",
-    version: 1,
-  };
-}
-
-function paragraph(children: unknown[], textFormat = 0) {
-  return {
-    children,
-    direction: null,
-    format: "",
-    indent: 0,
-    textFormat,
-    textStyle: "",
-    type: "paragraph",
-    version: 1,
-  };
-}
+import {
+  paragraph,
+  reviewDocument,
+  reviewNode,
+  text,
+} from "./ReviewDocument.test-fixtures";
 
 function proposal(
   kind: "review-deletion" | "review-insertion",
@@ -51,30 +33,7 @@ function proposal(
   value: string,
   format = 0,
 ) {
-  return {
-    children: [text(value, format)],
-    direction: null,
-    extensions: [],
-    format: "",
-    indent: 0,
-    proposalId,
-    type: kind,
-    version: 1,
-  };
-}
-
-function reviewDocument(children: unknown[]) {
-  return {
-    root: {
-      $: { "lexical-review": { extensions: [], version: 3 } },
-      children,
-      direction: null,
-      format: "",
-      indent: 0,
-      type: "root",
-      version: 1,
-    },
-  };
+  return reviewNode(kind, proposalId, [text(value, format)]);
 }
 
 function createReviewEditor(): LexicalEditor {
@@ -367,6 +326,139 @@ describe("node-backed review session targeting", () => {
     },
   );
 
+  it.each([
+    ["backward", KEY_BACKSPACE_COMMAND, "ACD", 1],
+    ["forward", KEY_DELETE_COMMAND, "ABD", 2],
+  ] as const)(
+    "deletes the %s character at a formatted proposal element boundary",
+    async (_direction, command, expectedText, expectedCaret) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            reviewNode("review-deletion", "deletion-formatted", [
+              text("AB"),
+              text("CD", 1),
+            ]),
+          ]),
+        ]),
+        outcomes,
+      );
+      await update(editor, () => {
+        const deletion = firstParagraph().getFirstChild();
+        if (!$isElementNode(deletion)) {
+          throw new Error("Expected a deletion wrapper.");
+        }
+        deletion.select(1, 1);
+      });
+
+      expect(
+        editor.dispatchCommand(command, new KeyboardEvent("keydown")),
+      ).toBe(true);
+      await Promise.resolve();
+
+      editor.getEditorState().read(() => {
+        expect(firstParagraph().getTextContent()).toBe(expectedText);
+      });
+      expect(editor.getEditorState().read(liveSelection)).toMatchObject({
+        anchor: { offset: expectedCaret, type: "text" },
+        focus: { offset: expectedCaret, type: "text" },
+      });
+      expect(outcomes).toMatchObject([{ status: "changed" }]);
+      unregister();
+    },
+  );
+
+  it("inserts at a formatted proposal element boundary and restores that caret", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          reviewNode("review-insertion", "insertion-formatted", [
+            text("AB"),
+            text("CD", 1),
+          ]),
+        ]),
+      ]),
+      outcomes,
+    );
+    await update(editor, () => {
+      const insertion = firstParagraph().getFirstChild();
+      if (!$isElementNode(insertion)) {
+        throw new Error("Expected an insertion wrapper.");
+      }
+      insertion.select(1, 1);
+    });
+
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
+      true,
+    );
+    await Promise.resolve();
+
+    editor.getEditorState().read(() => {
+      expect(firstParagraph().getTextContent()).toBe("ABXCD");
+    });
+    expect(editor.getEditorState().read(liveSelection)).toMatchObject({
+      anchor: { offset: 3, type: "text" },
+      focus: { offset: 3, type: "text" },
+    });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it.each([
+    ["before", 0, KEY_DELETE_COMMAND],
+    ["after", 2, KEY_BACKSPACE_COMMAND],
+  ] as const)(
+    "refuses accepted-side deletion %s pending deletion content",
+    async (_side, acceptedIndex, command) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            text("A"),
+            proposal("review-deletion", "deletion-a", "BC"),
+            text("D"),
+          ]),
+        ]),
+        outcomes,
+      );
+      await update(editor, () => {
+        const accepted = firstParagraph().getChildAtIndex(acceptedIndex);
+        if (!$isTextNode(accepted)) {
+          throw new Error("Expected accepted text beside the deletion.");
+        }
+        if (acceptedIndex === 0) {
+          accepted.selectEnd();
+        } else {
+          accepted.selectStart();
+        }
+      });
+      const beforeDocument = editor.getEditorState().toJSON();
+      const beforeSelection = editor.getEditorState().read(liveSelection);
+
+      expect(
+        editor.dispatchCommand(command, new KeyboardEvent("keydown")),
+      ).toBe(true);
+      await Promise.resolve();
+
+      expect(outcomes).toMatchObject([
+        { reason: { code: "deletion-target-unavailable" }, status: "refused" },
+      ]);
+      expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+      expect(editor.getEditorState().read(liveSelection)).toEqual(
+        beforeSelection,
+      );
+      unregister();
+    },
+  );
+
   it("refuses zero-length deletion adjacency without moving selection", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewNodeOutcome[] = [];
@@ -447,52 +539,60 @@ describe("node-backed review session targeting", () => {
     unregister();
   });
 
-  it("creates an insertion on an explicit accepted-side caret next to a proposal", async () => {
-    const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
-    const { unregister } = open(
-      editor,
-      reviewDocument([
-        paragraph([
-          text("A"),
-          proposal("review-insertion", "insertion-a", "B"),
-          text("C"),
+  it.each([
+    ["before", 0, ["A", "X", "B", "C"], 1],
+    ["after", 2, ["A", "B", "X", "C"], 2],
+  ] as const)(
+    "creates an insertion on the explicit accepted side %s a proposal",
+    async (_side, acceptedIndex, expectedText, insertionIndex) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            text("A"),
+            proposal("review-insertion", "insertion-a", "B"),
+            text("C"),
+          ]),
         ]),
-      ]),
-      outcomes,
-      { proposalIdFactory: () => "insertion-b" },
-    );
-    await update(editor, () => {
-      const accepted = firstParagraph().getChildAtIndex(0);
-      if (!$isTextNode(accepted)) {
-        throw new Error("Expected accepted text.");
-      }
-      accepted.selectEnd();
-    });
+        outcomes,
+        { proposalIdFactory: () => "insertion-b" },
+      );
+      await update(editor, () => {
+        const accepted = firstParagraph().getChildAtIndex(acceptedIndex);
+        if (!$isTextNode(accepted)) {
+          throw new Error("Expected accepted text.");
+        }
+        if (acceptedIndex === 0) {
+          accepted.selectEnd();
+        } else {
+          accepted.selectStart();
+        }
+      });
 
-    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
-      true,
-    );
-    await Promise.resolve();
+      expect(
+        editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X"),
+      ).toBe(true);
+      await Promise.resolve();
 
-    editor.getEditorState().read(() => {
-      const children = firstParagraph().getChildren();
-      expect(children.map((child) => child.getTextContent())).toEqual([
-        "A",
-        "X",
-        "B",
-        "C",
-      ]);
-      expect($isElementNode(children[1])).toBe(true);
-      if ($isElementNode(children[1])) {
-        expect((children[1] as ReviewInsertionNode).getProposalId()).toBe(
-          "insertion-b",
+      editor.getEditorState().read(() => {
+        const children = firstParagraph().getChildren();
+        expect(children.map((child) => child.getTextContent())).toEqual(
+          expectedText,
         );
-      }
-    });
-    expect(outcomes).toMatchObject([{ status: "changed" }]);
-    unregister();
-  });
+        const insertion = children[insertionIndex];
+        expect($isElementNode(insertion)).toBe(true);
+        if ($isElementNode(insertion)) {
+          expect((insertion as ReviewInsertionNode).getProposalId()).toBe(
+            "insertion-b",
+          );
+        }
+      });
+      expect(outcomes).toMatchObject([{ status: "changed" }]);
+      unregister();
+    },
+  );
 
   it("keeps a paragraph boundary away from proposals on the accepted side", async () => {
     const editor = createReviewEditor();
@@ -760,6 +860,24 @@ describe("node-backed review session targeting", () => {
 
     outcomes.length = 0;
     await update(editor, () => {
+      firstParagraph().select(2, 2);
+    });
+    const beforeOppositeBoundary = editor.getEditorState().toJSON();
+    const beforeOppositeSelection = editor.getEditorState().read(liveSelection);
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "Y")).toBe(
+      true,
+    );
+    await Promise.resolve();
+    expect(outcomes).toMatchObject([
+      { reason: { code: "ambiguous-boundary" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeOppositeBoundary);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeOppositeSelection,
+    );
+
+    outcomes.length = 0;
+    await update(editor, () => {
       const [accepted, insertion] = firstParagraph().getChildren();
       if (!$isTextNode(accepted) || !$isElementNode(insertion)) {
         throw new Error("Expected an accepted node and insertion wrapper.");
@@ -782,6 +900,123 @@ describe("node-backed review session targeting", () => {
       { reason: { code: "unsafe-proposal-intersection" }, status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeMixedRange);
+    unregister();
+  });
+
+  it("refuses controlled drop insertion without mutating the live selection", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB")])]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).select(1, 1);
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+    const event = new InputEvent("beforeinput", {
+      data: null,
+      inputType: "insertFromDrop",
+    });
+
+    expect(
+      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, event),
+    ).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "unsupported-transfer" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+    unregister();
+  });
+
+  it("refuses controlled replacement insertion with data", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB")])]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).select(1, 1);
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+    const event = new InputEvent("beforeinput", {
+      data: "X",
+      inputType: "insertReplacementText",
+    });
+
+    expect(
+      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, event),
+    ).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "unsupported-transfer" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    unregister();
+  });
+
+  it("keeps collapsed generic text removal unchanged", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB")])]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).select(1, 1);
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+
+    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([{ status: "unchanged" }]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+    unregister();
+  });
+
+  it("refuses cut-driven text removal without mutating the range", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB")])]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).select(0, 1);
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+    const event = new InputEvent("beforeinput", {
+      inputType: "deleteByCut",
+    });
+
+    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, event)).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "unsupported-transfer" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
     unregister();
   });
 
@@ -877,5 +1112,22 @@ describe("node-backed review session targeting", () => {
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     unregister();
+  });
+
+  it("rejects registration against an editor outside the authoring session", () => {
+    const sessionEditor = createReviewEditor();
+    const otherEditor = createReviewEditor();
+    const opened = openReviewSession(
+      sessionEditor,
+      reviewDocument([paragraph([text("A")])]),
+    );
+    expect(opened.status).toBe("valid");
+    if (opened.status !== "valid") {
+      throw new Error("Expected the node-backed review document to open.");
+    }
+
+    expect(() => registerReviewSession(otherEditor, opened.value)).toThrow(
+      "same Lexical editor",
+    );
   });
 });

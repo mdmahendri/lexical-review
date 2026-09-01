@@ -52,13 +52,14 @@ The v3 client route registers the session against the live Lexical tree:
 ```tsx
 import { ReviewSessionPlugin } from "lexical-review/client";
 
-<ReviewSessionPlugin session={session} />
+<ReviewSessionPlugin session={session} />;
 ```
 
 It keeps accepted-side and proposal-side targeting distinct, edits compatible
 pending insertion/deletion nodes in place, and reports ambiguous, mixed, and
 structurally unsafe targets as no-mutation refusals. The lower-level
 `registerReviewSession` export is available for hosts that do not use React.
+The session must be registered with the same Lexical editor that opened it.
 
 ## Legacy editor-wide review mode
 
