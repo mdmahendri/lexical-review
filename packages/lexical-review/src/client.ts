@@ -1,4 +1,4 @@
 "use client";
 
-export { ReviewTextPlugin } from "./LexicalReviewTextPlugin";
-export { registerReviewText } from "./registerReviewText";
+export { ReviewTextPlugin as LegacyReviewTextPlugin } from "./LexicalReviewTextPlugin";
+export { registerReviewText as registerLegacyReviewText } from "./registerReviewText";

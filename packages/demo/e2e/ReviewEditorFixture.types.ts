@@ -1,4 +1,4 @@
-import type { TextReviewType } from "lexical-review";
+import type { LegacyTextReviewType as TextReviewType } from "lexical-review";
 
 export type ReviewEditorScenario =
   | "insertion-boundary"
@@ -41,8 +41,24 @@ export type ReviewEditorFixtureApi = {
   placeCaret: (scenario: ReviewEditorScenario) => void;
 };
 
+export type ReviewSessionEditorFixtureApi = {
+  dispatchBeforeInput: (inputType: string) => boolean;
+  getCaret: () => NativeCaret | null;
+  getSegments: () => ReviewSegment[];
+  insertText: (text: string) => void;
+  placeCaret: (offset: number) => void;
+  placeSegmentCaret: (segmentIndex: number, offset: number) => void;
+  selectSegmentRange: (
+    startSegmentIndex: number,
+    startOffset: number,
+    endSegmentIndex: number,
+    endOffset: number,
+  ) => void;
+};
+
 declare global {
   interface Window {
     __lexicalReviewEditorFixture?: ReviewEditorFixtureApi;
+    __lexicalReviewSessionEditorFixture?: ReviewSessionEditorFixtureApi;
   }
 }

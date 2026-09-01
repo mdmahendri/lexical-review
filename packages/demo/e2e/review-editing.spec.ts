@@ -47,6 +47,114 @@ async function getSegments(
   }, scenario);
 }
 
+async function getSessionSegments(page: Page): Promise<ReviewSegment[]> {
+  return page.evaluate(() => {
+    const fixture = window.__lexicalReviewSessionEditorFixture;
+
+    if (fixture == null) {
+      throw new Error("The deletion session fixture is not ready.");
+    }
+
+    return fixture.getSegments();
+  });
+}
+
+async function getSessionCaret(page: Page): Promise<NativeCaret | null> {
+  return page.evaluate(() => {
+    const fixture = window.__lexicalReviewSessionEditorFixture;
+
+    if (fixture == null) {
+      throw new Error("The deletion session fixture is not ready.");
+    }
+
+    return fixture.getCaret();
+  });
+}
+
+async function placeSessionCaret(page: Page, offset: number): Promise<void> {
+  await page.evaluate((caretOffset) => {
+    const fixture = window.__lexicalReviewSessionEditorFixture;
+
+    if (fixture == null) {
+      throw new Error("The deletion session fixture is not ready.");
+    }
+
+    fixture.placeCaret(caretOffset);
+  }, offset);
+}
+
+async function placeSessionSegmentCaret(
+  page: Page,
+  segmentIndex: number,
+  offset: number,
+): Promise<void> {
+  await page.evaluate(
+    ({ segmentIndex, offset }) => {
+      const fixture = window.__lexicalReviewSessionEditorFixture;
+
+      if (fixture == null) {
+        throw new Error("The deletion session fixture is not ready.");
+      }
+
+      fixture.placeSegmentCaret(segmentIndex, offset);
+    },
+    { offset, segmentIndex },
+  );
+}
+
+async function selectSessionSegmentRange(
+  page: Page,
+  startSegmentIndex: number,
+  startOffset: number,
+  endSegmentIndex: number,
+  endOffset: number,
+): Promise<void> {
+  await page.evaluate(
+    ({ endOffset, endSegmentIndex, startOffset, startSegmentIndex }) => {
+      const fixture = window.__lexicalReviewSessionEditorFixture;
+
+      if (fixture == null) {
+        throw new Error("The deletion session fixture is not ready.");
+      }
+
+      fixture.selectSegmentRange(
+        startSegmentIndex,
+        startOffset,
+        endSegmentIndex,
+        endOffset,
+      );
+    },
+    { endOffset, endSegmentIndex, startOffset, startSegmentIndex },
+  );
+}
+
+async function insertSessionText(page: Page, text: string): Promise<void> {
+  await page.evaluate((value) => {
+    const fixture = window.__lexicalReviewSessionEditorFixture;
+
+    if (fixture == null) {
+      throw new Error("The deletion session fixture is not ready.");
+    }
+
+    fixture.insertText(value);
+  }, text);
+}
+
+async function dispatchSessionBeforeInput(
+  page: Page,
+  inputType: string,
+): Promise<boolean> {
+  return page.evaluate((type) => {
+    const fixture = window.__lexicalReviewSessionEditorFixture;
+
+    if (fixture == null) {
+      throw new Error("The deletion session fixture is not ready.");
+    }
+
+    return fixture.dispatchBeforeInput(type);
+  }, inputType);
+}
+
 async function compose(
   page: Page,
   scenario: ReviewEditorScenario,
@@ -136,6 +244,221 @@ async function installDeleteTrace(page: Page): Promise<void> {
     window.__deleteTrace = trace;
   });
 }
+
+test("Delete creates and extends one deletion draft in the review session", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  const editor = page.getByTestId("review-session-editor");
+  await expect(editor).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.__lexicalReviewSessionEditorFixture !== undefined,
+      ),
+    )
+    .toBe(true);
+  await expect(getSessionSegments(page)).resolves.toEqual([
+    { review: "original", text: "Alpha beta gamma" },
+  ]);
+
+  await placeSessionCaret(page, 0);
+  await editor.press("Delete");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "deletion", text: "A" },
+      { review: "original", text: "lpha beta gamma" },
+    ]);
+  await expect(editor.locator("del")).toHaveText("A");
+
+  await editor.press("Delete");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "deletion", text: "Al" },
+      { review: "original", text: "pha beta gamma" },
+    ]);
+  await expect(editor.locator("del")).toHaveText("Al");
+  await expect
+    .poll(() => getSessionCaret(page))
+    .toEqual({
+      anchorNodeType: "text",
+      offset: 2,
+      review: "deletion",
+      segmentIndex: 0,
+    });
+});
+
+test("Backspace creates and extends one backward deletion draft", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  const editor = page.getByTestId("review-session-editor");
+  await expect(editor).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => window.__lexicalReviewSessionEditorFixture !== undefined,
+      ),
+    )
+    .toBe(true);
+
+  await placeSessionCaret(page, "Alpha beta gamma".length);
+  await editor.press("Backspace");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "original", text: "Alpha beta gamm" },
+      { review: "deletion", text: "a" },
+    ]);
+
+  await editor.press("Backspace");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "original", text: "Alpha beta gam" },
+      { review: "deletion", text: "ma" },
+    ]);
+  await expect(editor.locator("del")).toHaveText("ma");
+  await expect
+    .poll(() => getSessionCaret(page))
+    .toEqual({
+      anchorNodeType: "text",
+      offset: 0,
+      review: "deletion",
+      segmentIndex: 1,
+    });
+});
+
+test("native forward beforeinput creates a deletion draft", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  const editor = page.getByTestId("review-session-editor");
+  await placeSessionCaret(page, 0);
+
+  await expect(
+    dispatchSessionBeforeInput(page, "deleteContentForward"),
+  ).resolves.toBe(true);
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "deletion", text: "A" },
+      { review: "original", text: "lpha beta gamma" },
+    ]);
+  await expect
+    .poll(() => getSessionCaret(page))
+    .toEqual({
+      anchorNodeType: "text",
+      offset: 1,
+      review: "deletion",
+      segmentIndex: 0,
+    });
+  await expect(editor.locator("del")).toHaveText("A");
+});
+
+test("native word beforeinput resolves a larger deletion target", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  await placeSessionCaret(page, 0);
+
+  await expect(
+    dispatchSessionBeforeInput(page, "deleteWordForward"),
+  ).resolves.toBe(true);
+  await expect
+    .poll(async () => {
+      const segments = await getSessionSegments(page);
+      const deleted = segments[0];
+      const remaining = segments[1];
+      return (
+        deleted?.review === "deletion" &&
+        /^Alpha/.test(deleted.text) &&
+        deleted.text.length > 1 &&
+        remaining?.review === "original" &&
+        remaining.text.trimStart() === "beta gamma"
+      );
+    })
+    .toBe(true);
+});
+
+test("an explicit selected range creates one deletion draft", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  const editor = page.getByTestId("review-session-editor");
+  await selectSessionSegmentRange(page, 0, 1, 0, 3);
+  await editor.press("Backspace");
+
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "original", text: "A" },
+      { review: "deletion", text: "lp" },
+      { review: "original", text: "ha beta gamma" },
+    ]);
+});
+
+test("insertion-draft correction reconciles across an accepted boundary", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  const editor = page.getByTestId("review-session-editor");
+
+  await placeSessionCaret(page, 2);
+  await insertSessionText(page, "XYZ");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "original", text: "Al" },
+      { review: "insertion", text: "XYZ" },
+      { review: "original", text: "pha beta gamma" },
+    ]);
+
+  await selectSessionSegmentRange(page, 0, 2, 1, 1);
+  await editor.press("Backspace");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "original", text: "Al" },
+      { review: "insertion", text: "YZ" },
+      { review: "original", text: "pha beta gamma" },
+    ]);
+});
+
+test("deleting inside a deletion draft restores it, while an adjacent caret is a no-op", async ({
+  page,
+}) => {
+  await openReviewEditorFixture(page);
+  const editor = page.getByTestId("review-session-editor");
+
+  await selectSessionSegmentRange(page, 0, 1, 0, 3);
+  await editor.press("Backspace");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "original", text: "A" },
+      { review: "deletion", text: "lp" },
+      { review: "original", text: "ha beta gamma" },
+    ]);
+
+  await placeSessionSegmentCaret(page, 0, 1);
+  await editor.press("Delete");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([
+      { review: "original", text: "A" },
+      { review: "deletion", text: "lp" },
+      { review: "original", text: "ha beta gamma" },
+    ]);
+
+  await placeSessionSegmentCaret(page, 1, 1);
+  await editor.press("Delete");
+  await expect
+    .poll(() => getSessionSegments(page))
+    .toEqual([{ review: "original", text: "Alpha beta gamma" }]);
+});
 
 async function getDeleteTrace(page: Page): Promise<DeleteTraceEntry[]> {
   return page.evaluate(() => window.__deleteTrace ?? []);

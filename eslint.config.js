@@ -7,8 +7,24 @@ import eslintConfigPrettier from "eslint-config-prettier";
 /** @type {import('eslint').Linter.Config[]} */
 export default [
   { ignores: ["**/dist/**", "**/.nx/**", "**/coverage/**"] },
-  { files: ["**/*.{ts,tsx}"] },
-  { languageOptions: { globals: globals.browser } },
+  {
+    files: [
+      "packages/demo/src/**/*.{ts,tsx}",
+      "packages/demo/e2e/**/*.{ts,tsx}",
+      "packages/lexical-review/src/**/*.{ts,tsx}",
+    ],
+    languageOptions: { globals: globals.browser },
+  },
+  {
+    files: [
+      "*.{js,mjs,cjs,ts}",
+      "scripts/**/*.{js,mjs,cjs,ts}",
+      "packages/**/*.{js,mjs,cjs}",
+      "packages/demo/e2e/**/*.spec.ts",
+    ],
+    ignores: [".pnpmfile.mjs"],
+    languageOptions: { globals: globals.node },
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   {

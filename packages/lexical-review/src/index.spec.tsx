@@ -23,7 +23,7 @@ import {
   $isReviewTextNode,
   ReviewTextNode,
 } from "./ReviewTextNode";
-import { registerReviewText } from "./client";
+import { registerReviewText } from "./registerReviewText";
 
 describe("Lexical Review Mode tests", () => {
   let container: HTMLElement;

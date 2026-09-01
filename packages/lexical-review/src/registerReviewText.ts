@@ -1,3 +1,4 @@
+import { $canReviewSegmentsMerge } from "./ReviewProjection";
 import {
   $getSelection,
   $getNodeByKey,
@@ -48,7 +49,9 @@ function $canReviewTextNodesBeMerged(
   node1: ReviewTextNode,
   node2: ReviewTextNode,
 ): boolean {
-  return node1.__review == node2.__review;
+  return (
+    node1.__review == node2.__review && $canReviewSegmentsMerge(node1, node2)
+  );
 }
 
 function $mergeReviewTextNodes(

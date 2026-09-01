@@ -1,6 +1,9 @@
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { TextNode } from "lexical";
-import { $createReviewTextNode, ReviewTextNode } from "lexical-review";
+import {
+  $createLegacyReviewTextNode as $createReviewTextNode,
+  LegacyReviewTextNode as ReviewTextNode,
+} from "lexical-review";
 import "./index.css";
 import ReviewEditor from "./ReviewEditor";
 

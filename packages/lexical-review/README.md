@@ -25,33 +25,59 @@ iOS Safari.
 
 ## Entrypoints
 
-- React-free core entrypoint: `import { ReviewTextNode } from "lexical-review"`.
-- Client/editor integration: `import { ReviewTextPlugin, registerReviewText } from "lexical-review/client"`.
+- React-free core entrypoint: `import { ReviewInsertionNode } from "lexical-review"`.
+- Client/editor integration remains available through explicitly named legacy exports while the node-backed v3 routes are implemented.
 
 Core nodes, helpers, and types are exported only from the root entrypoint. The root entrypoint does not import React or `@lexical/react`, so it is suitable for server-side model and serialization code; DOM rendering and editor registration require a client environment.
 
-## Editor-wide review mode
+### Version 3 review-session authoring
 
-Review mode is intentionally editor-wide: editable text is represented by `ReviewTextNode`, not a mixture of review and ordinary Lexical `TextNode` instances. Register the node and replace Lexical text nodes in the editor configuration:
+The React-free root validates and opens a native version 3 review document
+against a Lexical editor. Opening validates before installing any state. The
+session reads and updates the current Lexical `EditorState`; it does not keep a
+parallel authoritative snapshot. Live pending proposals are represented
+directly by proposal-bearing Lexical nodes and remain editable in place. There
+is no identityless draft or proposal-finalization phase.
+
+Native serialization preserves the current pending proposal-bearing nodes
+directly. A serialized value is a snapshot, and a successor native document
+contains pending proposals only; accepted or rejected proposals are not kept as
+resolution history. Accepted-state targets and payloads are derived when a
+serialized native document crosses the WER adapter boundary, not maintained as
+live coordinates for ordinary editing.
+
+The v3 foundation currently exposes validation, import, pure export, and the
+proposal-bearing insertion/deletion node classes. Client interaction routes are
+added separately as their node-backed contracts are completed.
+
+## Legacy editor-wide review mode
+
+The v2 segment implementation remains available behind explicitly named
+`Legacy*` compatibility exports. It is not v3 review state or native
+serialization authority:
 
 ```tsx
 import { TextNode } from "lexical";
-import { $createReviewTextNode, ReviewTextNode } from "lexical-review";
+import {
+  $createLegacyReviewTextNode,
+  LegacyReviewTextNode,
+} from "lexical-review";
 
 const initialConfig = {
   nodes: [
-    ReviewTextNode,
+    LegacyReviewTextNode,
     {
       replace: TextNode,
       with: (node: TextNode) =>
-        $createReviewTextNode(node.getTextContent(), "original"),
-      withKlass: ReviewTextNode,
+        $createLegacyReviewTextNode(node.getTextContent(), "original"),
+      withKlass: LegacyReviewTextNode,
     },
   ],
 };
 ```
 
-`ReviewTextPlugin` also normalizes ordinary text nodes created after registration to original review text. It throws during registration when `ReviewTextNode` is not registered.
+`LegacyReviewTextPlugin` and `registerLegacyReviewText` are exported from
+`lexical-review/client` for this compatibility surface.
 
 Please visit the [homepage](https://github.com/mahendrimd/lexical-review).
 
