@@ -42,7 +42,6 @@ import {
   ReviewDeletionNode,
   ReviewElementNode,
   ReviewInsertionNode,
-  type ProposalKind,
 } from "./ReviewNodes";
 import type { ReviewSession } from "./ReviewSession";
 
@@ -104,7 +103,6 @@ type AcceptedPoint = Readonly<{
 type ProposalPoint = Readonly<{
   association: "proposal";
   childIndex: number;
-  kind: ProposalKind;
   node: TextNode | null;
   offset: number;
   paragraph: ParagraphNode;
@@ -138,7 +136,6 @@ type ProposalMapEntry = Readonly<{
 
 type ProposalMap = Readonly<{
   entries: readonly ProposalMapEntry[];
-  kind: ProposalKind;
   paragraph: ParagraphNode;
   total: number;
   wrappers: readonly ReviewElementNode[];
@@ -229,13 +226,10 @@ function getRootProposalContext(
 
 function isSameProposalNode(
   node: LexicalNode | null | undefined,
-  kind: ProposalKind,
-  proposalId: string,
+  reference: ReviewElementNode,
 ): node is ReviewElementNode {
   return (
-    isReviewElementNode(node) &&
-    node.getProposalKind() === kind &&
-    node.getProposalId() === proposalId
+    isReviewElementNode(node) && $canReviewElementNodesBeMerged(reference, node)
   );
 }
 
@@ -527,7 +521,6 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
         value: {
           association: "proposal",
           childIndex,
-          kind: parent.getProposalKind(),
           node,
           offset: point.offset,
           paragraph,
@@ -579,7 +572,6 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       value: {
         association: "proposal",
         childIndex,
-        kind: wrapper.getProposalKind(),
         node: null,
         offset: textChildren
           .slice(0, point.offset)
@@ -663,7 +655,7 @@ function inspectSelection(): Preparation<SelectionInspection> {
 function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
   return (
     left.paragraph === right.paragraph &&
-    isSameProposalNode(left.wrapper, right.kind, right.wrapper.getProposalId())
+    isSameProposalNode(left.wrapper, right.wrapper)
   );
 }
 
@@ -680,7 +672,6 @@ function buildProposalMap(
       "The proposal selection wrappers are not ordered in one paragraph.",
     );
   }
-  const kind = startWrapper.getProposalKind();
   const proposalId = startWrapper.getProposalId();
   const wrappers: ReviewElementNode[] = [];
   const entries: ProposalMapEntry[] = [];
@@ -688,7 +679,7 @@ function buildProposalMap(
   const children = paragraph.getChildren();
   for (let index = startIndex; index <= endIndex; index += 1) {
     const child = children[index];
-    if (!isSameProposalNode(child, kind, proposalId)) {
+    if (!isSameProposalNode(child, startWrapper)) {
       return refusal(
         "unsafe-proposal-intersection",
         "The selection intersects accepted content or another proposal identity.",
@@ -718,7 +709,6 @@ function buildProposalMap(
     status: "ready",
     value: {
       entries,
-      kind,
       paragraph,
       proposalId,
       total: offset,
@@ -733,11 +723,9 @@ function buildProposalMapAroundPoint(
   const children = point.paragraph.getChildren();
   let startIndex = point.childIndex;
   let endIndex = point.childIndex;
-  const kind = point.kind;
-  const proposalId = point.wrapper.getProposalId();
   const isSameWrapper = (
     child: LexicalNode | undefined,
-  ): child is ReviewElementNode => isSameProposalNode(child, kind, proposalId);
+  ): child is ReviewElementNode => isSameProposalNode(child, point.wrapper);
 
   while (startIndex > 0 && isSameWrapper(children[startIndex - 1])) {
     startIndex -= 1;
@@ -1196,7 +1184,7 @@ function defaultProposalIdFactory(): string {
 
 function missingProposalNode(
   editor: LexicalEditor,
-  kind: ProposalKind,
+  kind: "deletion" | "insertion",
 ): ReviewNodeOutcome | null {
   const nodeClass =
     kind === "insertion" ? ReviewInsertionNode : ReviewDeletionNode;
@@ -1211,7 +1199,7 @@ function missingProposalNode(
 function insertAcceptedProposal(
   point: AcceptedPoint,
   selection: RangeSelection,
-  kind: ProposalKind,
+  kind: "deletion" | "insertion",
   proposalId: string,
   text: string,
 ): void {
@@ -1407,7 +1395,7 @@ function performInsertion(
       if (proposalSpan.status !== "ready") {
         return refused(proposalSpan.reason);
       }
-      if (proposalSpan.value.map.kind !== "insertion") {
+      if (!$isReviewInsertionNode(proposalSpan.value.map.wrappers[0])) {
         return refused({
           code: "unsupported-proposal-edit",
           message:
@@ -1424,7 +1412,7 @@ function performInsertion(
   }
   const point = inspection.value.anchor;
   if (point.association === "proposal") {
-    if (point.kind !== "insertion") {
+    if (!$isReviewInsertionNode(point.wrapper)) {
       return refused({
         code: "unsupported-proposal-edit",
         message:

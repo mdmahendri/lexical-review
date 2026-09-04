@@ -19,8 +19,6 @@ type SerializedReviewElementNode = Spread<
   SerializedElementNode
 >;
 
-export type ProposalKind = "deletion" | "insertion";
-
 export type SerializedReviewInsertionNode = SerializedReviewElementNode & {
   type: "review-insertion";
 };
@@ -56,8 +54,6 @@ export abstract class ReviewElementNode extends ElementNode {
   getProposalId(): string {
     return this.getLatest().__proposalId;
   }
-
-  abstract getProposalKind(): ProposalKind;
 
   override canInsertTextBefore(): false {
     return false;
@@ -121,10 +117,6 @@ export class ReviewInsertionNode extends ReviewElementNode {
     return "ins";
   }
 
-  override getProposalKind(): "insertion" {
-    return "insertion";
-  }
-
   override exportJSON(): SerializedReviewInsertionNode {
     return {
       ...super.exportJSON(),
@@ -154,10 +146,6 @@ export class ReviewDeletionNode extends ReviewElementNode {
 
   protected override getReviewTag(): "del" {
     return "del";
-  }
-
-  override getProposalKind(): "deletion" {
-    return "deletion";
   }
 
   override exportJSON(): SerializedReviewDeletionNode {

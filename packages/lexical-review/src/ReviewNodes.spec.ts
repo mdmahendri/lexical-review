@@ -59,9 +59,7 @@ describe("review proposal element nodes", () => {
       expect($isReviewInsertionNode(deletion)).toBe(false);
 
       expect(insertion.getProposalId()).toBe("proposal-a");
-      expect(insertion.getProposalKind()).toBe("insertion");
       expect(deletion.getProposalId()).toBe("proposal-b");
-      expect(deletion.getProposalKind()).toBe("deletion");
     });
   });
 
@@ -181,7 +179,7 @@ describe("review proposal element nodes", () => {
     });
   });
 
-  it("identifies review element nodes sharing proposal kind and identity", async () => {
+  it("identifies review element nodes sharing type and identity", async () => {
     const editor = createReviewEditor();
 
     await update(editor, () => {

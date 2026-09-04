@@ -15,7 +15,6 @@ export {
   $isReviewInsertionNode,
   type SerializedReviewDeletionNode,
   type SerializedReviewInsertionNode,
-  type ProposalKind,
 } from "./ReviewNodes";
 export {
   exportReviewDocument,
