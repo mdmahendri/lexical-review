@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { registerReviewSession } from "./registerReviewSession";
-import type { NodeBackedReviewSessionRegistrationOptions } from "./registerNodeBackedReviewSession";
+import type { ReviewSessionRegistrationOptions } from "./registerReviewSession";
 import type { ReviewSession } from "./ReviewSession";
 
 export function ReviewSessionPlugin({
@@ -10,7 +10,7 @@ export function ReviewSessionPlugin({
   onOutcome,
   proposalIdFactory,
   session,
-}: NodeBackedReviewSessionRegistrationOptions & {
+}: ReviewSessionRegistrationOptions & {
   session: ReviewSession;
 }) {
   const [editor] = useLexicalComposerContext();

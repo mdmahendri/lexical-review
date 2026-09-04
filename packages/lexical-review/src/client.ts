@@ -8,10 +8,9 @@ export {
   type ReviewSessionRegistrationOptions,
 } from "./registerReviewSession";
 export type {
-  NodeBackedReviewSessionRegistrationOptions,
   ReviewNodeOperationalError,
   ReviewNodeOutcome,
   ReviewNodeRefusal,
   ReviewNodeRefusalCode,
   ReviewProposalIdFactory,
-} from "./registerNodeBackedReviewSession";
+} from "./registerReviewSession";

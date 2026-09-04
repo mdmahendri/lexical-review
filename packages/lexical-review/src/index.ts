@@ -5,10 +5,6 @@ export {
   type TextReviewType as LegacyTextReviewType,
 } from "./ReviewTextNode";
 export {
-  openReviewSession as openLegacyReviewSession,
-  type ReviewSession as LegacyReviewSession,
-} from "./LegacyReviewSession";
-export {
   ReviewDeletionNode,
   ReviewElementNode,
   ReviewInsertionNode,

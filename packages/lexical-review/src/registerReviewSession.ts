@@ -1,6 +1,11 @@
 import {
+  $createTextNode,
+  $getRoot,
   $getSelection,
+  $isElementNode,
+  $isParagraphNode,
   $isRangeSelection,
+  $isTextNode,
   BEFORE_INPUT_COMMAND,
   COMMAND_PRIORITY_HIGH,
   CONTROLLED_TEXT_INSERTION_COMMAND,
@@ -12,531 +17,1693 @@ import {
   FORMAT_TEXT_COMMAND,
   INSERT_LINE_BREAK_COMMAND,
   INSERT_PARAGRAPH_COMMAND,
-  KEY_ENTER_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
+  KEY_ENTER_COMMAND,
   PASTE_COMMAND,
   REMOVE_TEXT_COMMAND,
   SET_TEXT_FORMAT_COMMAND,
+  type ElementNode,
   type LexicalEditor,
+  type LexicalNode,
+  type ParagraphNode,
+  type PointType,
   type RangeSelection,
+  type TextNode,
 } from "lexical";
 import { mergeRegister } from "@lexical/utils";
+import { isValidProposalId } from "./ProposalIdentity";
 import {
-  $createReviewProjection,
-  type ProjectionSelectionInspection,
-  type ReviewProjectionCursor,
-} from "./ReviewProjection";
-import {
-  type DeletionIntentionPreparation,
-  type InsertionIntentionPreparation,
-  type ReviewOutcome,
-  type ReviewRefusal,
-  type ReviewRefusalCode,
-  type ReviewSession as LegacyReviewSession,
-  type ReviewStateView,
-} from "./LegacyReviewSession";
-import {
-  registerNodeBackedReviewSession,
-  type NodeBackedReviewSessionRegistrationOptions,
-} from "./registerNodeBackedReviewSession";
-import type { ReviewSession as NodeBackedReviewSession } from "./ReviewSession";
+  $canReviewElementNodesBeMerged,
+  $createReviewDeletionNode,
+  $createReviewInsertionNode,
+  $isReviewDeletionNode,
+  $isReviewInsertionNode,
+  ReviewDeletionNode,
+  ReviewElementNode,
+  ReviewInsertionNode,
+  type ProposalKind,
+} from "./ReviewNodes";
+import type { ReviewSession } from "./ReviewSession";
 
-type SelectionSnapshot = Readonly<{
-  anchor: Readonly<{ key: string; offset: number; type: "element" | "text" }>;
-  focus: Readonly<{ key: string; offset: number; type: "element" | "text" }>;
+const SUPPORTED_TEXT_FORMAT_MASK = 0b1111;
+
+type PointSnapshot = Readonly<{
+  key: string;
+  offset: number;
+  type: "element" | "text";
 }>;
 
-function refusal(code: ReviewRefusalCode, message: string): ReviewRefusal {
-  return { code, message };
+export type ReviewNodeRefusalCode =
+  | "ambiguous-boundary"
+  | "deletion-target-unavailable"
+  | "invalid-proposal-id"
+  | "invalid-structural-target"
+  | "unsafe-proposal-intersection"
+  | "unsupported-formatting"
+  | "unsupported-input"
+  | "unsupported-proposal-edit"
+  | "unsupported-structure"
+  | "unsupported-target"
+  | "unsupported-transfer";
+
+export type ReviewNodeRefusal = Readonly<{
+  code: ReviewNodeRefusalCode;
+  message: string;
+}>;
+
+export type ReviewNodeOperationalError = Readonly<{
+  cause: unknown;
+  code: string;
+  message: string;
+}>;
+
+export type ReviewNodeOutcome<T = void> =
+  | Readonly<{ status: "changed"; value: T }>
+  | Readonly<{ status: "unchanged"; value: T }>
+  | Readonly<{ reason: ReviewNodeRefusal; status: "refused" }>
+  | Readonly<{ error: ReviewNodeOperationalError; status: "failed" }>;
+
+export type ReviewProposalIdFactory = () => string;
+
+export type ReviewSessionRegistrationOptions = Readonly<{
+  onDeletionOutcome?: (outcome: ReviewNodeOutcome) => void;
+  onInsertionOutcome?: (outcome: ReviewNodeOutcome) => void;
+  onOutcome?: (outcome: ReviewNodeOutcome) => void;
+  proposalIdFactory?: ReviewProposalIdFactory;
+}>;
+
+type AcceptedPoint = Readonly<{
+  association: "accepted";
+  childIndex: number;
+  node: TextNode | null;
+  offset: number;
+  paragraph: ParagraphNode;
+}>;
+
+type ProposalPoint = Readonly<{
+  association: "proposal";
+  childIndex: number;
+  kind: ProposalKind;
+  node: TextNode | null;
+  offset: number;
+  paragraph: ParagraphNode;
+  wrapper: ReviewElementNode;
+}>;
+
+type SelectionPoint = AcceptedPoint | ProposalPoint;
+
+type SelectionFailure = Readonly<{
+  reason: ReviewNodeRefusal;
+  status: "refused";
+}>;
+
+type SelectionInspection = Readonly<{
+  anchor: SelectionPoint;
+  backward: boolean;
+  collapsed: boolean;
+  focus: SelectionPoint;
+  selection: RangeSelection;
+}>;
+
+type Preparation<T> =
+  Readonly<{ status: "ready"; value: T }> | SelectionFailure;
+
+type ProposalMapEntry = Readonly<{
+  end: number;
+  node: TextNode;
+  start: number;
+  wrapper: ReviewElementNode;
+}>;
+
+type ProposalMap = Readonly<{
+  entries: readonly ProposalMapEntry[];
+  kind: ProposalKind;
+  paragraph: ParagraphNode;
+  total: number;
+  wrappers: readonly ReviewElementNode[];
+  proposalId: string;
+}>;
+
+type ProposalSpan = Readonly<{
+  end: number;
+  map: ProposalMap;
+  start: number;
+}>;
+
+type AcceptedMapEntry = Readonly<{
+  childIndex: number;
+  end: number;
+  node: TextNode;
+  start: number;
+}>;
+
+type AcceptedMap = Readonly<{
+  entries: readonly AcceptedMapEntry[];
+  paragraph: ParagraphNode;
+  total: number;
+}>;
+
+type AcceptedSpan = Readonly<{
+  end: number;
+  map: AcceptedMap;
+  start: number;
+}>;
+
+let generatedProposalCounter = 0;
+
+function refusal(
+  code: ReviewNodeRefusalCode,
+  message: string,
+): SelectionFailure {
+  return { reason: { code, message }, status: "refused" };
 }
 
-function getSelectionTargetRefusal(
-  selection: ProjectionSelectionInspection,
-): ReviewRefusal | null {
-  if (selection.status === "unsupported") {
-    return refusal(
-      "unsupported-target",
-      "The selection does not identify a supported review target.",
+function changed(): ReviewNodeOutcome {
+  return { status: "changed", value: undefined };
+}
+
+function unchanged(): ReviewNodeOutcome {
+  return { status: "unchanged", value: undefined };
+}
+
+function refused(reason: ReviewNodeRefusal): ReviewNodeOutcome {
+  return { reason, status: "refused" };
+}
+
+function failed(cause: unknown, message: string): ReviewNodeOutcome {
+  return {
+    error: {
+      cause,
+      code: "node-backed-edit-failed",
+      message,
+    },
+    status: "failed",
+  };
+}
+
+function isRootParagraph(node: LexicalNode | null): node is ParagraphNode {
+  return $isParagraphNode(node) && node.getParent() === $getRoot();
+}
+
+function isReviewElementNode(
+  node: LexicalNode | null | undefined,
+): node is ReviewElementNode {
+  return $isReviewDeletionNode(node) || $isReviewInsertionNode(node);
+}
+
+type RootProposalContext = Readonly<{
+  paragraph: ParagraphNode;
+  wrapper: ReviewElementNode;
+}>;
+
+function getRootProposalContext(
+  node: LexicalNode | null | undefined,
+): RootProposalContext | null {
+  if (!isReviewElementNode(node)) {
+    return null;
+  }
+  const paragraph = node.getParent();
+  return isRootParagraph(paragraph) ? { paragraph, wrapper: node } : null;
+}
+
+function isSameProposalNode(
+  node: LexicalNode | null | undefined,
+  kind: ProposalKind,
+  proposalId: string,
+): node is ReviewElementNode {
+  return (
+    isReviewElementNode(node) &&
+    node.getProposalKind() === kind &&
+    node.getProposalId() === proposalId
+  );
+}
+
+function snapshotPoint(point: PointType): PointSnapshot {
+  return { key: point.key, offset: point.offset, type: point.type };
+}
+
+function restorePointAfterReviewElementMerge(
+  point: PointType,
+  snapshot: PointSnapshot,
+  left: ReviewElementNode,
+  right: ReviewElementNode,
+  parent: ElementNode,
+  leftChildCount: number,
+  rightIndex: number,
+): void {
+  if (snapshot.type === "element" && snapshot.key === right.getKey()) {
+    point.set(left.getKey(), leftChildCount + snapshot.offset, "element");
+    return;
+  }
+  if (snapshot.type === "element" && snapshot.key === parent.getKey()) {
+    if (snapshot.offset === rightIndex) {
+      point.set(left.getKey(), leftChildCount, "element");
+    } else if (snapshot.offset > rightIndex) {
+      point.set(parent.getKey(), snapshot.offset - 1, "element");
+    } else {
+      point.set(parent.getKey(), snapshot.offset, "element");
+    }
+    return;
+  }
+  point.set(snapshot.key, snapshot.offset, snapshot.type);
+}
+
+function mergeReviewElementNodes(
+  left: ReviewElementNode,
+  right: ReviewElementNode,
+): void {
+  const parent = left.getParent();
+  const rightIndex = right.getIndexWithinParent();
+  if (!$isElementNode(parent) || rightIndex < 0) {
+    return;
+  }
+  const leftChildCount = left.getChildrenSize();
+  const selection = $getSelection();
+  const anchor = $isRangeSelection(selection)
+    ? snapshotPoint(selection.anchor)
+    : null;
+  const focus = $isRangeSelection(selection)
+    ? snapshotPoint(selection.focus)
+    : null;
+
+  left.append(...right.getChildren());
+  right.remove();
+
+  if ($isRangeSelection(selection) && anchor !== null && focus !== null) {
+    restorePointAfterReviewElementMerge(
+      selection.anchor,
+      anchor,
+      left,
+      right,
+      parent,
+      leftChildCount,
+      rightIndex,
     );
+    restorePointAfterReviewElementMerge(
+      selection.focus,
+      focus,
+      left,
+      right,
+      parent,
+      leftChildCount,
+      rightIndex,
+    );
+    selection.dirty = true;
   }
-  if (!selection.collapsed) {
-    return selection.selected.finalizedProposal
-      ? refusal(
-          "finalized-proposal-intersection",
-          "The selection intersects finalized proposal content.",
-        )
-      : refusal(
-          "unsupported-target",
-          "The range is not supported by this review intention.",
-        );
+}
+
+function normalizeReviewElementNode(node: ReviewElementNode): void {
+  if (!node.isAttached()) {
+    return;
   }
+  const previous = node.getPreviousSibling();
   if (
-    selection.anchor.association === "proposal-insertion" ||
-    selection.anchor.association === "proposal-deletion"
+    isReviewElementNode(previous) &&
+    $canReviewElementNodesBeMerged(previous, node)
   ) {
-    return refusal(
-      "proposal-side-target",
-      "Finalized proposal content is not an accepted-side target.",
-    );
+    mergeReviewElementNodes(previous, node);
+    return;
   }
-  if (selection.acceptedBoundary === "unsupported") {
-    return refusal(
-      "unsupported-target",
-      "The selection does not identify a supported paragraph target.",
-    );
+  const next = node.getNextSibling();
+  if (isReviewElementNode(next) && $canReviewElementNodesBeMerged(node, next)) {
+    mergeReviewElementNodes(node, next);
   }
-  return selection.acceptedBoundary === "ambiguous"
-    ? refusal(
-        "ambiguous-boundary",
-        "The caret boundary does not carry one accepted-side association.",
-      )
+}
+
+function getChildIndex(parent: ElementNode, node: LexicalNode): number | null {
+  const index = parent
+    .getChildren()
+    .findIndex((child) => child.getKey() === node.getKey());
+  return index === -1 ? null : index;
+}
+
+function getTextChildren(wrapper: ReviewElementNode): TextNode[] | null {
+  const children = wrapper.getChildren();
+  if (
+    children.length === 0 ||
+    children.some(
+      (child) => !$isTextNode(child) || child.getTextContentSize() === 0,
+    )
+  ) {
+    return null;
+  }
+  return children.filter($isTextNode);
+}
+
+function validateParagraphStructure(
+  paragraph: ParagraphNode,
+): ReviewNodeRefusal | null {
+  for (const child of paragraph.getChildren()) {
+    if ($isTextNode(child)) {
+      if (hasUnsupportedTextFormatting(child)) {
+        return {
+          code: "unsupported-formatting",
+          message:
+            "Review editing supports bold, italic, strikethrough, and underline text without inline styles or token modes.",
+        };
+      }
+      continue;
+    }
+    if (isReviewElementNode(child)) {
+      const textChildren = getTextChildren(child);
+      if (textChildren === null) {
+        return {
+          code: "invalid-structural-target",
+          message:
+            "Review editing supports only direct paragraph text and text-only proposal wrappers.",
+        };
+      }
+      if (textChildren.some(hasUnsupportedTextFormatting)) {
+        return {
+          code: "unsupported-formatting",
+          message:
+            "Review editing supports bold, italic, strikethrough, and underline text without inline styles or token modes.",
+        };
+      }
+      continue;
+    }
+    return {
+      code: "invalid-structural-target",
+      message:
+        "Review editing supports only direct paragraph text and text-only proposal wrappers.",
+    };
+  }
+  return null;
+}
+
+function hasUnsupportedTextFormatting(node: TextNode): boolean {
+  return (
+    (node.getFormat() & ~SUPPORTED_TEXT_FORMAT_MASK) !== 0 ||
+    node.getDetail() !== 0 ||
+    node.getMode() !== "normal" ||
+    node.getStyle() !== ""
+  );
+}
+
+function validateSelectionFormatting(
+  selection: RangeSelection,
+): ReviewNodeRefusal | null {
+  return (selection.format & ~SUPPORTED_TEXT_FORMAT_MASK) !== 0 ||
+    selection.style !== ""
+    ? {
+        code: "unsupported-formatting",
+        message:
+          "Review editing supports bold, italic, strikethrough, and underline text without inline styles.",
+      }
     : null;
 }
 
-function getUnsupportedIntentionRefusal(
-  fallback: ReviewRefusal,
-): ReviewRefusal {
-  const projection = $createReviewProjection();
-  return (
-    getSelectionTargetRefusal(projection.inspect({ kind: "selection" })) ??
-    fallback
+function isTextBoundary(text: string, offset: number): boolean {
+  if (offset <= 0 || offset >= text.length) {
+    return true;
+  }
+  const before = text.charCodeAt(offset - 1);
+  const after = text.charCodeAt(offset);
+  return !(
+    before >= 0xd800 &&
+    before <= 0xdbff &&
+    after >= 0xdc00 &&
+    after <= 0xdfff
   );
 }
 
-function snapshotSelection(selection: RangeSelection): SelectionSnapshot {
-  return {
-    anchor: {
-      key: selection.anchor.key,
-      offset: selection.anchor.offset,
-      type: selection.anchor.type,
-    },
-    focus: {
-      key: selection.focus.key,
-      offset: selection.focus.offset,
-      type: selection.focus.type,
-    },
-  };
+function previousCharacterOffset(text: string, offset: number): number {
+  const previous = offset - 1;
+  if (
+    previous > 0 &&
+    text.charCodeAt(previous) >= 0xdc00 &&
+    text.charCodeAt(previous) <= 0xdfff &&
+    text.charCodeAt(previous - 1) >= 0xd800 &&
+    text.charCodeAt(previous - 1) <= 0xdbff
+  ) {
+    return previous - 1;
+  }
+  return previous;
 }
 
-function getSelectionSnapshot(): SelectionSnapshot | null {
-  const selection = $getSelection();
-  return $isRangeSelection(selection) ? snapshotSelection(selection) : null;
+function nextCharacterOffset(text: string, offset: number): number {
+  const next = offset + 1;
+  if (
+    next < text.length &&
+    text.charCodeAt(offset) >= 0xd800 &&
+    text.charCodeAt(offset) <= 0xdbff &&
+    text.charCodeAt(next) >= 0xdc00 &&
+    text.charCodeAt(next) <= 0xdfff
+  ) {
+    return next + 1;
+  }
+  return next;
 }
 
-function restoreSelectionSnapshot(snapshot: SelectionSnapshot): boolean {
+function classifyPoint(point: PointType): Preparation<SelectionPoint> {
+  const node = point.getNode();
+  if (point.type === "text") {
+    if (!$isTextNode(node)) {
+      return refusal(
+        "invalid-structural-target",
+        "A text selection point must identify a Lexical text node.",
+      );
+    }
+    const text = node.getTextContent();
+    if (
+      !Number.isInteger(point.offset) ||
+      point.offset < 0 ||
+      point.offset > text.length ||
+      !isTextBoundary(text, point.offset)
+    ) {
+      return refusal(
+        "invalid-structural-target",
+        "The text selection point is outside a supported Unicode text boundary.",
+      );
+    }
+    const parentNode: LexicalNode | null = node.getParent();
+    if (isRootParagraph(parentNode)) {
+      const structure = validateParagraphStructure(parentNode);
+      if (structure !== null) {
+        return { reason: structure, status: "refused" };
+      }
+      const childIndex = getChildIndex(parentNode, node);
+      if (childIndex === null) {
+        return refusal(
+          "invalid-structural-target",
+          "The selected text node is not attached to its paragraph.",
+        );
+      }
+      return {
+        status: "ready",
+        value: {
+          association: "accepted",
+          childIndex,
+          node,
+          offset: point.offset,
+          paragraph: parentNode,
+        },
+      };
+    }
+    const proposal = getRootProposalContext(parentNode);
+    if (proposal !== null) {
+      const { paragraph, wrapper: parent } = proposal;
+      const structure = validateParagraphStructure(paragraph);
+      if (structure !== null) {
+        return { reason: structure, status: "refused" };
+      }
+      const childIndex = getChildIndex(paragraph, parent);
+      if (childIndex === null) {
+        return refusal(
+          "invalid-structural-target",
+          "The selected proposal wrapper is not attached to its paragraph.",
+        );
+      }
+      const textChildren = getTextChildren(parent);
+      if (textChildren === null) {
+        return refusal(
+          "invalid-structural-target",
+          "The selected proposal wrapper has unsupported live children.",
+        );
+      }
+      return {
+        status: "ready",
+        value: {
+          association: "proposal",
+          childIndex,
+          kind: parent.getProposalKind(),
+          node,
+          offset: point.offset,
+          paragraph,
+          wrapper: parent,
+        },
+      };
+    }
+    return refusal(
+      "invalid-structural-target",
+      "Review editing supports only direct paragraph text and proposal text.",
+    );
+  }
+
+  if (!$isElementNode(node)) {
+    return refusal(
+      "invalid-structural-target",
+      "An element selection point must identify a Lexical element node.",
+    );
+  }
+  if (!Number.isInteger(point.offset) || point.offset < 0) {
+    return refusal(
+      "invalid-structural-target",
+      "The element selection point has an invalid child offset.",
+    );
+  }
+  const proposal = getRootProposalContext(node);
+  if (proposal !== null) {
+    const { paragraph, wrapper } = proposal;
+    const textChildren = getTextChildren(wrapper);
+    if (textChildren === null || point.offset > textChildren.length) {
+      return refusal(
+        "invalid-structural-target",
+        "The proposal element point does not identify a supported child boundary.",
+      );
+    }
+    const structure = validateParagraphStructure(paragraph);
+    if (structure !== null) {
+      return { reason: structure, status: "refused" };
+    }
+    const childIndex = getChildIndex(paragraph, node);
+    if (childIndex === null) {
+      return refusal(
+        "invalid-structural-target",
+        "The selected proposal wrapper is not attached to its paragraph.",
+      );
+    }
+    return {
+      status: "ready",
+      value: {
+        association: "proposal",
+        childIndex,
+        kind: wrapper.getProposalKind(),
+        node: null,
+        offset: textChildren
+          .slice(0, point.offset)
+          .reduce((total, child) => total + child.getTextContentSize(), 0),
+        paragraph,
+        wrapper,
+      },
+    };
+  }
+  if (isRootParagraph(node)) {
+    const structure = validateParagraphStructure(node);
+    if (structure !== null) {
+      return { reason: structure, status: "refused" };
+    }
+    const children = node.getChildren();
+    if (point.offset > children.length) {
+      return refusal(
+        "invalid-structural-target",
+        "The paragraph element point is outside its child range.",
+      );
+    }
+    const left = children[point.offset - 1];
+    const right = children[point.offset];
+    if (isReviewElementNode(left) || isReviewElementNode(right)) {
+      return refusal(
+        "ambiguous-boundary",
+        "A paragraph boundary next to proposal content does not identify one editing side.",
+      );
+    }
+    return {
+      status: "ready",
+      value: {
+        association: "accepted",
+        childIndex: point.offset,
+        node: null,
+        offset: children
+          .slice(0, point.offset)
+          .reduce((total, child) => total + child.getTextContentSize(), 0),
+        paragraph: node,
+      },
+    };
+  }
+  return refusal(
+    "invalid-structural-target",
+    "Review editing supports only paragraph and proposal element points.",
+  );
+}
+
+function inspectSelection(): Preparation<SelectionInspection> {
   const selection = $getSelection();
   if (!$isRangeSelection(selection)) {
-    return false;
-  }
-  selection.anchor.set(
-    snapshot.anchor.key,
-    snapshot.anchor.offset,
-    snapshot.anchor.type,
-  );
-  selection.focus.set(
-    snapshot.focus.key,
-    snapshot.focus.offset,
-    snapshot.focus.type,
-  );
-  selection.dirty = true;
-  return true;
-}
-
-function prepareInsertionIntention(
-  projection: ReviewProjectionCursor,
-  text: string,
-): InsertionIntentionPreparation {
-  const selection = projection.inspect({ kind: "selection" });
-  const targetRefusal = getSelectionTargetRefusal(selection);
-  if (targetRefusal !== null) {
-    return { reason: targetRefusal, status: "refused" };
-  }
-  if (selection.status !== "available" || !selection.collapsed) {
-    return {
-      reason: refusal(
-        "unsupported-target",
-        "Insertion requires one collapsed accepted-side caret.",
-      ),
-      status: "refused",
-    };
-  }
-  if (
-    selection.anchor.association === "draft-insertion" &&
-    selection.insertionDraft.target !== null
-  ) {
-    return {
-      status: "ready",
-      value: {
-        format: selection.anchor.format,
-        target: selection.insertionDraft.target,
-        text,
-      },
-    };
-  }
-  if (selection.anchor.association !== "accepted") {
-    return {
-      reason: refusal(
-        "proposal-side-target",
-        "Finalized proposal content is not an accepted-side target.",
-      ),
-      status: "refused",
-    };
-  }
-  if (selection.anchor.accepted === null) {
-    return {
-      reason: refusal(
-        "unsupported-target",
-        "The selection does not identify a supported paragraph target.",
-      ),
-      status: "refused",
-    };
-  }
-  return {
-    status: "ready",
-    value: {
-      format: selection.anchor.format,
-      target: selection.anchor.accepted,
-      text,
-    },
-  };
-}
-
-function prepareDeletionIntention(
-  projection: ReviewProjectionCursor,
-  isBackward: boolean,
-  granularity: "word" | "character",
-): DeletionIntentionPreparation {
-  const nativeSelection = $getSelection();
-  if (!$isRangeSelection(nativeSelection)) {
-    return {
-      reason: refusal(
-        "unsupported-target",
-        "Deletion requires one supported range selection.",
-      ),
-      status: "refused",
-    };
-  }
-
-  const snapshot = snapshotSelection(nativeSelection);
-  const wasCollapsed = nativeSelection.isCollapsed();
-  let selection = projection.inspect({ kind: "selection" });
-  if (selection.status !== "available") {
-    return {
-      reason: refusal(
-        "unsupported-target",
-        "Deletion requires one supported range selection.",
-      ),
-      status: "refused",
-    };
-  }
-  const initialPoint = wasCollapsed ? selection.anchor.accepted : null;
-  if (
-    selection.selected.finalizedProposal ||
-    (selection.collapsed &&
-      (selection.anchor.association === "proposal-insertion" ||
-        selection.anchor.association === "proposal-deletion"))
-  ) {
-    return {
-      reason: refusal(
-        selection.collapsed
-          ? "proposal-side-target"
-          : "finalized-proposal-intersection",
-        selection.collapsed
-          ? "Finalized proposal content is not an accepted-side target."
-          : "The selection intersects finalized proposal content.",
-      ),
-      status: "refused",
-    };
-  }
-
-  if (wasCollapsed) {
-    const adjacent = isBackward
-      ? selection.deletionDraft.adjacentBackward
-      : selection.deletionDraft.adjacentForward;
-    if (initialPoint !== null && adjacent) {
-      return {
-        status: "ready",
-        value: {
-          direction: isBackward ? "backward" : "forward",
-          target: { end: initialPoint, start: initialPoint },
-        },
-      };
-    }
-    if (
-      selection.deletionDraft.inside &&
-      selection.deletionDraft.target !== null
-    ) {
-      return {
-        status: "ready",
-        value: {
-          direction: isBackward ? "backward" : "forward",
-          target: selection.deletionDraft.target,
-        },
-      };
-    }
-    try {
-      projection.reconcile({
-        kind: "place-selection",
-        target: { isBackward, kind: "deletion-native-continuation" },
-      });
-      nativeSelection.modify("extend", isBackward, granularity);
-      selection = projection.inspect({ kind: "selection" });
-    } catch {
-      restoreSelectionSnapshot(snapshot);
-      return {
-        reason: refusal(
-          "deletion-target-unavailable",
-          "The native selection could not resolve the deletion target.",
-        ),
-        status: "refused",
-      };
-    }
-  }
-
-  if (selection.status !== "available") {
-    restoreSelectionSnapshot(snapshot);
-    return {
-      reason: refusal(
-        "unsupported-target",
-        "Deletion requires one supported range selection.",
-      ),
-      status: "refused",
-    };
-  }
-  if (selection.selected.finalizedProposal) {
-    restoreSelectionSnapshot(snapshot);
-    return {
-      reason: refusal(
-        "finalized-proposal-intersection",
-        "The selection intersects finalized proposal content.",
-      ),
-      status: "refused",
-    };
-  }
-  if (selection.selected.draftDeletion) {
-    const { anchor, focus } = selection;
-    if (
-      !selection.collapsed &&
-      anchor.accepted !== null &&
-      focus.accepted !== null &&
-      anchor.accepted.paragraph === focus.accepted.paragraph &&
-      anchor.accepted.offset !== focus.accepted.offset
-    ) {
-      const start =
-        anchor.accepted.offset <= focus.accepted.offset
-          ? anchor.accepted
-          : focus.accepted;
-      const end =
-        anchor.accepted.offset <= focus.accepted.offset
-          ? focus.accepted
-          : anchor.accepted;
-      return {
-        status: "ready",
-        value: { direction: "range", target: { end, start } },
-      };
-    }
-    restoreSelectionSnapshot(snapshot);
-    if (initialPoint === null) {
-      return {
-        reason: refusal(
-          "unsupported-target",
-          "The deletion caret does not identify accepted content.",
-        ),
-        status: "refused",
-      };
-    }
-    return {
-      status: "ready",
-      value: {
-        direction: isBackward ? "backward" : "forward",
-        target: { end: initialPoint, start: initialPoint },
-      },
-    };
-  }
-  if (
-    selection.insertionDraft.selection !== null &&
-    selection.insertionDraft.target !== null
-  ) {
-    return {
-      status: "ready",
-      value: {
-        direction: isBackward ? "backward" : "forward",
-        draftSelection: {
-          ...selection.insertionDraft.selection,
-          kind: "insertion",
-        },
-        target: {
-          end: selection.insertionDraft.target,
-          start: selection.insertionDraft.target,
-        },
-      },
-    };
-  }
-  if (selection.selected.draftInsertion) {
-    restoreSelectionSnapshot(snapshot);
-    return {
-      reason: refusal(
-        "unsupported-target",
-        "A deletion range may not mix insertion-draft and accepted content.",
-      ),
-      status: "refused",
-    };
-  }
-  const { anchor, focus } = selection;
-  if (
-    anchor.accepted === null ||
-    focus.accepted === null ||
-    anchor.accepted.paragraph !== focus.accepted.paragraph
-  ) {
-    restoreSelectionSnapshot(snapshot);
-    return {
-      reason: refusal(
-        "unsupported-target",
-        "Deletion supports one same-paragraph accepted-state range.",
-      ),
-      status: "refused",
-    };
-  }
-  const start =
-    anchor.accepted.offset <= focus.accepted.offset
-      ? anchor.accepted
-      : focus.accepted;
-  const end =
-    anchor.accepted.offset <= focus.accepted.offset
-      ? focus.accepted
-      : anchor.accepted;
-  return {
-    status: "ready",
-    value: {
-      direction: wasCollapsed ? (isBackward ? "backward" : "forward") : "range",
-      target: { end, start },
-    },
-  };
-}
-
-const UNSUPPORTED_DELETION: ReviewRefusal = {
-  code: "unsupported-deletion",
-  message: "Deletion authoring is not supported by this review session yet.",
-};
-const UNSUPPORTED_FORMATTING: ReviewRefusal = {
-  code: "unsupported-formatting",
-  message: "Formatting authoring is not supported by this review session yet.",
-};
-const UNSUPPORTED_STRUCTURE: ReviewRefusal = {
-  code: "unsupported-structure",
-  message:
-    "Paragraph structure authoring is not supported by this review session yet.",
-};
-const UNSUPPORTED_TRANSFER: ReviewRefusal = {
-  code: "unsupported-transfer",
-  message: "Content transfer is not supported by this review session yet.",
-};
-
-export type ReviewSessionRegistrationOptions = Readonly<{
-  onDeletionOutcome?: (outcome: ReviewOutcome<ReviewStateView>) => void;
-  onInsertionOutcome?: (outcome: ReviewOutcome<ReviewStateView>) => void;
-  onOutcome?: (outcome: ReviewOutcome<ReviewStateView>) => void;
-}>;
-
-function registerLegacyReviewSession(
-  editor: LexicalEditor,
-  session: LegacyReviewSession,
-  options: ReviewSessionRegistrationOptions = {},
-): () => void {
-  const report = (outcome: ReviewOutcome<ReviewStateView>): void => {
-    options.onOutcome?.(outcome);
-  };
-  const refuse = (fallback: ReviewRefusal): ReviewRefusal => {
-    const reason = getUnsupportedIntentionRefusal(fallback);
-    report({
-      reason,
-      status: "refused",
-    });
-    return reason;
-  };
-  const refuseDeletion = () => {
-    const reason = refuse(UNSUPPORTED_DELETION);
-    options.onDeletionOutcome?.({ reason, status: "refused" });
-    return true;
-  };
-  const handleDeletion = (
-    isBackward: boolean,
-    granularity: "word" | "character",
-    event?: Event | null,
-  ): boolean => {
-    event?.preventDefault();
-    const selectionBefore = getSelectionSnapshot();
-    const prepared = prepareDeletionIntention(
-      $createReviewProjection(),
-      isBackward,
-      granularity,
+    return refusal(
+      "unsupported-target",
+      "Review editing requires one Lexical range selection.",
     );
-    if (prepared.status === "refused") {
-      report(prepared);
-      options.onDeletionOutcome?.(prepared);
-      return true;
+  }
+  const formatting = validateSelectionFormatting(selection);
+  if (formatting !== null) {
+    return { reason: formatting, status: "refused" };
+  }
+  const anchor = classifyPoint(selection.anchor);
+  if (anchor.status !== "ready") {
+    return anchor;
+  }
+  const focus = classifyPoint(selection.focus);
+  if (focus.status !== "ready") {
+    return focus;
+  }
+  return {
+    status: "ready",
+    value: {
+      anchor: anchor.value,
+      backward: selection.isBackward(),
+      collapsed: selection.isCollapsed(),
+      focus: focus.value,
+      selection,
+    },
+  };
+}
+
+function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
+  return (
+    left.paragraph === right.paragraph &&
+    isSameProposalNode(left.wrapper, right.kind, right.wrapper.getProposalId())
+  );
+}
+
+function buildProposalMap(
+  paragraph: ParagraphNode,
+  startWrapper: ReviewElementNode,
+  endWrapper: ReviewElementNode,
+): Preparation<ProposalMap> {
+  const startIndex = getChildIndex(paragraph, startWrapper);
+  const endIndex = getChildIndex(paragraph, endWrapper);
+  if (startIndex === null || endIndex === null || startIndex > endIndex) {
+    return refusal(
+      "invalid-structural-target",
+      "The proposal selection wrappers are not ordered in one paragraph.",
+    );
+  }
+  const kind = startWrapper.getProposalKind();
+  const proposalId = startWrapper.getProposalId();
+  const wrappers: ReviewElementNode[] = [];
+  const entries: ProposalMapEntry[] = [];
+  let offset = 0;
+  const children = paragraph.getChildren();
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const child = children[index];
+    if (!isSameProposalNode(child, kind, proposalId)) {
+      return refusal(
+        "unsafe-proposal-intersection",
+        "The selection intersects accepted content or another proposal identity.",
+      );
     }
-    queueMicrotask(() => {
-      const outcome = session.deleteText(prepared.value);
-      report(outcome);
-      options.onDeletionOutcome?.(outcome);
-      if (outcome.status === "changed") {
-        editor.update(
-          () => {
-            if (prepared.value.draftSelection !== undefined) {
-              $createReviewProjection().reconcile({
-                kind: "place-selection",
-                target: {
-                  kind: "insertion-draft-offset",
-                  offset: prepared.value.draftSelection.start,
-                },
-              });
-            } else {
-              $createReviewProjection().reconcile({
-                kind: "place-selection",
-                target: {
-                  direction: prepared.value.direction ?? "range",
-                  kind: "deletion-draft-continuation",
-                },
-              });
-            }
-          },
-          { discrete: true },
-        );
-      } else if (selectionBefore !== null) {
-        editor.update(() => restoreSelectionSnapshot(selectionBefore), {
-          discrete: true,
+    const textChildren = getTextChildren(child);
+    if (textChildren === null) {
+      return refusal(
+        "invalid-structural-target",
+        "A pending proposal contains unsupported live children.",
+      );
+    }
+    wrappers.push(child);
+    for (const node of textChildren) {
+      const end = offset + node.getTextContentSize();
+      entries.push({ end, node, start: offset, wrapper: child });
+      offset = end;
+    }
+  }
+  if (entries.length === 0) {
+    return refusal(
+      "invalid-structural-target",
+      "A pending proposal must contain live text before it can be edited.",
+    );
+  }
+  return {
+    status: "ready",
+    value: {
+      entries,
+      kind,
+      paragraph,
+      proposalId,
+      total: offset,
+      wrappers,
+    },
+  };
+}
+
+function buildProposalMapAroundPoint(
+  point: ProposalPoint,
+): Preparation<ProposalMap> {
+  const children = point.paragraph.getChildren();
+  let startIndex = point.childIndex;
+  let endIndex = point.childIndex;
+  const kind = point.kind;
+  const proposalId = point.wrapper.getProposalId();
+  const isSameWrapper = (
+    child: LexicalNode | undefined,
+  ): child is ReviewElementNode => isSameProposalNode(child, kind, proposalId);
+
+  while (startIndex > 0 && isSameWrapper(children[startIndex - 1])) {
+    startIndex -= 1;
+  }
+  while (
+    endIndex + 1 < children.length &&
+    isSameWrapper(children[endIndex + 1])
+  ) {
+    endIndex += 1;
+  }
+  const startWrapper = children[startIndex];
+  const endWrapper = children[endIndex];
+  if (!isSameWrapper(startWrapper) || !isSameWrapper(endWrapper)) {
+    return refusal(
+      "invalid-structural-target",
+      "The proposal caret is not attached to a supported proposal run.",
+    );
+  }
+  return buildProposalMap(point.paragraph, startWrapper, endWrapper);
+}
+
+function getProposalOffset(
+  point: ProposalPoint,
+  map: ProposalMap,
+): number | null {
+  let offset = 0;
+  for (const wrapper of map.wrappers) {
+    const children = getTextChildren(wrapper);
+    if (children === null) {
+      return null;
+    }
+    if (wrapper.getKey() === point.wrapper.getKey()) {
+      if (point.node === null) {
+        return offset + point.offset;
+      }
+      for (const child of children) {
+        if (child.getKey() === point.node.getKey()) {
+          return offset + point.offset;
+        }
+        offset += child.getTextContentSize();
+      }
+      return null;
+    }
+    offset += children.reduce(
+      (total, child) => total + child.getTextContentSize(),
+      0,
+    );
+  }
+  return null;
+}
+
+function buildProposalSpan(
+  inspection: SelectionInspection,
+): Preparation<ProposalSpan> {
+  if (
+    inspection.anchor.association !== "proposal" ||
+    inspection.focus.association !== "proposal"
+  ) {
+    return refusal(
+      "unsafe-proposal-intersection",
+      "The selection does not stay on one proposal side.",
+    );
+  }
+  if (!sameProposal(inspection.anchor, inspection.focus)) {
+    return refusal(
+      "unsafe-proposal-intersection",
+      "A selection may edit only one proposal identity and kind at a time.",
+    );
+  }
+  const startPoint = inspection.backward ? inspection.focus : inspection.anchor;
+  const endPoint = inspection.backward ? inspection.anchor : inspection.focus;
+  const map = buildProposalMap(
+    startPoint.paragraph,
+    startPoint.wrapper,
+    endPoint.wrapper,
+  );
+  if (map.status !== "ready") {
+    return map;
+  }
+  const start = getProposalOffset(startPoint, map.value);
+  const end = getProposalOffset(endPoint, map.value);
+  if (start === null || end === null || end < start) {
+    return refusal(
+      "invalid-structural-target",
+      "The proposal selection points cannot be ordered in the live tree.",
+    );
+  }
+  return { status: "ready", value: { end, map: map.value, start } };
+}
+
+function buildAcceptedMap(paragraph: ParagraphNode): Preparation<AcceptedMap> {
+  const entries: AcceptedMapEntry[] = [];
+  let offset = 0;
+  for (const [childIndex, child] of paragraph.getChildren().entries()) {
+    if (!$isTextNode(child)) {
+      continue;
+    }
+    const end = offset + child.getTextContentSize();
+    if (child.getTextContentSize() > 0) {
+      entries.push({ childIndex, end, node: child, start: offset });
+    }
+    offset = end;
+  }
+  return {
+    status: "ready",
+    value: { entries, paragraph, total: offset },
+  };
+}
+
+function getAcceptedOffset(
+  point: AcceptedPoint,
+  map: AcceptedMap,
+): number | null {
+  let offset = 0;
+  const children = map.paragraph.getChildren();
+  for (let childIndex = 0; childIndex < children.length; childIndex += 1) {
+    if (childIndex > point.childIndex) {
+      break;
+    }
+    const child = children[childIndex];
+    if (child === undefined) {
+      return null;
+    }
+    if (childIndex === point.childIndex) {
+      if (point.node === null) {
+        return offset;
+      }
+      if (!$isTextNode(child) || child.getKey() !== point.node.getKey()) {
+        return null;
+      }
+      return offset + point.offset;
+    }
+    if ($isTextNode(child)) {
+      offset += child.getTextContentSize();
+    }
+  }
+  return point.node === null &&
+    point.childIndex === map.paragraph.getChildrenSize()
+    ? offset
+    : null;
+}
+
+function buildAcceptedSpan(
+  inspection: SelectionInspection,
+): Preparation<AcceptedSpan> {
+  if (
+    inspection.anchor.association !== "accepted" ||
+    inspection.focus.association !== "accepted"
+  ) {
+    return refusal(
+      "unsafe-proposal-intersection",
+      "The selection intersects proposal-side content.",
+    );
+  }
+  if (inspection.anchor.paragraph !== inspection.focus.paragraph) {
+    return refusal(
+      "unsupported-target",
+      "Accepted editing supports one same-paragraph range.",
+    );
+  }
+  const startPoint = inspection.backward ? inspection.focus : inspection.anchor;
+  const endPoint = inspection.backward ? inspection.anchor : inspection.focus;
+  const startIndex = startPoint.childIndex;
+  const endIndex = endPoint.node
+    ? endPoint.childIndex
+    : endPoint.childIndex - 1;
+  if (startIndex > endIndex + 1) {
+    return refusal(
+      "invalid-structural-target",
+      "The accepted selection points are not ordered in the paragraph.",
+    );
+  }
+  const children = startPoint.paragraph.getChildren();
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    const child = children[index];
+    if (child !== undefined && !$isTextNode(child)) {
+      return refusal(
+        "unsafe-proposal-intersection",
+        "The accepted range crosses pending proposal content.",
+      );
+    }
+  }
+  const map = buildAcceptedMap(startPoint.paragraph);
+  if (map.status !== "ready") {
+    return map;
+  }
+  const start = getAcceptedOffset(startPoint, map.value);
+  const end = getAcceptedOffset(endPoint, map.value);
+  if (start === null || end === null || end < start) {
+    return refusal(
+      "invalid-structural-target",
+      "The accepted selection points cannot be resolved in the live tree.",
+    );
+  }
+  return { status: "ready", value: { end, map: map.value, start } };
+}
+
+function getStartEntry(
+  entries: readonly AcceptedMapEntry[] | readonly ProposalMapEntry[],
+  offset: number,
+): AcceptedMapEntry | ProposalMapEntry | null {
+  return (
+    entries.find((entry) => entry.start <= offset && offset < entry.end) ?? null
+  );
+}
+
+function getEndEntry(
+  entries: readonly AcceptedMapEntry[] | readonly ProposalMapEntry[],
+  offset: number,
+): AcceptedMapEntry | ProposalMapEntry | null {
+  return (
+    entries.find((entry) => entry.start < offset && offset <= entry.end) ?? null
+  );
+}
+
+function getAcceptedSelectedNodes(span: AcceptedSpan): TextNode[] | null {
+  if (span.start >= span.end) {
+    return null;
+  }
+  const startEntry = getStartEntry(span.map.entries, span.start);
+  const endEntry = getEndEntry(span.map.entries, span.end);
+  if (startEntry === null || endEntry === null) {
+    return null;
+  }
+  const startOffset = span.start - startEntry.start;
+  const endOffset = span.end - endEntry.start;
+  if (startEntry.node.getKey() === endEntry.node.getKey()) {
+    const parts = startEntry.node.splitText(startOffset, endOffset);
+    const selected = startOffset === 0 ? parts[0] : parts[1];
+    return selected === undefined ? null : [selected];
+  }
+
+  let first = startEntry.node;
+  if (startOffset > 0) {
+    const parts = first.splitText(startOffset);
+    first = parts[1] ?? first;
+  }
+  let last = endEntry.node;
+  if (endOffset < last.getTextContentSize()) {
+    const parts = last.splitText(endOffset);
+    last = parts[0] ?? last;
+  }
+  const firstIndex = getChildIndex(span.map.paragraph, first);
+  const lastIndex = getChildIndex(span.map.paragraph, last);
+  if (firstIndex === null || lastIndex === null || firstIndex > lastIndex) {
+    return null;
+  }
+  const selected = span.map.paragraph
+    .getChildren()
+    .slice(firstIndex, lastIndex + 1);
+  return selected.every($isTextNode) ? selected : null;
+}
+
+function placeCaretAfterWrapper(
+  paragraph: ParagraphNode,
+  wrapper: ReviewElementNode,
+): void {
+  const wrapperIndex = getChildIndex(paragraph, wrapper);
+  if (wrapperIndex === null) {
+    paragraph.select();
+    return;
+  }
+  const next = paragraph.getChildAtIndex(wrapperIndex + 1);
+  if ($isTextNode(next)) {
+    next.selectStart();
+    return;
+  }
+  const previous = paragraph.getChildAtIndex(wrapperIndex - 1);
+  if ($isTextNode(previous)) {
+    previous.selectEnd();
+    return;
+  }
+  paragraph.select(wrapperIndex + 1, wrapperIndex + 1);
+}
+
+function placeProposalCaret(
+  map: ProposalMap,
+  offset: number,
+  fallbackIndex: number,
+): void {
+  let cursor = 0;
+  let lastText: TextNode | null = null;
+  for (const child of map.wrappers) {
+    if (child.getParent() !== map.paragraph) {
+      continue;
+    }
+    const textChildren = getTextChildren(child);
+    if (textChildren === null) {
+      continue;
+    }
+    for (const textNode of textChildren) {
+      const length = textNode.getTextContentSize();
+      if (offset <= cursor + length) {
+        textNode.select(offset - cursor, offset - cursor);
+        return;
+      }
+      cursor += length;
+      lastText = textNode;
+    }
+  }
+  if (lastText !== null) {
+    lastText.selectEnd();
+    return;
+  }
+  map.paragraph.select(
+    Math.min(Math.max(fallbackIndex, 0), map.paragraph.getChildrenSize()),
+  );
+}
+
+function removeProposalRange(
+  span: ProposalSpan,
+  start: number,
+  end: number,
+): void {
+  for (let index = span.map.entries.length - 1; index >= 0; index -= 1) {
+    const entry = span.map.entries[index];
+    if (entry === undefined) {
+      continue;
+    }
+    const localStart = Math.max(start, entry.start) - entry.start;
+    const localEnd = Math.min(end, entry.end) - entry.start;
+    if (localStart >= localEnd) {
+      continue;
+    }
+    entry.node.spliceText(localStart, localEnd - localStart, "", false);
+    if (entry.node.getTextContentSize() === 0) {
+      entry.node.remove();
+    }
+  }
+  for (const wrapper of span.map.wrappers) {
+    if (wrapper.getChildrenSize() === 0) {
+      wrapper.remove();
+    }
+  }
+}
+
+function replaceProposalRange(
+  span: ProposalSpan,
+  text: string,
+): ReviewNodeOutcome {
+  if (span.start === span.end) {
+    return unchanged();
+  }
+  const startEntry = getStartEntry(span.map.entries, span.start);
+  const endEntry = getEndEntry(span.map.entries, span.end);
+  if (startEntry === null || endEntry === null) {
+    return refused({
+      code: "invalid-structural-target",
+      message:
+        "The proposal replacement range cannot be resolved in the live tree.",
+    });
+  }
+  const fallbackIndex = getChildIndex(
+    span.map.paragraph,
+    span.map.wrappers[0]!,
+  );
+  for (let index = span.map.entries.length - 1; index >= 0; index -= 1) {
+    const entry = span.map.entries[index];
+    if (entry === undefined) {
+      continue;
+    }
+    const localStart = Math.max(span.start, entry.start) - entry.start;
+    const localEnd = Math.min(span.end, entry.end) - entry.start;
+    if (localStart >= localEnd) {
+      continue;
+    }
+    if (entry.node.getKey() === startEntry.node.getKey()) {
+      entry.node.spliceText(localStart, localEnd - localStart, text, true);
+    } else {
+      entry.node.spliceText(localStart, localEnd - localStart, "", false);
+      if (entry.node.getTextContentSize() === 0) {
+        entry.node.remove();
+      }
+    }
+  }
+  for (const wrapper of span.map.wrappers) {
+    if (wrapper.getChildrenSize() === 0) {
+      wrapper.remove();
+    }
+  }
+  placeProposalCaret(span.map, span.start + text.length, fallbackIndex ?? 0);
+  return changed();
+}
+
+function insertIntoProposal(point: ProposalPoint, text: string): void {
+  if (point.node !== null) {
+    point.node.spliceText(point.offset, 0, text, true);
+    return;
+  }
+  const children = getTextChildren(point.wrapper);
+  if (children === null) {
+    throw new Error("The proposal wrapper has no editable text children.");
+  }
+  if (point.offset === 0) {
+    children[0]!.spliceText(0, 0, text, true);
+    return;
+  }
+  let offset = 0;
+  for (const child of children) {
+    const end = offset + child.getTextContentSize();
+    if (point.offset <= end) {
+      child.spliceText(point.offset - offset, 0, text, true);
+      return;
+    }
+    offset = end;
+  }
+  children
+    .at(-1)!
+    .spliceText(children.at(-1)!.getTextContentSize(), 0, text, true);
+}
+
+function getUniqueProposalId(
+  factory: ReviewProposalIdFactory,
+): Preparation<string> {
+  const existing = new Set<string>();
+  for (const paragraph of $getRoot().getChildren()) {
+    if (!$isElementNode(paragraph)) {
+      continue;
+    }
+    for (const child of paragraph.getChildren()) {
+      if (isReviewElementNode(child)) {
+        existing.add(child.getProposalId());
+      }
+    }
+  }
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    let proposalId: string;
+    try {
+      proposalId = factory();
+    } catch (cause) {
+      return refusal(
+        "invalid-proposal-id",
+        cause instanceof Error
+          ? cause.message
+          : "The proposal identity factory failed.",
+      );
+    }
+    if (isValidProposalId(proposalId) && !existing.has(proposalId)) {
+      return { status: "ready", value: proposalId };
+    }
+  }
+  return refusal(
+    "invalid-proposal-id",
+    "The proposal identity factory did not produce a unique valid identity.",
+  );
+}
+
+function defaultProposalIdFactory(): string {
+  generatedProposalCounter += 1;
+  const cryptoObject = globalThis.crypto;
+  if (typeof cryptoObject?.randomUUID === "function") {
+    return `review-${cryptoObject.randomUUID()}`;
+  }
+  return `review-${Date.now().toString(36)}-${generatedProposalCounter.toString(36)}`;
+}
+
+function missingProposalNode(
+  editor: LexicalEditor,
+  kind: ProposalKind,
+): ReviewNodeOutcome | null {
+  const nodeClass =
+    kind === "insertion" ? ReviewInsertionNode : ReviewDeletionNode;
+  return editor.hasNode(nodeClass)
+    ? null
+    : refused({
+        code: "invalid-structural-target",
+        message: `The editor must register the review-${kind} node before authoring ${kind} proposals.`,
+      });
+}
+
+function insertAcceptedProposal(
+  point: AcceptedPoint,
+  selection: RangeSelection,
+  kind: ProposalKind,
+  proposalId: string,
+  text: string,
+): void {
+  const wrapper =
+    kind === "insertion"
+      ? $createReviewInsertionNode(proposalId)
+      : $createReviewDeletionNode(proposalId);
+  const textNode = $createTextNode(text);
+  textNode.setFormat(point.node?.getFormat() ?? selection.format);
+  wrapper.append(textNode);
+  if (point.node !== null) {
+    if (point.offset === 0) {
+      point.node.insertBefore(wrapper);
+    } else if (point.offset === point.node.getTextContentSize()) {
+      point.node.insertAfter(wrapper);
+    } else {
+      const parts = point.node.splitText(point.offset);
+      const right = parts[1];
+      if (right === undefined) {
+        throw new Error("The accepted text point could not be split.");
+      }
+      right.insertBefore(wrapper);
+    }
+  } else {
+    point.paragraph.splice(point.childIndex, 0, [wrapper]);
+  }
+  textNode.selectEnd();
+}
+
+function acceptedDeletionTarget(
+  point: AcceptedPoint,
+  backward: boolean,
+): Readonly<{ end: number; map: AcceptedMap; start: number }> | null {
+  const map = buildAcceptedMap(point.paragraph);
+  if (map.status !== "ready") {
+    return null;
+  }
+  const offset = getAcceptedOffset(point, map.value);
+  if (offset === null) {
+    return null;
+  }
+  if (point.node !== null) {
+    const text = point.node.getTextContent();
+    if (backward && point.offset > 0) {
+      return {
+        end: offset,
+        map: map.value,
+        start:
+          offset - (point.offset - previousCharacterOffset(text, point.offset)),
+      };
+    }
+    if (!backward && point.offset < text.length) {
+      return {
+        end: offset + (nextCharacterOffset(text, point.offset) - point.offset),
+        map: map.value,
+        start: offset,
+      };
+    }
+  }
+  const adjacentIndex = backward
+    ? point.childIndex - 1
+    : point.node === null
+      ? point.childIndex
+      : point.childIndex + 1;
+  const adjacent = point.paragraph.getChildAtIndex(adjacentIndex);
+  if (!$isTextNode(adjacent) || adjacent.getTextContentSize() === 0) {
+    return null;
+  }
+  const adjacentEntry = map.value.entries.find(
+    (entry) => entry.node.getKey() === adjacent.getKey(),
+  );
+  if (adjacentEntry === undefined) {
+    return null;
+  }
+  if (backward) {
+    const start = previousCharacterOffset(
+      adjacent.getTextContent(),
+      adjacent.getTextContentSize(),
+    );
+    return {
+      end: adjacentEntry.end,
+      map: map.value,
+      start: adjacentEntry.start + start,
+    };
+  }
+  const end = nextCharacterOffset(adjacent.getTextContent(), 0);
+  return {
+    end: adjacentEntry.start + end,
+    map: map.value,
+    start: adjacentEntry.start,
+  };
+}
+
+function deleteProposalCharacter(
+  point: ProposalPoint,
+  backward: boolean,
+): ReviewNodeOutcome {
+  const map = buildProposalMapAroundPoint(point);
+  if (map.status !== "ready") {
+    return refused(map.reason);
+  }
+  const offset = getProposalOffset(point, map.value);
+  if (offset === null) {
+    return refused(
+      refusal(
+        "invalid-structural-target",
+        "The proposal caret cannot be resolved in the live tree.",
+      ).reason,
+    );
+  }
+  const text = map.value.entries
+    .map((entry) => entry.node.getTextContent())
+    .join("");
+  if (!isTextBoundary(text, offset)) {
+    return refused(
+      refusal(
+        "invalid-structural-target",
+        "The proposal caret is not on a supported Unicode text boundary.",
+      ).reason,
+    );
+  }
+  if (backward && offset === 0) {
+    return refused(
+      refusal(
+        "deletion-target-unavailable",
+        "Backward deletion may not cross from proposal content into accepted content.",
+      ).reason,
+    );
+  }
+  if (!backward && offset === map.value.total) {
+    return refused(
+      refusal(
+        "deletion-target-unavailable",
+        "Forward deletion may not cross from proposal content into accepted content.",
+      ).reason,
+    );
+  }
+  const start = backward ? previousCharacterOffset(text, offset) : offset;
+  const end = backward ? offset : nextCharacterOffset(text, offset);
+  const span: ProposalSpan = { end, map: map.value, start };
+  const fallbackIndex = point.childIndex;
+  removeProposalRange(span, start, end);
+  placeProposalCaret(map.value, start, fallbackIndex);
+  return changed();
+}
+
+function deleteProposalSelection(span: ProposalSpan): ReviewNodeOutcome {
+  if (span.start === span.end) {
+    return unchanged();
+  }
+  const fallbackIndex = getChildIndex(
+    span.map.paragraph,
+    span.map.wrappers[0]!,
+  );
+  removeProposalRange(span, span.start, span.end);
+  placeProposalCaret(span.map, span.start, fallbackIndex ?? 0);
+  return changed();
+}
+
+function prepareProposalId(
+  options: ReviewSessionRegistrationOptions,
+): Preparation<string> {
+  return getUniqueProposalId(
+    options.proposalIdFactory ?? defaultProposalIdFactory,
+  );
+}
+
+function performInsertion(
+  editor: LexicalEditor,
+  text: string,
+  options: ReviewSessionRegistrationOptions,
+): ReviewNodeOutcome {
+  if (text.length === 0) {
+    return unchanged();
+  }
+  if (/\r|\n/u.test(text)) {
+    return refused({
+      code: "unsupported-input",
+      message:
+        "Text insertion supports inline text only; paragraph breaks are unsupported.",
+    });
+  }
+  const inspection = inspectSelection();
+  if (inspection.status !== "ready") {
+    return refused(inspection.reason);
+  }
+  if (!inspection.value.collapsed) {
+    if (
+      inspection.value.anchor.association === "proposal" ||
+      inspection.value.focus.association === "proposal"
+    ) {
+      const proposalSpan = buildProposalSpan(inspection.value);
+      if (proposalSpan.status !== "ready") {
+        return refused(proposalSpan.reason);
+      }
+      if (proposalSpan.value.map.kind !== "insertion") {
+        return refused({
+          code: "unsupported-proposal-edit",
+          message:
+            "Insertion replacement may edit pending insertion content, not deletion content.",
         });
       }
+      return replaceProposalRange(proposalSpan.value, text);
+    }
+    return refused({
+      code: "unsupported-target",
+      message:
+        "Text replacement ranges are not part of the node-backed insertion contract.",
     });
+  }
+  const point = inspection.value.anchor;
+  if (point.association === "proposal") {
+    if (point.kind !== "insertion") {
+      return refused({
+        code: "unsupported-proposal-edit",
+        message:
+          "Insertion typing may edit pending insertion content, not deletion content.",
+      });
+    }
+    const map = buildProposalMapAroundPoint(point);
+    if (map.status !== "ready") {
+      return refused(map.reason);
+    }
+    const offset = getProposalOffset(point, map.value);
+    if (offset === null) {
+      return refused({
+        code: "invalid-structural-target",
+        message: "The proposal caret cannot be resolved in the live tree.",
+      });
+    }
+    insertIntoProposal(point, text);
+    placeProposalCaret(map.value, offset + text.length, point.childIndex);
+    return changed();
+  }
+  const missingNode = missingProposalNode(editor, "insertion");
+  if (missingNode !== null) {
+    return missingNode;
+  }
+  const proposalId = prepareProposalId(options);
+  if (proposalId.status !== "ready") {
+    return refused(proposalId.reason);
+  }
+  insertAcceptedProposal(
+    point,
+    inspection.value.selection,
+    "insertion",
+    proposalId.value,
+    text,
+  );
+  return changed();
+}
+
+function performDeletion(
+  editor: LexicalEditor,
+  backward: boolean,
+  options: ReviewSessionRegistrationOptions,
+): ReviewNodeOutcome {
+  const inspection = inspectSelection();
+  if (inspection.status !== "ready") {
+    return refused(inspection.reason);
+  }
+  if (!inspection.value.collapsed) {
+    if (
+      inspection.value.anchor.association === "proposal" &&
+      inspection.value.focus.association === "proposal"
+    ) {
+      const proposalSpan = buildProposalSpan(inspection.value);
+      if (proposalSpan.status !== "ready") {
+        return refused(proposalSpan.reason);
+      }
+      return deleteProposalSelection(proposalSpan.value);
+    }
+    const acceptedSpan = buildAcceptedSpan(inspection.value);
+    if (acceptedSpan.status !== "ready") {
+      return refused(acceptedSpan.reason);
+    }
+    if (acceptedSpan.value.start === acceptedSpan.value.end) {
+      return unchanged();
+    }
+    const missingNode = missingProposalNode(editor, "deletion");
+    if (missingNode !== null) {
+      return missingNode;
+    }
+    const proposalId = prepareProposalId(options);
+    if (proposalId.status !== "ready") {
+      return refused(proposalId.reason);
+    }
+    const selected = getAcceptedSelectedNodes(acceptedSpan.value);
+    if (selected === null || selected.length === 0) {
+      return refused({
+        code: "invalid-structural-target",
+        message:
+          "The accepted range could not be isolated without changing its content.",
+      });
+    }
+    const wrapper = $createReviewDeletionNode(proposalId.value);
+    selected[0]!.insertBefore(wrapper);
+    for (const node of selected) {
+      wrapper.append(node);
+    }
+    placeCaretAfterWrapper(acceptedSpan.value.map.paragraph, wrapper);
+    return changed();
+  }
+
+  const point = inspection.value.anchor;
+  if (point.association === "proposal") {
+    return deleteProposalCharacter(point, backward);
+  }
+  const target = acceptedDeletionTarget(point, backward);
+  if (target === null || target.start === target.end) {
+    return refused({
+      code: "deletion-target-unavailable",
+      message:
+        "Deletion may not cross proposal content or an empty accepted boundary.",
+    });
+  }
+  const missingNode = missingProposalNode(editor, "deletion");
+  if (missingNode !== null) {
+    return missingNode;
+  }
+  const proposalId = prepareProposalId(options);
+  if (proposalId.status !== "ready") {
+    return refused(proposalId.reason);
+  }
+  const selected = getAcceptedSelectedNodes({
+    end: target.end,
+    map: target.map,
+    start: target.start,
+  });
+  if (selected === null || selected.length === 0) {
+    return refused({
+      code: "invalid-structural-target",
+      message: "The accepted deletion target could not be isolated safely.",
+    });
+  }
+  const wrapper = $createReviewDeletionNode(proposalId.value);
+  selected[0]!.insertBefore(wrapper);
+  for (const node of selected) {
+    wrapper.append(node);
+  }
+  placeCaretAfterWrapper(target.map.paragraph, wrapper);
+  return changed();
+}
+
+function unsupportedOutcome(
+  code: ReviewNodeRefusalCode,
+  message: string,
+): ReviewNodeOutcome {
+  return refused({ code, message });
+}
+
+function reportOutcome(
+  options: ReviewSessionRegistrationOptions,
+  outcome: ReviewNodeOutcome,
+  kind: "deletion" | "insertion" | null,
+): void {
+  options.onOutcome?.(outcome);
+  if (kind === "deletion") {
+    options.onDeletionOutcome?.(outcome);
+  } else if (kind === "insertion") {
+    options.onInsertionOutcome?.(outcome);
+  }
+}
+
+function safePerform(operation: () => ReviewNodeOutcome): ReviewNodeOutcome {
+  try {
+    return operation();
+  } catch (cause) {
+    return failed(
+      cause,
+      "The node-backed review operation could not be applied.",
+    );
+  }
+}
+
+export function registerReviewSession(
+  editor: LexicalEditor,
+  session: ReviewSession,
+  options: ReviewSessionRegistrationOptions = {},
+): () => void {
+  if (session.getEditorState() !== editor.getEditorState()) {
+    throw new Error(
+      "A node-backed review session must be registered with the same Lexical editor that opened it.",
+    );
+  }
+  const handleDeletion = (backward: boolean, event?: Event | null): boolean => {
+    event?.preventDefault();
+    const outcome = safePerform(() =>
+      performDeletion(editor, backward, options),
+    );
+    reportOutcome(options, outcome, "deletion");
     return true;
   };
   const handleBeforeInput = (event: InputEvent): boolean => {
-    if (event.inputType !== "deleteContentForward") {
-      return false;
+    if (event.inputType === "deleteContentBackward") {
+      return handleDeletion(true, event);
     }
-    return handleDeletion(false, "character", event);
+    if (event.inputType === "deleteContentForward") {
+      return handleDeletion(false, event);
+    }
+    return false;
   };
-  const refuseStructure = () => {
-    refuse(UNSUPPORTED_STRUCTURE);
+  const refuseFormatting = (): boolean => {
+    reportOutcome(
+      options,
+      unsupportedOutcome(
+        "unsupported-formatting",
+        "Formatting authoring is not supported by the node-backed review session yet.",
+      ),
+      null,
+    );
     return true;
   };
-  const refuseTransfer = (event: Event | null) => {
+  const refuseDeletionGranularity = (): boolean => {
+    reportOutcome(
+      options,
+      unsupportedOutcome(
+        "unsupported-target",
+        "Node-backed review deletion currently supports character intentions only.",
+      ),
+      "deletion",
+    );
+    return true;
+  };
+  const refuseStructure = (): boolean => {
+    reportOutcome(
+      options,
+      unsupportedOutcome(
+        "unsupported-structure",
+        "Paragraph structure authoring is not supported by the node-backed review session yet.",
+      ),
+      null,
+    );
+    return true;
+  };
+  const refuseTransfer = (event?: Event | null): boolean => {
     event?.preventDefault();
-    refuse(UNSUPPORTED_TRANSFER);
+    reportOutcome(
+      options,
+      unsupportedOutcome(
+        "unsupported-transfer",
+        "Content transfer is not supported by the node-backed review session yet.",
+      ),
+      null,
+    );
     return true;
   };
-  const handleFormatting = () => {
-    const reason = getUnsupportedIntentionRefusal(UNSUPPORTED_FORMATTING);
-    if (reason === UNSUPPORTED_FORMATTING) {
-      return false;
+  const handleRemoval = (event: InputEvent | null): boolean => {
+    if (event !== null) {
+      if (
+        event.inputType === "deleteByCut" ||
+        event.inputType === "deleteByDrag"
+      ) {
+        return refuseTransfer(event);
+      }
+      event.preventDefault();
+      reportOutcome(
+        options,
+        unsupportedOutcome(
+          "unsupported-input",
+          "This native text-removal route is not supported by the node-backed review session.",
+        ),
+        "deletion",
+      );
+      return true;
     }
-    report({ reason, status: "refused" });
-    return true;
+    const selection = $getSelection();
+    if ($isRangeSelection(selection) && selection.isCollapsed()) {
+      reportOutcome(options, unchanged(), "deletion");
+      return true;
+    }
+    return handleDeletion(false);
   };
 
+  const normalizationRegistrations: Array<() => void> = [];
+  if (editor.hasNode(ReviewInsertionNode)) {
+    normalizationRegistrations.push(
+      editor.registerNodeTransform(ReviewInsertionNode, (node) => {
+        normalizeReviewElementNode(node);
+      }),
+    );
+  }
+  if (editor.hasNode(ReviewDeletionNode)) {
+    normalizationRegistrations.push(
+      editor.registerNodeTransform(ReviewDeletionNode, (node) => {
+        normalizeReviewElementNode(node);
+      }),
+    );
+  }
+
   return mergeRegister(
+    ...normalizationRegistrations,
     editor.registerCommand(
       BEFORE_INPUT_COMMAND,
       handleBeforeInput,
@@ -545,78 +1712,66 @@ function registerLegacyReviewSession(
     editor.registerCommand(
       CONTROLLED_TEXT_INSERTION_COMMAND,
       (eventOrText) => {
+        if (
+          typeof eventOrText !== "string" &&
+          (eventOrText.dataTransfer != null ||
+            eventOrText.inputType === "insertFromDrop" ||
+            eventOrText.inputType === "insertFromYank" ||
+            eventOrText.inputType === "insertReplacementText")
+        ) {
+          return refuseTransfer(eventOrText);
+        }
         const text =
           typeof eventOrText === "string" ? eventOrText : eventOrText.data;
         if (text == null) {
           return false;
         }
-        const prepared = prepareInsertionIntention(
-          $createReviewProjection(),
-          text,
+        const outcome = safePerform(() =>
+          performInsertion(editor, text, options),
         );
-        if (prepared.status === "refused") {
-          report(prepared);
-          options.onInsertionOutcome?.(prepared);
-          return true;
-        }
-        queueMicrotask(() => {
-          const outcome = session.insertText(prepared.value);
-          report(outcome);
-          options.onInsertionOutcome?.(outcome);
-          if (outcome.status === "changed") {
-            editor.update(
-              () => {
-                $createReviewProjection().reconcile({
-                  kind: "place-selection",
-                  target: { kind: "insertion-draft-end" },
-                });
-              },
-              { discrete: true },
-            );
-          }
-        });
+        reportOutcome(options, outcome, "insertion");
         return true;
       },
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       DELETE_CHARACTER_COMMAND,
-      (isBackward) => handleDeletion(isBackward, "character"),
+      (backward) => handleDeletion(backward),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       DELETE_WORD_COMMAND,
-      (isBackward) => handleDeletion(isBackward, "word"),
+      refuseDeletionGranularity,
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       REMOVE_TEXT_COMMAND,
-      (event) => handleDeletion(false, "character", event),
-      COMMAND_PRIORITY_HIGH,
-    ),
-    editor.registerCommand(
-      DELETE_LINE_COMMAND,
-      refuseDeletion,
+      handleRemoval,
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       KEY_BACKSPACE_COMMAND,
-      (event) => handleDeletion(true, "character", event),
+      (event) => handleDeletion(true, event),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       KEY_DELETE_COMMAND,
-      (event) => handleDeletion(false, "character", event),
+      (event) => handleDeletion(false, event),
+      COMMAND_PRIORITY_HIGH,
+    ),
+    editor.registerCommand(
+      DELETE_LINE_COMMAND,
+      refuseDeletionGranularity,
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       FORMAT_TEXT_COMMAND,
-      handleFormatting,
+      refuseFormatting,
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       SET_TEXT_FORMAT_COMMAND,
-      handleFormatting,
+      refuseFormatting,
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
@@ -624,13 +1779,6 @@ function registerLegacyReviewSession(
       refuseStructure,
       COMMAND_PRIORITY_HIGH,
     ),
-    editor.registerCommand(
-      PASTE_COMMAND,
-      refuseTransfer,
-      COMMAND_PRIORITY_HIGH,
-    ),
-    editor.registerCommand(DROP_COMMAND, refuseTransfer, COMMAND_PRIORITY_HIGH),
-    editor.registerCommand(CUT_COMMAND, refuseTransfer, COMMAND_PRIORITY_HIGH),
     editor.registerCommand(
       INSERT_LINE_BREAK_COMMAND,
       refuseStructure,
@@ -640,47 +1788,16 @@ function registerLegacyReviewSession(
       KEY_ENTER_COMMAND,
       (event) => {
         event?.preventDefault();
-        refuse(UNSUPPORTED_STRUCTURE);
-        return true;
+        return refuseStructure();
       },
       COMMAND_PRIORITY_HIGH,
     ),
-  );
-}
-
-function isLegacyReviewSession(
-  session: LegacyReviewSession | NodeBackedReviewSession,
-): session is LegacyReviewSession {
-  return "readState" in session && typeof session.readState === "function";
-}
-
-export function registerReviewSession(
-  editor: LexicalEditor,
-  session: LegacyReviewSession,
-  options?: ReviewSessionRegistrationOptions,
-): () => void;
-export function registerReviewSession(
-  editor: LexicalEditor,
-  session: NodeBackedReviewSession,
-  options?: NodeBackedReviewSessionRegistrationOptions,
-): () => void;
-export function registerReviewSession(
-  editor: LexicalEditor,
-  session: LegacyReviewSession | NodeBackedReviewSession,
-  options:
-    | ReviewSessionRegistrationOptions
-    | NodeBackedReviewSessionRegistrationOptions = {},
-): () => void {
-  if (isLegacyReviewSession(session)) {
-    return registerLegacyReviewSession(
-      editor,
-      session,
-      options as ReviewSessionRegistrationOptions,
-    );
-  }
-  return registerNodeBackedReviewSession(
-    editor,
-    session,
-    options as NodeBackedReviewSessionRegistrationOptions,
+    editor.registerCommand(
+      PASTE_COMMAND,
+      refuseTransfer,
+      COMMAND_PRIORITY_HIGH,
+    ),
+    editor.registerCommand(DROP_COMMAND, refuseTransfer, COMMAND_PRIORITY_HIGH),
+    editor.registerCommand(CUT_COMMAND, refuseTransfer, COMMAND_PRIORITY_HIGH),
   );
 }

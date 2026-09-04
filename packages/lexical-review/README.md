@@ -26,8 +26,8 @@ iOS Safari.
 ## Entrypoints
 
 - React-free core entrypoint: `import { ReviewInsertionNode } from "lexical-review"`.
-- Client/editor integration is available through the node-backed v3 session
-  registration and explicitly named legacy exports.
+- Client/editor integration is available through the v3 session registration
+  and explicitly named legacy v2 editor-wide exports.
 
 Core nodes, helpers, and types are exported only from the root entrypoint. The root entrypoint does not import React or `@lexical/react`, so it is suitable for server-side model and serialization code; DOM rendering and editor registration require a client environment.
 

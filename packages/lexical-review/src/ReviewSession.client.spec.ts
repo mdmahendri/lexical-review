@@ -1,122 +1,63 @@
 import {
-  BEFORE_INPUT_COMMAND,
   $getRoot,
   $getSelection,
+  $isElementNode,
   $isRangeSelection,
   $isTextNode,
   CONTROLLED_TEXT_INSERTION_COMMAND,
-  CUT_COMMAND,
-  DELETE_CHARACTER_COMMAND,
-  DELETE_LINE_COMMAND,
-  DELETE_WORD_COMMAND,
-  INSERT_PARAGRAPH_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
   REMOVE_TEXT_COMMAND,
   createEditor,
   type ElementNode,
+  type LexicalEditor,
+  type TextNode,
 } from "lexical";
-import { ReviewTextNode } from "./ReviewTextNode";
 import {
   openReviewSession,
-  type ReviewOutcome,
-  type ReviewStateView,
-} from "./LegacyReviewSession";
-import { registerReviewText } from "./registerReviewText";
-import { registerReviewSession } from "./registerReviewSession";
+  ReviewDeletionNode,
+  ReviewInsertionNode,
+} from "./index";
+import {
+  registerReviewSession,
+  type ReviewNodeOutcome,
+} from "./registerReviewSession";
+import {
+  paragraph,
+  reviewDocument,
+  reviewNode,
+  text,
+} from "./ReviewDocument.test-fixtures";
 
-function acceptedDocument(text: string, format = 0) {
-  return {
-    root: {
-      children: [
-        {
-          children: [
-            {
-              detail: 0,
-              format,
-              mode: "normal",
-              style: "",
-              text,
-              type: "text",
-              version: 1,
-            },
-          ],
-          direction: null,
-          format: "",
-          indent: 0,
-          textFormat: 0,
-          textStyle: "",
-          type: "paragraph",
-          version: 1,
-        },
-      ],
-      direction: null,
-      format: "",
-      indent: 0,
-      type: "root",
-      version: 1,
-      $: { "lexical-review": { proposals: [], version: 3 } },
-    },
-  };
+function proposal(
+  kind: "review-deletion" | "review-insertion",
+  proposalId: string,
+  value: string,
+  format = 0,
+) {
+  return reviewNode(kind, proposalId, [text(value, format)]);
 }
 
-function documentWithInsertionProposal(
-  acceptedText: string,
-  proposalText: string,
-  offset: number,
-) {
-  const input = acceptedDocument(acceptedText);
-  return {
-    root: {
-      ...input.root,
-      $: {
-        "lexical-review": {
-          proposals: [
-            {
-              id: "proposal-a",
-              kind: "insertion",
-              payload: { runs: [{ format: 0, text: proposalText }] },
-              status: "pending",
-              target: { offset, paragraph: 0 },
-            },
-          ],
-          version: 3,
-        },
-      },
+function createReviewEditor(): LexicalEditor {
+  return createEditor({
+    namespace: "node-backed-review-session",
+    nodes: [ReviewInsertionNode, ReviewDeletionNode],
+    onError: (error) => {
+      throw error;
     },
-  };
+    theme: {
+      del: "review-deletion",
+      ins: "review-insertion",
+    },
+  });
 }
 
-function documentWithDeletionProposal(
-  acceptedText: string,
-  start: number,
-  end: number,
-) {
-  const input = acceptedDocument(acceptedText);
-  return {
-    root: {
-      ...input.root,
-      $: {
-        "lexical-review": {
-          proposals: [
-            {
-              id: "deletion-a",
-              kind: "deletion",
-              payload: {
-                runs: [{ format: 0, text: acceptedText.slice(start, end) }],
-              },
-              status: "pending",
-              target: {
-                start: { offset: start, paragraph: 0 },
-                end: { offset: end, paragraph: 0 },
-              },
-            },
-          ],
-          version: 3,
-        },
-      },
-    },
-  };
+async function update(
+  editor: LexicalEditor,
+  callback: () => void,
+): Promise<void> {
+  editor.update(callback, { discrete: true });
+  await Promise.resolve();
 }
 
 function liveSelection() {
@@ -138,1291 +79,1093 @@ function liveSelection() {
   };
 }
 
-function selectElementBoundary(
-  paragraph: ElementNode,
-  anchorOffset: number,
-  focusOffset = anchorOffset,
-): void {
-  const selection = paragraph.select();
-  selection.anchor.set(paragraph.getKey(), anchorOffset, "element");
-  selection.focus.set(paragraph.getKey(), focusOffset, "element");
-  selection.dirty = true;
+function firstParagraph(): ElementNode {
+  const paragraphNode = $getRoot().getFirstChild();
+  if (!$isElementNode(paragraphNode)) {
+    throw new Error("Expected a paragraph in the review document.");
+  }
+  return paragraphNode;
 }
 
-describe("version 3 client integration", () => {
-  it("refuses an ambiguous element-point boundary without moving selection", () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(
-      editor,
-      documentWithInsertionProposal("Alpha", "A", 0),
-    );
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onInsertionOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        $getRoot().getFirstChild<ElementNode>()?.select(1, 1);
-      },
-      { discrete: true },
-    );
-    const beforeSelection = editor.getEditorState().read(liveSelection);
+function firstText(node: ElementNode): TextNode {
+  const textNode = node.getFirstChild();
+  if (!$isTextNode(textNode)) {
+    throw new Error("Expected a text node.");
+  }
+  return textNode;
+}
 
-    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
-      true,
-    );
-
-    expect(outcomes).toMatchObject([
-      { reason: { code: "ambiguous-boundary" }, status: "refused" },
-    ]);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
-    expect(opened.value.readState()).toMatchObject({
-      draft: null,
-      proposals: [{ id: "proposal-a", status: "pending" }],
-    });
-
-    unregister();
+function open(
+  editor: LexicalEditor,
+  input: unknown,
+  outcomes: ReviewNodeOutcome[] = [],
+  options: Parameters<typeof registerReviewSession>[2] = {},
+) {
+  const opened = openReviewSession(editor, input);
+  expect(opened.status).toBe("valid");
+  if (opened.status !== "valid") {
+    throw new Error("Expected the node-backed review document to open.");
+  }
+  const unregister = registerReviewSession(editor, opened.value, {
+    ...options,
+    onOutcome: (outcome) => {
+      outcomes.push(outcome);
+      options.onOutcome?.(outcome);
+    },
   });
+  return { opened: opened.value, unregister };
+}
 
-  it.each([
-    [0, 0],
-    [1, 5],
-  ])(
-    "maps a paragraph element point at child offset %s to accepted offset %s",
-    async (childOffset, expectedOffset) => {
-      const editor = createEditor({
-        nodes: [ReviewTextNode],
-        onError: (error) => void error,
-      });
-      const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-      expect(opened.status).toBe("valid");
-      if (opened.status !== "valid") {
-        return;
-      }
-      const unregister = registerReviewSession(editor, opened.value);
-
-      editor.update(
-        () => {
-          const paragraph = $getRoot().getFirstChild<ElementNode>();
-          if (paragraph !== null) {
-            selectElementBoundary(paragraph, childOffset);
-          }
-        },
-        { discrete: true },
+describe("node-backed review session targeting", () => {
+  it.each(["review-insertion", "review-deletion"] as const)(
+    "merges adjacent %s wrappers sharing one proposal identity",
+    async (kind) => {
+      const editor = createReviewEditor();
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            proposal(kind, "shared", "A"),
+            proposal(kind, "shared", "B", 1),
+          ]),
+        ]),
       );
+      await Promise.resolve();
+
+      editor.getEditorState().read(() => {
+        const children = firstParagraph().getChildren();
+        expect(children).toHaveLength(1);
+        const wrapper = children[0];
+        expect($isElementNode(wrapper)).toBe(true);
+        if (!$isElementNode(wrapper)) {
+          return;
+        }
+        expect(wrapper.getTextContent()).toBe("AB");
+        expect(
+          wrapper
+            .getChildren()
+            .map((child) => ($isTextNode(child) ? child.getFormat() : null)),
+        ).toEqual([0, 1]);
+      });
+      unregister();
+    },
+  );
+
+  it.each([0, 2])(
+    "continues an insertion at its proposal boundary offset %s",
+    async (offset) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([proposal("review-insertion", "insertion-a", "BC")]),
+        ]),
+        outcomes,
+      );
+      await update(editor, () => {
+        const insertion = firstParagraph().getChildAtIndex(0);
+        if (!$isElementNode(insertion)) {
+          throw new Error("Expected an insertion wrapper.");
+        }
+        firstText(insertion).select(offset, offset);
+      });
 
       expect(
         editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X"),
       ).toBe(true);
       await Promise.resolve();
 
-      expect(opened.value.readState()).toMatchObject({
-        draft: {
-          kind: "insertion",
-          target: { offset: expectedOffset, paragraph: 0 },
-        },
+      editor.getEditorState().read(() => {
+        expect(firstParagraph().getTextContent()).toBe(
+          offset === 0 ? "XBC" : "BCX",
+        );
       });
-
+      expect(outcomes).toMatchObject([{ status: "changed" }]);
       unregister();
     },
   );
 
-  it("maps a paragraph element range to an accepted deletion range", async () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const unregister = registerReviewSession(editor, opened.value);
-
-    editor.update(
-      () => {
-        const paragraph = $getRoot().getFirstChild<ElementNode>();
-        if (paragraph !== null) {
-          selectElementBoundary(paragraph, 0, 1);
-        }
-      },
-      { discrete: true },
-    );
-
-    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
-    await Promise.resolve();
-
-    expect(opened.value.readState()).toMatchObject({
-      draft: {
-        kind: "deletion",
-        payload: { runs: [{ text: "Alpha" }] },
-        target: {
-          start: { offset: 0, paragraph: 0 },
-          end: { offset: 5, paragraph: 0 },
-        },
-      },
-    });
-
-    unregister();
-  });
-
-  it("refuses a finalized-proposal range intersection without mutation", () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(
+  it("continues a pending insertion on the proposal side", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { opened, unregister } = open(
       editor,
-      documentWithInsertionProposal("Alpha", "ABC", 2),
-    );
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onInsertionOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const proposal = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode &&
-              child.getTextContent() === "ABC",
-          );
-        if (proposal instanceof ReviewTextNode) {
-          proposal.select(0, 2);
-        }
-      },
-      { discrete: true },
-    );
-    const beforeState = opened.value.readState();
-    const beforeProjection = opened.value.project("review");
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-
-    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
-      true,
+      reviewDocument([
+        paragraph([
+          text("A"),
+          proposal("review-insertion", "insertion-a", "BC"),
+          text("D"),
+        ]),
+      ]),
+      outcomes,
     );
 
-    expect(outcomes).toMatchObject([
-      {
-        reason: { code: "finalized-proposal-intersection" },
-        status: "refused",
-      },
-    ]);
-    expect(opened.value.readState()).toEqual(beforeState);
-    expect(opened.value.project("review")).toEqual(beforeProjection);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
-
-    unregister();
-  });
-
-  it("claims direct deletion inside finalized proposal content", () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(
-      editor,
-      documentWithInsertionProposal("Alpha", "ABC", 2),
-    );
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregisterLegacy = registerReviewText(editor);
-    const unregister = registerReviewSession(editor, opened.value, {
-      onOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const proposal = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode &&
-              child.getTextContent() === "ABC",
-          );
-        if (proposal instanceof ReviewTextNode) {
-          proposal.select(2, 2);
-        }
-      },
-      { discrete: true },
-    );
-    const beforeState = opened.value.readState();
-    const beforeProjection = opened.value.project("review");
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-
-    expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
-
-    expect(outcomes).toMatchObject([
-      { reason: { code: "proposal-side-target" }, status: "refused" },
-    ]);
-    expect(opened.value.readState()).toEqual(beforeState);
-    expect(opened.value.project("review")).toEqual(beforeProjection);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
-
-    unregister();
-    unregisterLegacy();
-  });
-
-  it("routes explicit deletion ranges through the same root contract", async () => {
-    const rootEditor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const rootOpened = openReviewSession(rootEditor, acceptedDocument("Alpha"));
-    expect(rootOpened.status).toBe("valid");
-    if (rootOpened.status !== "valid") {
-      return;
-    }
-    expect(
-      rootOpened.value.deleteText({
-        target: {
-          end: { offset: 3, paragraph: 0 },
-          start: { offset: 1, paragraph: 0 },
-        },
-      }),
-    ).toMatchObject({ status: "changed" });
-
-    const clientEditor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const clientOpened = openReviewSession(
-      clientEditor,
-      acceptedDocument("Alpha"),
-    );
-    expect(clientOpened.status).toBe("valid");
-    if (clientOpened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(clientEditor, clientOpened.value, {
-      onDeletionOutcome: (outcome) => outcomes.push(outcome),
-    });
-    clientEditor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(1, 3);
-        }
-      },
-      { discrete: true },
-    );
-
-    expect(clientEditor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
-    await Promise.resolve();
-
-    expect(outcomes).toMatchObject([
-      {
-        status: "changed",
-        value: {
-          draft: {
-            kind: "deletion",
-            payload: { runs: [{ text: "lp" }] },
-          },
-        },
-      },
-    ]);
-    expect(clientOpened.value.readState()).toEqual(
-      rootOpened.value.readState(),
-    );
-    expect(clientOpened.value.project("review")).toEqual(
-      rootOpened.value.project("review"),
-    );
-
-    unregister();
-  });
-
-  it("corrects insertion-draft content through a deletion command", async () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const deletionOutcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onDeletionOutcome: (outcome) => deletionOutcomes.push(outcome),
-    });
-
-    editor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(2, 2);
-        }
-      },
-      { discrete: true },
-    );
-    expect(
-      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "XYZ"),
-    ).toBe(true);
-    await Promise.resolve();
-
-    editor.update(
-      () => {
-        const draft = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode &&
-              child.getTextContent() === "XYZ",
-          );
-        if ($isTextNode(draft)) {
-          draft.select(1, 3);
-        }
-      },
-      { discrete: true },
-    );
-    expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, false)).toBe(true);
-    await Promise.resolve();
-
-    expect(deletionOutcomes).toMatchObject([
-      {
-        status: "changed",
-        value: { draft: { payload: { runs: [{ text: "X" }] } } },
-      },
-    ]);
-    expect(opened.value.project("review").paragraphs[0]?.runs).toEqual([
-      { format: 0, text: "Al", type: "accepted" },
-      { format: 0, text: "X", type: "draft-insertion" },
-      { format: 0, text: "pha", type: "accepted" },
-    ]);
-
-    unregister();
-  });
-
-  it("does not mutate when a deletion command points toward its own draft", async () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onDeletionOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(1, 3);
-        }
-      },
-      { discrete: true },
-    );
-    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
-    await Promise.resolve();
-
-    const before = opened.value.readState();
-    editor.update(
-      () => {
-        const accepted = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode && child.getTextContent() === "A",
-          );
-        if ($isTextNode(accepted)) {
-          accepted.selectEnd();
-        }
-      },
-      { discrete: true },
-    );
-    expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, false)).toBe(true);
-    await Promise.resolve();
-
-    expect(outcomes.at(-1)).toEqual({ status: "unchanged", value: before });
-    expect(opened.value.readState()).toEqual(before);
-
-    unregister();
-  });
-
-  it("restores a deletion draft when a caret inside it is deleted", async () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onDeletionOutcome: (outcome) => outcomes.push(outcome),
-    });
-
-    editor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(1, 3);
-        }
-      },
-      { discrete: true },
-    );
-    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
-    await Promise.resolve();
-
-    editor.update(
-      () => {
-        const draft = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode &&
-              child.getTextContent() === "lp",
-          );
-        if ($isTextNode(draft)) {
-          draft.select(1, 1);
-        }
-      },
-      { discrete: true },
-    );
-    expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, false)).toBe(true);
-    await Promise.resolve();
-
-    expect(outcomes.at(-1)).toMatchObject({
-      status: "changed",
-      value: { draft: null },
-    });
-    expect(opened.value.project("review").paragraphs[0]?.runs).toEqual([
-      { format: 0, text: "Alpha", type: "accepted" },
-    ]);
-
-    unregister();
-  });
-
-  it("corrects an insertion draft when the selection starts at its accepted boundary", async () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onDeletionOutcome: (outcome) => outcomes.push(outcome),
-    });
-
-    editor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(2, 2);
-        }
-      },
-      { discrete: true },
-    );
-    expect(
-      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "XYZ"),
-    ).toBe(true);
-    await Promise.resolve();
-
-    editor.update(
-      () => {
-        const paragraph = $getRoot().getFirstChild<ElementNode>();
-        const accepted = paragraph
-          ?.getChildren()
-          .find(
-            (child) => $isTextNode(child) && child.getTextContent() === "Al",
-          );
-        const draft = paragraph
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode &&
-              child.getTextContent() === "XYZ",
-          );
-        if ($isTextNode(accepted) && $isTextNode(draft)) {
-          const selection = accepted.selectEnd();
-          selection.focus.set(draft.getKey(), 1, "text");
-          selection.dirty = true;
-        }
-      },
-      { discrete: true },
-    );
-    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
-    await Promise.resolve();
-
-    expect(outcomes.at(-1)).toMatchObject({
-      status: "changed",
-      value: { draft: { payload: { runs: [{ text: "YZ" }] } } },
-    });
-    expect(opened.value.project("review").paragraphs[0]?.runs).toEqual([
-      { format: 0, text: "Al", type: "accepted" },
-      { format: 0, text: "YZ", type: "draft-insertion" },
-      { format: 0, text: "pha", type: "accepted" },
-    ]);
-
-    unregister();
-  });
-
-  it("routes native forward beforeinput deletion into the review session", async () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onDeletionOutcome: (outcome) => outcomes.push(outcome),
-    });
-
-    editor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(0, 1);
-        }
-      },
-      { discrete: true },
-    );
-    const event = new InputEvent("beforeinput", {
-      bubbles: true,
-      cancelable: true,
-      inputType: "deleteContentForward",
-    });
-    expect(editor.dispatchCommand(BEFORE_INPUT_COMMAND, event)).toBe(true);
-    expect(event.defaultPrevented).toBe(true);
-    await Promise.resolve();
-
-    expect(outcomes.at(-1)).toMatchObject({
-      status: "changed",
-      value: { draft: { kind: "deletion" } },
-    });
-    expect(opened.value.project("review").paragraphs[0]?.runs).toEqual([
-      { format: 0, text: "A", type: "draft-deletion" },
-      { format: 0, text: "lpha", type: "accepted" },
-    ]);
-
-    unregister();
-  });
-
-  it("keeps the selected range when restoring a deletion draft", async () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const unregister = registerReviewSession(editor, opened.value);
-
-    editor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(1, 3);
-        }
-      },
-      { discrete: true },
-    );
-    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
-    await Promise.resolve();
-
-    editor.update(
-      () => {
-        const draft = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode &&
-              child.getTextContent() === "lp",
-          );
-        if ($isTextNode(draft)) {
-          draft.select(0, 1);
-        }
-      },
-      { discrete: true },
-    );
-
-    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
-    await Promise.resolve();
-
-    expect(opened.value.project("review").paragraphs[0]?.runs).toEqual([
-      { format: 0, text: "Alpha", type: "accepted" },
-    ]);
-    expect(
-      editor.getEditorState().read(() => {
-        const selection = $getSelection();
-        if (!$isRangeSelection(selection)) {
-          return null;
-        }
-        return {
-          anchorText: selection.anchor.getNode().getTextContent(),
-          anchorOffset: selection.anchor.offset,
-          collapsed: selection.isCollapsed(),
-          focusOffset: selection.focus.offset,
-        };
-      }),
-    ).toMatchObject({
-      anchorText: "lp",
-      anchorOffset: 0,
-      collapsed: false,
-      focusOffset: 1,
-    });
-
-    unregister();
-  });
-
-  it("routes character and word deletion commands into deletion drafts", async () => {
-    const characterEditor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const characterOpened = openReviewSession(
-      characterEditor,
-      acceptedDocument("Alpha beta"),
-    );
-    expect(characterOpened.status).toBe("valid");
-    if (characterOpened.status !== "valid") {
-      return;
-    }
-    const characterOutcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregisterCharacter = registerReviewSession(
-      characterEditor,
-      characterOpened.value,
-      { onDeletionOutcome: (outcome) => characterOutcomes.push(outcome) },
-    );
-    characterEditor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(4, 5);
-        }
-      },
-      { discrete: true },
-    );
-    expect(
-      characterEditor.dispatchCommand(DELETE_CHARACTER_COMMAND, true),
-    ).toBe(true);
-    await Promise.resolve();
-    expect(characterOutcomes).toMatchObject([{ status: "changed" }]);
-    expect(characterOpened.value.readState().draft).toMatchObject({
-      kind: "deletion",
-      target: {
-        start: { offset: 4 },
-        end: { offset: 5 },
-      },
-    });
-    unregisterCharacter();
-
-    const wordEditor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const wordOpened = openReviewSession(
-      wordEditor,
-      acceptedDocument("Alpha beta"),
-    );
-    expect(wordOpened.status).toBe("valid");
-    if (wordOpened.status !== "valid") {
-      return;
-    }
-    const wordOutcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregisterWord = registerReviewSession(wordEditor, wordOpened.value, {
-      onDeletionOutcome: (outcome) => wordOutcomes.push(outcome),
-    });
-    wordEditor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(5, 10);
-        }
-      },
-      { discrete: true },
-    );
-    expect(wordEditor.dispatchCommand(DELETE_WORD_COMMAND, true)).toBe(true);
-    await Promise.resolve();
-    expect(wordOutcomes).toMatchObject([{ status: "changed" }]);
-    expect(wordOpened.value.readState().draft).toMatchObject({
-      kind: "deletion",
-      target: {
-        start: { offset: 5 },
-        end: { offset: 10 },
-      },
-    });
-    unregisterWord();
-  });
-
-  it("claims Backspace and Delete before native text removal", async () => {
-    const cases = [
-      [KEY_BACKSPACE_COMMAND, true],
-      [KEY_DELETE_COMMAND, false],
-    ] as const;
-    for (const [command, isBackward] of cases) {
-      const editor = createEditor({
-        nodes: [ReviewTextNode],
-        onError: (error) => void error,
-      });
-      const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-      expect(opened.status).toBe("valid");
-      if (opened.status !== "valid") {
-        continue;
+    await update(editor, () => {
+      const insertion = firstParagraph().getChildAtIndex(1);
+      if (!$isElementNode(insertion)) {
+        throw new Error("Expected an insertion wrapper.");
       }
-      const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-      const unregister = registerReviewSession(editor, opened.value, {
-        onDeletionOutcome: (outcome) => outcomes.push(outcome),
-      });
-      editor.update(
-        () => {
-          const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-          if ($isTextNode(text)) {
-            text.select(1, 3);
-          }
-        },
-        { discrete: true },
-      );
-      const event = new KeyboardEvent("keydown", { cancelable: true });
-      expect(editor.dispatchCommand(command, event)).toBe(true);
-      expect(event.defaultPrevented).toBe(true);
-      await Promise.resolve();
-      expect(outcomes).toMatchObject([{ status: "changed" }]);
-      expect(opened.value.readState().draft).toMatchObject({
-        kind: "deletion",
-        target: {
-          start: { offset: 1 },
-          end: { offset: 3 },
-        },
-      });
-      const draft = opened.value.readState().draft;
-      expect(draft?.kind).toBe("deletion");
-      if (draft?.kind === "deletion") {
-        expect(draft.target.start.offset).toBe(1);
-        expect(draft.target.end.offset).toBe(3);
-      }
-      expect(isBackward).toBe(command === KEY_BACKSPACE_COMMAND);
-      unregister();
-    }
-  });
-
-  it("refuses deletion ranges that intersect finalized deletion proposals", () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(
-      editor,
-      documentWithDeletionProposal("Alpha", 1, 3),
-    );
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onDeletionOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const proposal = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode &&
-              child.getTextContent() === "lp",
-          );
-        if ($isTextNode(proposal)) {
-          proposal.select(0, 1);
-        }
-      },
-      { discrete: true },
-    );
-    const before = opened.value.readState();
-
-    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
-    expect(outcomes).toMatchObject([
-      {
-        reason: { code: "finalized-proposal-intersection" },
-        status: "refused",
-      },
-    ]);
-    expect(opened.value.readState()).toEqual(before);
-
-    unregister();
-  });
-
-  it("refuses unsupported paragraph structure without mutation", () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregisterLegacy = registerReviewText(editor);
-    const unregister = registerReviewSession(editor, opened.value, {
-      onOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(2, 2);
-        }
-      },
-      { discrete: true },
-    );
-    const beforeState = opened.value.readState();
-    const beforeProjection = opened.value.project("review");
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-
-    expect(editor.dispatchCommand(INSERT_PARAGRAPH_COMMAND, undefined)).toBe(
-      true,
-    );
-
-    expect(outcomes).toMatchObject([
-      { reason: { code: "unsupported-structure" }, status: "refused" },
-    ]);
-    expect(opened.value.readState()).toEqual(beforeState);
-    expect(opened.value.project("review")).toEqual(beforeProjection);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
-
-    unregister();
-    unregisterLegacy();
-  });
-
-  it("authors from an explicit accepted side adjacent to finalized work", async () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(
-      editor,
-      documentWithInsertionProposal("Alpha", "A", 0),
-    );
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const accepted = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getLastChild();
-        if ($isTextNode(accepted)) {
-          accepted.select(0, 0);
-        }
-      },
-      { discrete: true },
-    );
-
-    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
-      true,
-    );
-    await Promise.resolve();
-
-    expect(outcomes.map((outcome) => outcome.status)).toEqual(["changed"]);
-    expect(opened.value.readState()).toMatchObject({
-      draft: { payload: { runs: [{ text: "X" }] } },
-      proposals: [{ id: "proposal-a", status: "pending" }],
+      firstText(insertion).select(1, 1);
     });
 
-    unregister();
-  });
-
-  it("refuses an unsupported accepted range without mutation", () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const accepted = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getFirstChild();
-        if ($isTextNode(accepted)) {
-          accepted.select(1, 4);
-        }
-      },
-      { discrete: true },
-    );
-    const beforeState = opened.value.readState();
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-
-    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
-      true,
-    );
-
-    expect(outcomes).toMatchObject([
-      { reason: { code: "unsupported-target" }, status: "refused" },
-    ]);
-    expect(opened.value.readState()).toEqual(beforeState);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
-
-    unregister();
-  });
-
-  it("claims cut before finalized content or selection can change", () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(
-      editor,
-      documentWithInsertionProposal("Alpha", "ABC", 2),
-    );
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const proposal = $getRoot()
-          .getFirstChild<ElementNode>()
-          ?.getChildren()
-          .find(
-            (child) =>
-              child instanceof ReviewTextNode &&
-              child.getTextContent() === "ABC",
-          );
-        if (proposal instanceof ReviewTextNode) {
-          proposal.select(0, 3);
-        }
-      },
-      { discrete: true },
-    );
-    const beforeState = opened.value.readState();
-    const beforeProjection = opened.value.project("review");
-    const beforeSelection = editor.getEditorState().read(liveSelection);
-    const event = new Event("cut", { cancelable: true }) as ClipboardEvent;
-
-    expect(editor.dispatchCommand(CUT_COMMAND, event)).toBe(true);
-
-    expect(event.defaultPrevented).toBe(true);
-    expect(outcomes).toMatchObject([
-      {
-        reason: { code: "finalized-proposal-intersection" },
-        status: "refused",
-      },
-    ]);
-    expect(opened.value.readState()).toEqual(beforeState);
-    expect(opened.value.project("review")).toEqual(beforeProjection);
-    expect(editor.getEditorState().read(liveSelection)).toEqual(
-      beforeSelection,
-    );
-
-    unregister();
-  });
-
-  it("reports line deletion as an unsupported accepted-side intention", () => {
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, acceptedDocument("Alpha"));
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregister = registerReviewSession(editor, opened.value, {
-      onOutcome: (outcome) => outcomes.push(outcome),
-    });
-    editor.update(
-      () => {
-        const text = $getRoot().getFirstChild<ElementNode>()?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(2, 2);
-        }
-      },
-      { discrete: true },
-    );
-
-    expect(editor.dispatchCommand(DELETE_LINE_COMMAND, true)).toBe(true);
-
-    expect(outcomes).toMatchObject([
-      { reason: { code: "unsupported-deletion" }, status: "refused" },
-    ]);
-    expect(opened.value.readState()).toMatchObject({
-      accepted: { paragraphs: [{ runs: [{ text: "Alpha" }] }] },
-      draft: null,
-      proposals: [],
-    });
-
-    unregister();
-  });
-
-  it("routes controlled typing through the root insertion contract", async () => {
-    const rootEditor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const rootOpened = openReviewSession(
-      rootEditor,
-      acceptedDocument("Alpha", 1),
-    );
-    expect(rootOpened.status).toBe("valid");
-    if (rootOpened.status !== "valid") {
-      return;
-    }
-    const rootOutcome = rootOpened.value.insertText({
-      format: 1,
-      target: { offset: 2, paragraph: 0 },
-      text: "XY",
-    });
-    expect(rootOutcome.status).toBe("changed");
-
-    const clientEditor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-      theme: { ins: "review-insertion" },
-    });
-    const container = document.createElement("div");
-    document.body.appendChild(container);
-    clientEditor.setRootElement(container);
-    const clientOpened = openReviewSession(
-      clientEditor,
-      acceptedDocument("Alpha", 1),
-    );
-    expect(clientOpened.status).toBe("valid");
-    if (clientOpened.status !== "valid") {
-      return;
-    }
-    const outcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregisterLegacy = registerReviewText(clientEditor);
-    const unregister = registerReviewSession(clientEditor, clientOpened.value, {
-      onInsertionOutcome: (outcome) => outcomes.push(outcome),
-    });
-
-    clientEditor.update(
-      () => {
-        const paragraph = $getRoot().getFirstChild<ElementNode>();
-        const text = paragraph?.getFirstChild();
-        if ($isTextNode(text)) {
-          text.select(2, 2);
-        }
-      },
-      { discrete: true },
-    );
     expect(
-      clientEditor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X"),
-    ).toBe(true);
-    await Promise.resolve();
-    clientEditor.update(
-      () => {
-        const paragraph = $getRoot().getFirstChild<ElementNode>();
-        const accepted = paragraph?.getFirstChild();
-        if ($isTextNode(accepted)) {
-          accepted.select(0, 0);
-        }
-      },
-      { discrete: true },
-    );
-    expect(
-      clientOpened.value.project("all-accepted").paragraphs[0]?.runs,
-    ).toMatchObject([{ text: "Al" }, { text: "X" }, { text: "pha" }]);
-    expect(clientOpened.value.readState()).toMatchObject({
-      draft: { payload: { runs: [{ text: "X" }] } },
-      proposals: [],
-    });
-    clientEditor.update(
-      () => {
-        const paragraph = $getRoot().getFirstChild<ElementNode>();
-        const draft = paragraph
-          ?.getChildren()
-          .find((child) => child instanceof ReviewTextNode);
-        if ($isTextNode(draft)) {
-          draft.selectEnd();
-        }
-      },
-      { discrete: true },
-    );
-    expect(
-      clientEditor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "Y"),
+      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "😀"),
     ).toBe(true);
     await Promise.resolve();
 
-    expect(outcomes.map((outcome) => outcome.status)).toEqual([
-      "changed",
-      "changed",
-    ]);
-    expect(clientOpened.value.readState()).toEqual(
-      rootOpened.value.readState(),
-    );
-    expect(clientOpened.value.project("review")).toEqual(
-      rootOpened.value.project("review"),
-    );
-    const insertion = container.querySelector("ins");
-    expect(insertion?.classList.contains("review-insertion")).toBe(true);
-    expect(insertion?.firstElementChild?.tagName).toBe("STRONG");
-    expect(insertion?.textContent).toBe("XY");
-    expect(window.getSelection()?.focusNode).toBe(
-      insertion?.firstElementChild?.firstChild,
-    );
-    expect(window.getSelection()?.focusOffset).toBe(2);
-
-    unregister();
-    unregisterLegacy();
-    clientEditor.setRootElement(null);
-    document.body.removeChild(container);
-  });
-
-  it("keeps adjacent finalized proposal identities distinct during normalization", async () => {
-    const input = acceptedDocument("Alpha");
-    const documentWithProposals = {
-      root: {
-        ...input.root,
-        $: {
-          "lexical-review": {
-            proposals: [
-              {
-                id: "proposal-a",
-                kind: "insertion",
-                payload: { runs: [{ format: 0, text: "A" }] },
-                status: "pending",
-                target: { offset: 0, paragraph: 0 },
-              },
-              {
-                id: "proposal-b",
-                kind: "insertion",
-                payload: { runs: [{ format: 0, text: "B" }] },
-                status: "pending",
-                target: { offset: 0, paragraph: 0 },
-              },
-            ],
-            version: 3,
-          },
-        },
-      },
-    };
-    const editor = createEditor({
-      nodes: [ReviewTextNode],
-      onError: (error) => void error,
-    });
-    const opened = openReviewSession(editor, documentWithProposals);
-    expect(opened.status).toBe("valid");
-    if (opened.status !== "valid") {
-      return;
-    }
-
-    const refusedOutcomes: Array<ReviewOutcome<ReviewStateView>> = [];
-    const unregisterLegacy = registerReviewText(editor);
-    const unregisterSession = registerReviewSession(editor, opened.value, {
-      onInsertionOutcome: (outcome) => refusedOutcomes.push(outcome),
-    });
-    await Promise.resolve();
-
-    expect(opened.value.project("review").paragraphs[0]?.runs).toMatchObject([
-      { proposalId: "proposal-a", text: "A" },
-      { proposalId: "proposal-b", text: "B" },
-      { text: "Alpha", type: "accepted" },
-    ]);
-    const beforeFinalizedTyping = opened.value.readState();
-    editor.update(
-      () => {
-        const paragraph = $getRoot().getFirstChild<ElementNode>();
-        const proposalB = paragraph?.getChildAtIndex(1);
-        if ($isTextNode(proposalB)) {
-          proposalB.select(1, 1);
-        }
-      },
-      { discrete: true },
-    );
-    expect(
-      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "forbidden"),
-    ).toBe(true);
-    expect(refusedOutcomes).toMatchObject([
-      {
-        reason: { code: "proposal-side-target" },
-        status: "refused",
-      },
-    ]);
-    expect(opened.value.readState()).toEqual(beforeFinalizedTyping);
-
-    expect(opened.value.acceptProposal("proposal-a")).toMatchObject({
-      status: "changed",
-    });
-    expect(opened.value.project("review").paragraphs[0]?.runs).toMatchObject([
-      { text: "A", type: "accepted" },
-      { proposalId: "proposal-b", text: "B" },
-      { text: "Alpha", type: "accepted" },
-    ]);
-
-    const exported = opened.value.exportDocument();
-    expect(exported.status).toBe("unchanged");
-    if (exported.status === "unchanged") {
-      const successorEditor = createEditor({
-        nodes: [ReviewTextNode],
-        onError: (error) => void error,
-      });
-      const successor = openReviewSession(successorEditor, exported.value);
-      expect(successor.status).toBe("valid");
-      if (successor.status === "valid") {
-        expect(successor.value.project("review")).toEqual(
-          opened.value.project("review"),
+    editor.getEditorState().read(() => {
+      const insertion = firstParagraph().getChildAtIndex(1);
+      expect($isElementNode(insertion)).toBe(true);
+      if ($isElementNode(insertion)) {
+        expect(insertion.getTextContent()).toBe("B😀C");
+        expect((insertion as ReviewInsertionNode).getProposalId()).toBe(
+          "insertion-a",
         );
       }
+    });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    expect(editor.getEditorState().read(liveSelection)).toMatchObject({
+      anchor: { offset: 3 },
+      focus: { offset: 3 },
+    });
+
+    const exported = opened.exportDocument();
+    expect(exported).toMatchObject({ status: "valid" });
+    unregister();
+  });
+
+  it("replaces a selected span inside one pending insertion identity", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([proposal("review-insertion", "insertion-a", "ABC")]),
+      ]),
+      outcomes,
+    );
+    await update(editor, () => {
+      const insertion = firstParagraph().getChildAtIndex(0);
+      if (!$isElementNode(insertion)) {
+        throw new Error("Expected an insertion wrapper.");
+      }
+      firstText(insertion).select(1, 2);
+    });
+
+    expect(
+      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "XY"),
+    ).toBe(true);
+    await Promise.resolve();
+
+    editor.getEditorState().read(() => {
+      const insertion = firstParagraph().getChildAtIndex(0);
+      expect(insertion?.getTextContent()).toBe("AXYC");
+      expect($isElementNode(insertion)).toBe(true);
+      if ($isElementNode(insertion)) {
+        expect((insertion as ReviewInsertionNode).getProposalId()).toBe(
+          "insertion-a",
+        );
+      }
+    });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it("removes a pending insertion when its whole proposal-side range is deleted", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { opened, unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          text("A"),
+          proposal("review-insertion", "insertion-a", "BC"),
+          text("D"),
+        ]),
+      ]),
+      outcomes,
+    );
+    await update(editor, () => {
+      const insertion = firstParagraph().getChildAtIndex(1);
+      if (!$isElementNode(insertion)) {
+        throw new Error("Expected an insertion wrapper.");
+      }
+      firstText(insertion).select(0, 2);
+    });
+
+    expect(
+      editor.dispatchCommand(
+        KEY_BACKSPACE_COMMAND,
+        new KeyboardEvent("keydown"),
+      ),
+    ).toBe(true);
+    await Promise.resolve();
+
+    editor.getEditorState().read(() => {
+      expect(
+        firstParagraph()
+          .getChildren()
+          .map((child) => child.getTextContent()),
+      ).toEqual(["AD"]);
+    });
+    expect(opened.exportDocument()).toMatchObject({ status: "valid" });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it.each([
+    ["backward", KEY_BACKSPACE_COMMAND, true],
+    ["forward", KEY_DELETE_COMMAND, false],
+  ] as const)(
+    "edits pending deletion content in the %s direction without restoring it",
+    async (_name, command, backward) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            text("A"),
+            proposal("review-deletion", "deletion-a", "BC"),
+            text("D"),
+          ]),
+        ]),
+        outcomes,
+      );
+
+      await update(editor, () => {
+        const deletion = firstParagraph().getChildAtIndex(1);
+        if (!$isElementNode(deletion)) {
+          throw new Error("Expected a deletion wrapper.");
+        }
+        firstText(deletion).select(backward ? 2 : 0, backward ? 2 : 0);
+      });
+
+      expect(
+        editor.dispatchCommand(command, new KeyboardEvent("keydown")),
+      ).toBe(true);
+      await Promise.resolve();
+
+      editor.getEditorState().read(() => {
+        const deletion = firstParagraph().getChildAtIndex(1);
+        expect($isElementNode(deletion)).toBe(true);
+        if ($isElementNode(deletion)) {
+          expect(deletion.getTextContent()).toBe(backward ? "B" : "C");
+        }
+        expect(firstParagraph().getTextContent()).toBe(
+          backward ? "ABD" : "ACD",
+        );
+      });
+      expect(outcomes).toMatchObject([{ status: "changed" }]);
+      unregister();
+    },
+  );
+
+  it.each([
+    ["backward", KEY_BACKSPACE_COMMAND, "ACD", 1],
+    ["forward", KEY_DELETE_COMMAND, "ABD", 2],
+  ] as const)(
+    "deletes the %s character at a formatted proposal element boundary",
+    async (_direction, command, expectedText, expectedCaret) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            reviewNode("review-deletion", "deletion-formatted", [
+              text("AB"),
+              text("CD", 1),
+            ]),
+          ]),
+        ]),
+        outcomes,
+      );
+      await update(editor, () => {
+        const deletion = firstParagraph().getFirstChild();
+        if (!$isElementNode(deletion)) {
+          throw new Error("Expected a deletion wrapper.");
+        }
+        deletion.select(1, 1);
+      });
+
+      expect(
+        editor.dispatchCommand(command, new KeyboardEvent("keydown")),
+      ).toBe(true);
+      await Promise.resolve();
+
+      editor.getEditorState().read(() => {
+        expect(firstParagraph().getTextContent()).toBe(expectedText);
+      });
+      expect(editor.getEditorState().read(liveSelection)).toMatchObject({
+        anchor: { offset: expectedCaret, type: "text" },
+        focus: { offset: expectedCaret, type: "text" },
+      });
+      expect(outcomes).toMatchObject([{ status: "changed" }]);
+      unregister();
+    },
+  );
+
+  it("inserts at a formatted proposal element boundary and restores that caret", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          reviewNode("review-insertion", "insertion-formatted", [
+            text("AB"),
+            text("CD", 1),
+          ]),
+        ]),
+      ]),
+      outcomes,
+    );
+    await update(editor, () => {
+      const insertion = firstParagraph().getFirstChild();
+      if (!$isElementNode(insertion)) {
+        throw new Error("Expected an insertion wrapper.");
+      }
+      insertion.select(1, 1);
+    });
+
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
+      true,
+    );
+    await Promise.resolve();
+
+    editor.getEditorState().read(() => {
+      expect(firstParagraph().getTextContent()).toBe("ABXCD");
+    });
+    expect(editor.getEditorState().read(liveSelection)).toMatchObject({
+      anchor: { offset: 3, type: "text" },
+      focus: { offset: 3, type: "text" },
+    });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it.each([
+    ["before", 0, KEY_DELETE_COMMAND],
+    ["after", 2, KEY_BACKSPACE_COMMAND],
+  ] as const)(
+    "refuses accepted-side deletion %s pending deletion content",
+    async (_side, acceptedIndex, command) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            text("A"),
+            proposal("review-deletion", "deletion-a", "BC"),
+            text("D"),
+          ]),
+        ]),
+        outcomes,
+      );
+      await update(editor, () => {
+        const accepted = firstParagraph().getChildAtIndex(acceptedIndex);
+        if (!$isTextNode(accepted)) {
+          throw new Error("Expected accepted text beside the deletion.");
+        }
+        if (acceptedIndex === 0) {
+          accepted.selectEnd();
+        } else {
+          accepted.selectStart();
+        }
+      });
+      const beforeDocument = editor.getEditorState().toJSON();
+      const beforeSelection = editor.getEditorState().read(liveSelection);
+
+      expect(
+        editor.dispatchCommand(command, new KeyboardEvent("keydown")),
+      ).toBe(true);
+      await Promise.resolve();
+
+      expect(outcomes).toMatchObject([
+        { reason: { code: "deletion-target-unavailable" }, status: "refused" },
+      ]);
+      expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+      expect(editor.getEditorState().read(liveSelection)).toEqual(
+        beforeSelection,
+      );
+      unregister();
+    },
+  );
+
+  it("refuses zero-length deletion adjacency without moving selection", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          text("A"),
+          proposal("review-deletion", "deletion-a", "BC"),
+          text("D"),
+        ]),
+      ]),
+      outcomes,
+    );
+    await update(editor, () => {
+      const deletion = firstParagraph().getChildAtIndex(1);
+      if (!$isElementNode(deletion)) {
+        throw new Error("Expected a deletion wrapper.");
+      }
+      firstText(deletion).select(0, 0);
+    });
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+    const beforeDocument = editor.getEditorState().toJSON();
+
+    expect(
+      editor.dispatchCommand(
+        KEY_BACKSPACE_COMMAND,
+        new KeyboardEvent("keydown"),
+      ),
+    ).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "deletion-target-unavailable" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+    unregister();
+  });
+
+  it("refuses forward deletion at the end of a pending deletion", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          text("A"),
+          proposal("review-deletion", "deletion-a", "BC"),
+          text("D"),
+        ]),
+      ]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph().getChildAtIndex(1) as ElementNode).select(
+        2,
+        2,
+      );
+    });
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+    const beforeDocument = editor.getEditorState().toJSON();
+
+    expect(
+      editor.dispatchCommand(KEY_DELETE_COMMAND, new KeyboardEvent("keydown")),
+    ).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "deletion-target-unavailable" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+    unregister();
+  });
+
+  it.each([
+    ["before", 0, ["A", "X", "B", "C"], 1],
+    ["after", 2, ["A", "B", "X", "C"], 2],
+  ] as const)(
+    "creates an insertion on the explicit accepted side %s a proposal",
+    async (_side, acceptedIndex, expectedText, insertionIndex) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([
+          paragraph([
+            text("A"),
+            proposal("review-insertion", "insertion-a", "B"),
+            text("C"),
+          ]),
+        ]),
+        outcomes,
+        { proposalIdFactory: () => "insertion-b" },
+      );
+      await update(editor, () => {
+        const accepted = firstParagraph().getChildAtIndex(acceptedIndex);
+        if (!$isTextNode(accepted)) {
+          throw new Error("Expected accepted text.");
+        }
+        if (acceptedIndex === 0) {
+          accepted.selectEnd();
+        } else {
+          accepted.selectStart();
+        }
+      });
+
+      expect(
+        editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X"),
+      ).toBe(true);
+      await Promise.resolve();
+
+      editor.getEditorState().read(() => {
+        const children = firstParagraph().getChildren();
+        expect(children.map((child) => child.getTextContent())).toEqual(
+          expectedText,
+        );
+        const insertion = children[insertionIndex];
+        expect($isElementNode(insertion)).toBe(true);
+        if ($isElementNode(insertion)) {
+          expect((insertion as ReviewInsertionNode).getProposalId()).toBe(
+            "insertion-b",
+          );
+        }
+      });
+      expect(outcomes).toMatchObject([{ status: "changed" }]);
+      unregister();
+    },
+  );
+
+  it("keeps a paragraph boundary away from proposals on the accepted side", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          text("A"),
+          proposal("review-insertion", "insertion-a", "B"),
+          text("C"),
+          text("D", 1),
+        ]),
+      ]),
+      outcomes,
+      { proposalIdFactory: () => "insertion-b" },
+    );
+    await update(editor, () => {
+      firstParagraph().select(3, 3);
+    });
+
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
+      true,
+    );
+    await Promise.resolve();
+
+    editor.getEditorState().read(() => {
+      const children = firstParagraph().getChildren();
+      expect(children.map((child) => child.getTextContent())).toEqual([
+        "A",
+        "B",
+        "C",
+        "X",
+        "D",
+      ]);
+      const insertion = children[3];
+      expect($isElementNode(insertion)).toBe(true);
+      if ($isElementNode(insertion)) {
+        expect((insertion as ReviewInsertionNode).getProposalId()).toBe(
+          "insertion-b",
+        );
+      }
+    });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it("creates a formatted deletion with UTF-16-safe non-BMP boundaries", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("A😀B", 1)], 1)]),
+      outcomes,
+      { proposalIdFactory: () => "deletion-a" },
+    );
+    await update(editor, () => {
+      const accepted = firstText(firstParagraph());
+      accepted.select(3, 1);
+    });
+
+    expect(
+      editor.dispatchCommand(
+        KEY_BACKSPACE_COMMAND,
+        new KeyboardEvent("keydown"),
+      ),
+    ).toBe(true);
+    await Promise.resolve();
+
+    editor.getEditorState().read(() => {
+      const [before, deletion, after] = firstParagraph().getChildren();
+      expect(before?.getTextContent()).toBe("A");
+      expect(deletion?.getTextContent()).toBe("😀");
+      expect(after?.getTextContent()).toBe("B");
+      expect($isElementNode(deletion)).toBe(true);
+      if ($isElementNode(deletion)) {
+        expect((deletion as ReviewDeletionNode).getProposalId()).toBe(
+          "deletion-a",
+        );
+        expect($isTextNode(deletion.getFirstChild())).toBe(true);
+        const deletionText = deletion.getFirstChild();
+        if ($isTextNode(deletionText)) {
+          expect(deletionText.getFormat()).toBe(1);
+        }
+      }
+    });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it("deletes a selected accepted range across formatted text runs", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { opened, unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB"), text("CD", 1)])]),
+      outcomes,
+      { proposalIdFactory: () => "deletion-range" },
+    );
+    await update(editor, () => {
+      const paragraphNode = firstParagraph();
+      const first = paragraphNode.getChildAtIndex(0);
+      const second = paragraphNode.getChildAtIndex(1);
+      if (!$isTextNode(first) || !$isTextNode(second)) {
+        throw new Error("Expected formatted accepted text runs.");
+      }
+      first.select(1, 1);
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) {
+        throw new Error("Expected a range selection.");
+      }
+      selection.focus.set(second.getKey(), 1, "text");
+      selection.dirty = true;
+    });
+
+    expect(
+      editor.dispatchCommand(KEY_DELETE_COMMAND, new KeyboardEvent("keydown")),
+    ).toBe(true);
+    await Promise.resolve();
+
+    editor.getEditorState().read(() => {
+      const children = firstParagraph().getChildren();
+      expect(children.map((child) => child.getTextContent())).toEqual([
+        "A",
+        "BC",
+        "D",
+      ]);
+      expect($isElementNode(children[1])).toBe(true);
+      if ($isElementNode(children[1])) {
+        expect(children[1].getTextContent()).toBe("BC");
+        const firstChild = children[1].getFirstChild();
+        expect($isTextNode(firstChild)).toBe(true);
+        if ($isTextNode(firstChild)) {
+          expect(firstChild.getFormat()).toBe(0);
+        }
+        const secondChild = children[1].getChildAtIndex(1);
+        expect($isTextNode(secondChild)).toBe(true);
+        if ($isTextNode(secondChild)) {
+          expect(secondChild.getFormat()).toBe(1);
+        }
+      }
+    });
+    expect(opened.exportDocument()).toMatchObject({ status: "valid" });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it.each([true, false])(
+    "deletes from an accepted paragraph element boundary in the %s direction",
+    async (backward) => {
+      const editor = createReviewEditor();
+      const outcomes: ReviewNodeOutcome[] = [];
+      const { unregister } = open(
+        editor,
+        reviewDocument([paragraph([text("A"), text("B", 1)])]),
+        outcomes,
+        {
+          proposalIdFactory: () =>
+            backward ? "deletion-back" : "deletion-forward",
+        },
+      );
+      await update(editor, () => {
+        firstParagraph().select(1, 1);
+      });
+
+      expect(
+        editor.dispatchCommand(
+          backward ? KEY_BACKSPACE_COMMAND : KEY_DELETE_COMMAND,
+          new KeyboardEvent("keydown"),
+        ),
+      ).toBe(true);
+      await Promise.resolve();
+
+      editor.getEditorState().read(() => {
+        const children = firstParagraph().getChildren();
+        expect(children.map((child) => child.getTextContent())).toEqual(
+          backward ? ["A", "B"] : ["A", "B"],
+        );
+        const deletion = children[backward ? 0 : 1];
+        expect($isElementNode(deletion)).toBe(true);
+        expect(deletion?.getTextContent()).toBe(backward ? "A" : "B");
+      });
+      expect(outcomes).toMatchObject([{ status: "changed" }]);
+      unregister();
+    },
+  );
+
+  it("allows a selection across formatted nodes sharing one proposal identity", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          proposal("review-insertion", "shared", "A"),
+          proposal("review-insertion", "shared", "B", 1),
+        ]),
+      ]),
+      outcomes,
+    );
+    await update(editor, () => {
+      const paragraphNode = firstParagraph();
+      const wrapper = paragraphNode.getChildAtIndex(0);
+      if (!$isElementNode(wrapper)) {
+        throw new Error("Expected one proposal wrapper.");
+      }
+      const firstNode = wrapper.getChildAtIndex(0);
+      const secondNode = wrapper.getChildAtIndex(1);
+      if (!$isTextNode(firstNode) || !$isTextNode(secondNode)) {
+        throw new Error("Expected formatted proposal text nodes.");
+      }
+      firstNode.select(0, 0);
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) {
+        throw new Error("Expected a range selection.");
+      }
+      selection.anchor.set(secondNode.getKey(), 1, "text");
+      selection.focus.set(firstNode.getKey(), 0, "text");
+      selection.dirty = true;
+    });
+
+    expect(
+      editor.dispatchCommand(
+        KEY_BACKSPACE_COMMAND,
+        new KeyboardEvent("keydown"),
+      ),
+    ).toBe(true);
+    await Promise.resolve();
+
+    editor.getEditorState().read(() => {
+      expect(firstParagraph().getChildren()).toHaveLength(0);
+    });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it("refuses ambiguous paragraph boundaries and mixed ranges without mutation", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          text("A"),
+          proposal("review-insertion", "insertion-a", "B"),
+          text("C"),
+        ]),
+      ]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstParagraph().select(1, 1);
+    });
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+    const beforeDocument = editor.getEditorState().toJSON();
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
+      true,
+    );
+    await Promise.resolve();
+    expect(outcomes).toMatchObject([
+      { reason: { code: "ambiguous-boundary" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+
+    outcomes.length = 0;
+    await update(editor, () => {
+      firstParagraph().select(2, 2);
+    });
+    const beforeOppositeBoundary = editor.getEditorState().toJSON();
+    const beforeOppositeSelection = editor.getEditorState().read(liveSelection);
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "Y")).toBe(
+      true,
+    );
+    await Promise.resolve();
+    expect(outcomes).toMatchObject([
+      { reason: { code: "ambiguous-boundary" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeOppositeBoundary);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeOppositeSelection,
+    );
+
+    outcomes.length = 0;
+    await update(editor, () => {
+      const [accepted, insertion] = firstParagraph().getChildren();
+      if (!$isTextNode(accepted) || !$isElementNode(insertion)) {
+        throw new Error("Expected an accepted node and insertion wrapper.");
+      }
+      const insertionText = firstText(insertion);
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) {
+        throw new Error("Expected a range selection.");
+      }
+      selection.anchor.set(accepted.getKey(), 0, "text");
+      selection.focus.set(insertionText.getKey(), 1, "text");
+      selection.dirty = true;
+    });
+    const beforeMixedRange = editor.getEditorState().toJSON();
+    expect(
+      editor.dispatchCommand(KEY_DELETE_COMMAND, new KeyboardEvent("keydown")),
+    ).toBe(true);
+    await Promise.resolve();
+    expect(outcomes).toMatchObject([
+      { reason: { code: "unsafe-proposal-intersection" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeMixedRange);
+    unregister();
+  });
+
+  it("refuses controlled drop insertion without mutating the live selection", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB")])]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).select(1, 1);
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+    const event = new InputEvent("beforeinput", {
+      data: null,
+      inputType: "insertFromDrop",
+    });
+
+    expect(
+      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, event),
+    ).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "unsupported-transfer" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+    unregister();
+  });
+
+  it("refuses controlled replacement insertion with data", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB")])]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).select(1, 1);
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+    const event = new InputEvent("beforeinput", {
+      data: "X",
+      inputType: "insertReplacementText",
+    });
+
+    expect(
+      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, event),
+    ).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "unsupported-transfer" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    unregister();
+  });
+
+  it("keeps collapsed generic text removal unchanged", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB")])]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).select(1, 1);
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+
+    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, null)).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([{ status: "unchanged" }]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+    unregister();
+  });
+
+  it("refuses cut-driven text removal without mutating the range", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("AB")])]),
+      outcomes,
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).select(0, 1);
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+    const event = new InputEvent("beforeinput", {
+      inputType: "deleteByCut",
+    });
+
+    expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, event)).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "unsupported-transfer" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+    unregister();
+  });
+
+  it("reconciles formatted proposal wrappers as stable outer DOM shells", async () => {
+    const editor = createReviewEditor();
+    const rootElement = document.createElement("div");
+    document.body.append(rootElement);
+    editor.setRootElement(rootElement);
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          proposal("review-insertion", "insertion-a", "new", 1),
+          proposal("review-deletion", "deletion-a", "old", 2),
+        ]),
+      ]),
+    );
+    const insertionElement = rootElement.querySelector("ins");
+    const deletionElement = rootElement.querySelector("del");
+    expect(insertionElement?.firstElementChild?.tagName).toBe("STRONG");
+    expect(deletionElement?.firstElementChild?.tagName).toBe("EM");
+
+    await update(editor, () => {
+      const insertion = firstParagraph().getChildAtIndex(0);
+      if (!$isElementNode(insertion)) {
+        throw new Error("Expected an insertion wrapper.");
+      }
+      firstText(insertion).selectEnd();
+    });
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "!")).toBe(
+      true,
+    );
+    await Promise.resolve();
+
+    expect(rootElement.querySelector("ins")).toBe(insertionElement);
+    expect(rootElement.querySelector("del")).toBe(deletionElement);
+    expect(insertionElement?.textContent).toBe("new!");
+    expect(deletionElement?.textContent).toBe("old");
+    unregister();
+    editor.setRootElement(null);
+    rootElement.remove();
+  });
+
+  it("targets an empty paragraph on the accepted side", async () => {
+    const editor = createReviewEditor();
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([])]),
+      outcomes,
+      { proposalIdFactory: () => "empty-paragraph-insertion" },
+    );
+    await update(editor, () => {
+      firstParagraph().select(0, 0);
+    });
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "x")).toBe(
+      true,
+    );
+    await Promise.resolve();
+    editor.getEditorState().read(() => {
+      expect(firstParagraph().getTextContent()).toBe("x");
+    });
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    unregister();
+  });
+
+  it("refuses accepted-side authoring when proposal node classes are not registered", async () => {
+    const editor = createEditor({
+      namespace: "node-backed-review-session-without-nodes",
+      onError: (error) => {
+        throw error;
+      },
+    });
+    const outcomes: ReviewNodeOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([paragraph([text("A")])]),
+      outcomes,
+      { proposalIdFactory: () => "missing-node" },
+    );
+    await update(editor, () => {
+      firstText(firstParagraph()).selectEnd();
+    });
+    const beforeDocument = editor.getEditorState().toJSON();
+
+    expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X")).toBe(
+      true,
+    );
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { reason: { code: "invalid-structural-target" }, status: "refused" },
+    ]);
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    unregister();
+  });
+
+  it("rejects registration against an editor outside the authoring session", () => {
+    const sessionEditor = createReviewEditor();
+    const otherEditor = createReviewEditor();
+    const opened = openReviewSession(
+      sessionEditor,
+      reviewDocument([paragraph([text("A")])]),
+    );
+    expect(opened.status).toBe("valid");
+    if (opened.status !== "valid") {
+      throw new Error("Expected the node-backed review document to open.");
     }
 
-    unregisterSession();
-    unregisterLegacy();
+    expect(() => registerReviewSession(otherEditor, opened.value)).toThrow(
+      "same Lexical editor",
+    );
   });
 });
