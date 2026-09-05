@@ -112,7 +112,8 @@ function placeProposalCaret(
   let cursor = 0;
   let lastText: TextNode | null = null;
   for (const child of map.wrappers) {
-    if (child.getParent() !== map.paragraph) {
+    // Removing wrappers can clone the paragraph; its key remains stable.
+    if (child.getParent()?.getKey() !== map.paragraph.getKey()) {
       continue;
     }
     const textChildren = getTextChildren(child);
@@ -133,9 +134,11 @@ function placeProposalCaret(
     lastText.selectEnd();
     return;
   }
-  map.paragraph.select(
-    Math.min(Math.max(fallbackIndex, 0), map.paragraph.getChildrenSize()),
+  const paragraphOffset = Math.min(
+    Math.max(fallbackIndex, 0),
+    map.paragraph.getChildrenSize(),
   );
+  map.paragraph.select(paragraphOffset, paragraphOffset);
 }
 
 function spliceProposalRange(

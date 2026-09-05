@@ -365,6 +365,18 @@ it.each([
       expect(nodes[0]!.getFormat()).toBe(1);
       expect(nodes[0]!.getParent()!.getParent()).toBe(paragraphNode);
       expect(nodes[0]!.getParent()!.getParent()!.getChildrenSize()).toBe(1);
+      expect(selectionSnapshot()).toMatchObject({
+        anchor: {
+          key: nodes[0]!.getKey(),
+          offset: expectedText.length,
+          type: "text",
+        },
+        focus: {
+          key: nodes[0]!.getKey(),
+          offset: expectedText.length,
+          type: "text",
+        },
+      });
       expect($inspectReviewInsertion("p")).toEqual({
         status: "unchanged",
         value: { proposalId: "p", text: expectedText },
@@ -372,6 +384,35 @@ it.each([
     });
     const saved = session.exportDocument();
     expect(saved.status).toBe("valid");
+    expect(errors).toEqual([]);
+  },
+);
+
+it.each([false, true])(
+  "collapses the caret between accepted text after removing an entire insertion (backward=%s)",
+  (backward) => {
+    const { editor, errors } = setup([
+      text("before"),
+      reviewNode("review-insertion", "p", [text("pending")]),
+      text("after", 2),
+    ]);
+    editor.update(
+      () => {
+        const pending = $getRoot().getAllTextNodes()[1]!;
+        const length = pending.getTextContentSize();
+        pending.select(backward ? length : 0, backward ? 0 : length);
+        expect($deleteReviewText(backward).status).toBe("changed");
+      },
+      { discrete: true },
+    );
+    editor.getEditorState().read(() => {
+      const paragraphNode = $getRoot().getFirstChildOrThrow();
+      expect(paragraphNode.getTextContent()).toBe("beforeafter");
+      expect(selectionSnapshot()).toMatchObject({
+        anchor: { key: paragraphNode.getKey(), offset: 1, type: "element" },
+        focus: { key: paragraphNode.getKey(), offset: 1, type: "element" },
+      });
+    });
     expect(errors).toEqual([]);
   },
 );
