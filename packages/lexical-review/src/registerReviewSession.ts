@@ -1,3 +1,4 @@
+import { normalizeReviewElementNode } from "./ReviewNormalization";
 import {
   $getSelection,
   $isRangeSelection,
@@ -26,7 +27,6 @@ import type { ReviewSession } from "./ReviewSession";
 import {
   $deleteReviewText,
   $insertReviewText,
-  normalizeReviewElementNode,
   type ReviewAuthoringOptions,
   type ReviewIntentOutcome,
   type ReviewIntentRefusalCode,

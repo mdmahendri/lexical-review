@@ -9,6 +9,7 @@ import {
 } from "lexical";
 import {
   $acceptReviewInsertion,
+  $deleteReviewText,
   $inspectReviewInsertion,
   $insertReviewText,
   $rejectReviewInsertion,
@@ -315,3 +316,62 @@ it("generates identity immediately and refuses an exhausted duplicate factory", 
     before.read(selectionSnapshot),
   );
 });
+
+it.each([
+  ["delete", false],
+  ["delete", true],
+  ["replace", false],
+  ["replace", true],
+] as const)(
+  "%s across formatted insertion wrappers preserves identity and removes empty wrappers (backward=%s)",
+  (operation, backward) => {
+    const { editor, session, errors } = setup([
+      reviewNode("review-insertion", "p", [text("ab", 1)]),
+      reviewNode("review-insertion", "p", [text("cd", 2)]),
+      reviewNode("review-insertion", "p", [text("ef", 8)]),
+    ]);
+    editor.update(
+      () => {
+        const nodes = $getRoot().getAllTextNodes();
+        const first = nodes[0]!;
+        const last = nodes[2]!;
+        first.select(1, 1);
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) throw new Error("Expected a range");
+        selection.anchor.set(
+          backward ? last.getKey() : first.getKey(),
+          backward ? 2 : 1,
+          "text",
+        );
+        selection.focus.set(
+          backward ? first.getKey() : last.getKey(),
+          backward ? 1 : 2,
+          "text",
+        );
+        const outcome =
+          operation === "replace"
+            ? $insertReviewText("X")
+            : $deleteReviewText(backward);
+        expect(outcome.status).toBe("changed");
+      },
+      { discrete: true },
+    );
+    const expectedText = operation === "replace" ? "aX" : "a";
+    editor.getEditorState().read(() => {
+      const paragraphNode = $getRoot().getFirstChildOrThrow();
+      const nodes = $getRoot().getAllTextNodes();
+      expect(nodes).toHaveLength(1);
+      expect(nodes[0]!.getTextContent()).toBe(expectedText);
+      expect(nodes[0]!.getFormat()).toBe(1);
+      expect(nodes[0]!.getParent()!.getParent()).toBe(paragraphNode);
+      expect(nodes[0]!.getParent()!.getParent()!.getChildrenSize()).toBe(1);
+      expect($inspectReviewInsertion("p")).toEqual({
+        status: "unchanged",
+        value: { proposalId: "p", text: expectedText },
+      });
+    });
+    const saved = session.exportDocument();
+    expect(saved.status).toBe("valid");
+    expect(errors).toEqual([]);
+  },
+);
