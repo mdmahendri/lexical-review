@@ -61,6 +61,53 @@ structurally unsafe targets as no-mutation refusals. The lower-level
 `registerReviewSession` export is available for hosts that do not use React.
 The session must be registered with the same Lexical editor that opened it.
 
+### Pending insertion proposals
+
+Use the same root operations as the client command route inside a Lexical
+update. Identity is assigned on creation and remains stable while content is
+continued or corrected:
+
+```ts
+import {
+  $insertReviewText,
+  $inspectReviewInsertion,
+  $acceptReviewInsertion,
+  $rejectReviewInsertion,
+  $removeReviewInsertion,
+} from "lexical-review";
+
+editor.update(() => {
+  const outcome = $insertReviewText("new text", {
+    proposalIdFactory: () => crypto.randomUUID(),
+  });
+  // Handle changed, unchanged, or refused outcomes.
+});
+
+editor.getEditorState().read(() => $inspectReviewInsertion(proposalId));
+editor.update(() => $acceptReviewInsertion(proposalId));
+// Alternatively: $rejectReviewInsertion(proposalId) or
+// $removeReviewInsertion(proposalId), each inside editor.update().
+```
+
+The identity factory is optional; the package generates identities by default.
+Client hosts can pass the same `proposalIdFactory` to `registerReviewSession`
+or `ReviewSessionPlugin`. Duplicate or invalid identities, factory failures,
+and unsupported targets are refused before mutation. Unexpected implementation
+errors propagate to Lexical's update error handling and rollback; do not catch
+and swallow them inside the update callback.
+
+Typing from an accepted text boundary continues an adjacent insertion when its
+formatting matches. Typing or replacing a range inside one insertion corrects
+that proposal in place. A paragraph element boundary adjacent to a proposal
+is ambiguous and is refused. Deleting all insertion content removes the
+proposal. The caret follows newly inserted or corrected content.
+
+Acceptance unwraps the insertion into accepted text, preserving formatting.
+Rejection removes the proposed text. Explicit removal also removes pending
+work, but expresses author removal rather than a review decision. These are
+separate operations; none adds a terminal record to native JSON. Resolution
+refuses missing, disconnected, or structurally unsupported identities.
+
 ## Legacy editor-wide review mode
 
 The v2 segment implementation remains available behind explicitly named

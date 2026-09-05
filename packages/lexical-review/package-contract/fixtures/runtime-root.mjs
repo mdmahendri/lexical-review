@@ -8,6 +8,15 @@ assert.equal(typeof root.ReviewDeletionNode, "function");
 assert.equal(typeof root.LegacyReviewTextNode, "function");
 assert.equal("ReviewTextNode" in root, false);
 assert.equal(typeof root.openReviewSession, "function");
+for (const name of [
+  "$insertReviewText",
+  "$inspectReviewInsertion",
+  "$removeReviewInsertion",
+  "$acceptReviewInsertion",
+  "$rejectReviewInsertion",
+]) {
+  assert.equal(typeof root[name], "function");
+}
 assert.equal(typeof root.validateReviewDocument, "function");
 assert.equal("ReviewTextPlugin" in root, false);
 assert.equal("registerReviewText" in root, false);

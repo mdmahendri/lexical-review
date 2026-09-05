@@ -29,3 +29,18 @@ export {
   openReviewSession,
   type ReviewSession,
 } from "./ReviewSession";
+
+export {
+  $insertReviewText,
+  $inspectReviewInsertion,
+  $removeReviewInsertion,
+  $acceptReviewInsertion,
+  $rejectReviewInsertion,
+  type ReviewAuthoringOptions,
+  type ReviewInsertionProposal,
+  type ReviewIntentError,
+  type ReviewIntentOutcome,
+  type ReviewIntentRefusal,
+  type ReviewIntentRefusalCode,
+  type ReviewProposalIdFactory,
+} from "./ReviewOperations";

@@ -576,10 +576,10 @@ describe("node-backed review session targeting", () => {
   });
 
   it.each([
-    ["before", 0, ["A", "X", "B", "C"], 1],
-    ["after", 2, ["A", "B", "X", "C"], 2],
+    ["before", 0, ["A", "XB", "C"], 1],
+    ["after", 2, ["A", "BX", "C"], 1],
   ] as const)(
-    "creates an insertion on the explicit accepted side %s a proposal",
+    "continues an insertion on the explicit accepted side %s a proposal",
     async (_side, acceptedIndex, expectedText, insertionIndex) => {
       const editor = createReviewEditor();
       const outcomes: ReviewIntentOutcome[] = [];
@@ -621,7 +621,7 @@ describe("node-backed review session targeting", () => {
         expect($isElementNode(insertion)).toBe(true);
         if ($isElementNode(insertion)) {
           expect((insertion as ReviewInsertionNode).getProposalId()).toBe(
-            "insertion-b",
+            "insertion-a",
           );
         }
       });

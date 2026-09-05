@@ -19,3 +19,14 @@ export function assertValidProposalId(value: unknown): asserts value is string {
     );
   }
 }
+
+let generatedProposalCounter = 0;
+
+export function createProposalId(): string {
+  generatedProposalCounter += 1;
+  const cryptoObject = globalThis.crypto;
+  if (typeof cryptoObject?.randomUUID === "function") {
+    return `review-${cryptoObject.randomUUID()}`;
+  }
+  return `review-${Date.now().toString(36)}-${generatedProposalCounter.toString(36)}`;
+}

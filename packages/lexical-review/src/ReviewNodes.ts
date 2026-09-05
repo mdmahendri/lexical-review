@@ -9,7 +9,7 @@ import {
   type Spread,
 } from "lexical";
 import { addClassNamesToElement } from "@lexical/utils";
-import { assertValidProposalId } from "./ProposalIdentity";
+import { assertValidProposalId, createProposalId } from "./ProposalIdentity";
 
 type SerializedReviewElementNode = Spread<
   {
@@ -159,7 +159,7 @@ export class ReviewDeletionNode extends ReviewElementNode {
 }
 
 export function $createReviewInsertionNode(
-  proposalId: string,
+  proposalId: string = createProposalId(),
 ): ReviewInsertionNode {
   return $applyNodeReplacement(new ReviewInsertionNode(proposalId));
 }

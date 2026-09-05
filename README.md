@@ -14,7 +14,7 @@
 - Review metadata survives Lexical JSON serialization and deserialization.
 - Custom theme classes for inserted (`<ins>`) and deleted (`<del>`) text.
 
-The review model tracks text changes. Formatting-only changes remain regular Lexical formatting changes, and accept/reject controls are not included in the package.
+The native v3 session authors pending insertion proposals with identity on creation, correction in place, and explicit accept, reject, and removal operations. See the [session API](packages/lexical-review/README.md#pending-insertion-proposals). The editor-wide features below describe the legacy integration.
 
 ## Installation
 
@@ -37,7 +37,7 @@ Lexical minors and browser boundary scenarios in Chromium, Firefox, and
 Playwright WebKit. Playwright WebKit results do not certify native Safari or
 iOS Safari.
 
-## Quick start
+## Legacy quick start
 
 Register `ReviewTextNode` and replace Lexical's regular `TextNode` so review mode applies to all editable text:
 
@@ -45,8 +45,11 @@ Register `ReviewTextNode` and replace Lexical's regular `TextNode` so review mod
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { TextNode } from "lexical";
-import { $createReviewTextNode, ReviewTextNode } from "lexical-review";
-import { ReviewTextPlugin } from "lexical-review/client";
+import {
+  $createLegacyReviewTextNode as $createReviewTextNode,
+  LegacyReviewTextNode as ReviewTextNode,
+} from "lexical-review";
+import { LegacyReviewTextPlugin as ReviewTextPlugin } from "lexical-review/client";
 
 const initialConfig = {
   namespace: "review-editor",
