@@ -1,6 +1,8 @@
 import type { EditorState, SerializedEditorState } from "lexical";
 import { isValidProposalId } from "./ProposalIdentity";
 
+import { isValidFormatRuns } from "./ReviewFormattingState";
+
 const REVIEW_STATE_KEY = "lexical-review";
 const SUPPORTED_TEXT_FORMAT_MASK = 0b1111;
 
@@ -31,7 +33,7 @@ export type ValidationResult<T> =
     }>;
 
 type JsonRecord = Record<string, unknown>;
-type ProposalKind = "deletion" | "insertion";
+type ProposalKind = "deletion" | "insertion" | "formatting";
 type ProposalOccurrence = Readonly<{
   kind: ProposalKind;
   paragraph: string;
@@ -142,6 +144,7 @@ function validateTextNode(
 }
 
 function proposalKind(value: JsonRecord): ProposalKind | null {
+  if (value.type === "review-formatting") return "formatting";
   if (value.type === "review-insertion") {
     return "insertion";
   }
@@ -160,10 +163,14 @@ function validateReviewNode(
 ): ValidationResult<void> {
   const kind = proposalKind(value);
   if (kind === null) {
-    return invalid(path, "Expected an insertion or deletion review node.");
+    return invalid(
+      path,
+      "Expected an insertion, deletion, or formatting review node.",
+    );
   }
   if (
     !hasExactlyKeys(value, [
+      ...(kind === "formatting" ? ["accepted"] : []),
       "children",
       "direction",
       "extensions",
@@ -201,7 +208,9 @@ function validateReviewNode(
   const prior = proposals.get(value.proposalId);
   if (
     prior &&
-    (prior.paragraph !== paragraph ||
+    (prior.kind === "formatting" ||
+      kind === "formatting" ||
+      prior.paragraph !== paragraph ||
       prior.index + 1 !== index ||
       (prior.kind === "insertion" && kind === "deletion"))
   ) {
@@ -233,6 +242,17 @@ function validateReviewNode(
     if (child.status !== "valid") {
       return child;
     }
+  }
+  if (
+    kind === "formatting" &&
+    (!isValidFormatRuns(value.accepted) ||
+      value.accepted.map((run) => run.text).join("") !==
+        value.children.map((child) => (child as JsonRecord).text).join(""))
+  ) {
+    return invalid(
+      `${path}.accepted`,
+      "Formatting proposals must retain supported accepted formats for exactly their current text.",
+    );
   }
   return valid();
 }

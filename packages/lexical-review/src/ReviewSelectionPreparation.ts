@@ -15,6 +15,7 @@ import {
 import {
   $canReviewElementNodesBeMerged,
   $isReviewDeletionNode,
+  $isReviewFormattingNode,
   $isReviewInsertionNode,
   type ReviewElementNode,
 } from "./ReviewNodes";
@@ -104,7 +105,11 @@ export function isRootParagraph(
 export function isReviewElementNode(
   node: LexicalNode | null | undefined,
 ): node is ReviewElementNode {
-  return $isReviewDeletionNode(node) || $isReviewInsertionNode(node);
+  return (
+    $isReviewDeletionNode(node) ||
+    $isReviewInsertionNode(node) ||
+    $isReviewFormattingNode(node)
+  );
 }
 
 type RootProposalContext = Readonly<{
@@ -127,7 +132,9 @@ function isSameProposalNode(
   reference: ReviewElementNode,
 ): node is ReviewElementNode {
   return (
-    isReviewElementNode(node) && $canReviewElementNodesBeMerged(reference, node)
+    isReviewElementNode(node) &&
+    (node.getKey() === reference.getKey() ||
+      $canReviewElementNodesBeMerged(reference, node))
   );
 }
 
@@ -465,7 +472,7 @@ function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
 
 /** Validate every occurrence of an identity before editing or resolving any side. */
 export function inspectProposalGroup(proposalId: string): Preparation<{
-  kind: "insertion" | "deletion" | "replacement";
+  kind: "insertion" | "deletion" | "replacement" | "formatting";
   wrappers: ReviewElementNode[];
 }> {
   if (!isValidProposalId(proposalId))
@@ -489,6 +496,21 @@ export function inspectProposalGroup(proposalId: string): Preparation<{
     );
   const structure = validateParagraphStructure(paragraph);
   if (structure) return structure;
+  if (wrappers.some($isReviewFormattingNode)) {
+    if (
+      wrappers.length !== 1 ||
+      !$isReviewFormattingNode(first) ||
+      first
+        .getAcceptedFormats()
+        .map((run) => run.text)
+        .join("") !== first.getTextContent()
+    )
+      return refusal(
+        "unsafe-proposal-intersection",
+        "Formatting requires one unchanged text target and one identity.",
+      );
+    return { status: "ready", value: { wrappers, kind: "formatting" } };
+  }
   let insertionSeen = false;
   let deletionSeen = false;
   for (const [index, wrapper] of wrappers.entries()) {

@@ -1,9 +1,8 @@
+import { $getReviewInputFormat } from "./ReviewInputFormatting";
 import {
   $createTextNode,
   $getEditor,
-  $getRoot,
   $getSelection,
-  $isElementNode,
   $isRangeSelection,
   $isTextNode,
   type LexicalEditor,
@@ -11,11 +10,23 @@ import {
   type RangeSelection,
   type TextNode,
 } from "lexical";
-import { createProposalId, isValidProposalId } from "./ProposalIdentity";
+import {
+  prepareProposalId,
+  type ReviewAuthoringOptions,
+} from "./ReviewAuthoring";
+export type {
+  ReviewAuthoringOptions,
+  ReviewProposalIdFactory,
+} from "./ReviewAuthoring";
+import {
+  $acceptReviewFormatting,
+  $rejectReviewFormatting,
+} from "./ReviewFormatting";
 import {
   $createReviewDeletionNode,
   $createReviewInsertionNode,
   $isReviewDeletionNode,
+  $isReviewFormattingNode,
   $isReviewInsertionNode,
   ReviewDeletionNode,
   ReviewInsertionNode,
@@ -36,7 +47,6 @@ export type {
 import {
   inspectProposalGroup,
   isRootParagraph,
-  isReviewElementNode,
   getChildIndex,
   getTextChildren,
   isTextBoundary,
@@ -58,12 +68,6 @@ import {
   type ProposalSpan,
   type AcceptedSpan,
 } from "./ReviewSelectionPreparation";
-
-export type ReviewProposalIdFactory = () => string;
-
-export type ReviewAuthoringOptions = Readonly<{
-  proposalIdFactory?: ReviewProposalIdFactory;
-}>;
 
 function isolateAcceptedTextRange(span: AcceptedSpan): TextNode[] | null {
   if (span.start >= span.end) {
@@ -203,66 +207,33 @@ function replaceProposalRange(
 }
 
 function insertIntoProposal(point: ProposalPoint, text: string): void {
-  if (point.node !== null) {
-    point.node.spliceText(point.offset, 0, text, true);
-    return;
-  }
-  const children = getTextChildren(point.wrapper);
-  if (children === null) {
-    throw new Error("The proposal wrapper has no editable text children.");
-  }
-  if (point.offset === 0) {
-    children[0]!.spliceText(0, 0, text, true);
-    return;
-  }
-  let offset = 0;
-  for (const child of children) {
-    const end = offset + child.getTextContentSize();
-    if (point.offset <= end) {
-      child.spliceText(point.offset - offset, 0, text, true);
-      return;
-    }
-    offset = end;
-  }
-  children
-    .at(-1)!
-    .spliceText(children.at(-1)!.getTextContentSize(), 0, text, true);
-}
-
-function getUniqueProposalId(
-  factory: ReviewProposalIdFactory,
-): Preparation<string> {
-  const existing = new Set<string>();
-  for (const paragraph of $getRoot().getChildren()) {
-    if (!$isElementNode(paragraph)) {
-      continue;
-    }
-    for (const child of paragraph.getChildren()) {
-      if (isReviewElementNode(child)) {
-        existing.add(child.getProposalId());
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection))
+    throw new Error("Expected a range selection.");
+  const children = getTextChildren(point.wrapper)!;
+  let offset = point.offset;
+  let target = point.node;
+  if (target === null) {
+    for (const child of children) {
+      if (offset <= child.getTextContentSize()) {
+        target = child;
+        break;
       }
+      offset -= child.getTextContentSize();
     }
   }
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    let proposalId: string;
-    try {
-      proposalId = factory();
-    } catch (cause) {
-      return refusal(
-        "invalid-proposal-id",
-        cause instanceof Error
-          ? cause.message
-          : "The proposal identity factory failed.",
-      );
-    }
-    if (isValidProposalId(proposalId) && !existing.has(proposalId)) {
-      return { status: "ready", value: proposalId };
-    }
+  if (target === null)
+    throw new Error("The proposal caret cannot be resolved.");
+  const format = $getReviewInputFormat(selection);
+  if (target.getFormat() === format) {
+    target.spliceText(offset, 0, text, true);
+    return;
   }
-  return refusal(
-    "invalid-proposal-id",
-    "The proposal identity factory did not produce a unique valid identity.",
-  );
+  const inserted = $createTextNode(text).setFormat(format);
+  if (offset === 0) target.insertBefore(inserted);
+  else if (offset === target.getTextContentSize()) target.insertAfter(inserted);
+  else target.splitText(offset)[1]!.insertBefore(inserted);
+  inserted.selectEnd();
 }
 
 function missingProposalNode(
@@ -287,7 +258,7 @@ function insertInsertionProposalAtAcceptedPoint(
 ): void {
   const wrapper = $createReviewInsertionNode(proposalId);
   const textNode = $createTextNode(text);
-  textNode.setFormat(point.node?.getFormat() ?? selection.format);
+  textNode.setFormat($getReviewInputFormat(selection));
   wrapper.append(textNode);
   if (point.node !== null) {
     if (point.offset === 0) {
@@ -398,6 +369,11 @@ function deleteProposalAtCaret(
   backward: boolean,
   granularity: "character" | "word",
 ): ReviewIntentOutcome {
+  if ($isReviewFormattingNode(point.wrapper))
+    return refusal(
+      "unsupported-proposal-edit",
+      "Text deletion cannot alter a pending formatting target.",
+    );
   const map = buildProposalMapAroundPoint(point);
   if (map.status !== "ready") {
     return map;
@@ -445,6 +421,11 @@ function deleteProposalAtCaret(
 }
 
 function deleteProposalSelection(span: ProposalSpan): ReviewIntentOutcome {
+  if ($isReviewFormattingNode(span.map.wrappers[0]))
+    return refusal(
+      "unsupported-proposal-edit",
+      "Text deletion cannot alter a pending formatting target.",
+    );
   if (span.start === span.end) {
     return unchanged();
   }
@@ -467,12 +448,6 @@ function deleteProposalSelection(span: ProposalSpan): ReviewIntentOutcome {
   spliceProposalRange(span);
   placeProposalCaret(span.map, span.start, fallbackIndex ?? 0);
   return changed();
-}
-
-function prepareProposalId(
-  options: ReviewAuthoringOptions,
-): Preparation<string> {
-  return getUniqueProposalId(options.proposalIdFactory ?? createProposalId);
 }
 
 function performInsertion(
@@ -575,7 +550,8 @@ function performInsertion(
         : adjacent.getFirstChild();
       if (
         $isTextNode(boundary) &&
-        boundary.getFormat() === point.node.getFormat()
+        boundary.getFormat() ===
+          $getReviewInputFormat(inspection.value.selection)
       ) {
         const offset = atStart ? boundary.getTextContentSize() : 0;
         boundary.spliceText(offset, 0, text, true);
@@ -987,7 +963,11 @@ export function $resolveReviewProposals(
     groups.push({ id, kind: group.value.kind });
   }
   for (const { id, kind } of groups) {
-    if (kind === "replacement") resolveReplacement(id, action === "accept");
+    if (kind === "formatting") {
+      if (action === "accept") $acceptReviewFormatting(id);
+      else $rejectReviewFormatting(id);
+    } else if (kind === "replacement")
+      resolveReplacement(id, action === "accept");
     else
       resolveProposal(
         id,

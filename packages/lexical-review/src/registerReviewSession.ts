@@ -1,3 +1,9 @@
+import { registerReviewInputFormatting } from "./ReviewInputFormatting";
+import {
+  $setReviewFormatting,
+  $toggleReviewFormatting,
+  type ReviewFormattingProperty,
+} from "./ReviewFormatting";
 import { normalizeReviewElementNode } from "./ReviewNormalization";
 import {
   $getSelection,
@@ -90,6 +96,24 @@ export function registerReviewSession(
     return true;
   };
   const handleBeforeInput = (event: InputEvent): boolean => {
+    if (
+      (event.inputType === "insertText" ||
+        event.inputType === "insertReplacementText") &&
+      !event.isComposing &&
+      event.data !== null &&
+      event.dataTransfer == null
+    ) {
+      event.preventDefault();
+      if (!handledEvents.has(event)) {
+        handledEvents.add(event);
+        const operation =
+          event.inputType === "insertReplacementText"
+            ? $replaceReviewText
+            : $insertReviewText;
+        reportOutcome(options, operation(event.data, options), "insertion");
+      }
+      return true;
+    }
     if (event.inputType === "deleteContentBackward") {
       return handleDeletion(true, event);
     }
@@ -105,18 +129,38 @@ export function registerReviewSession(
         event,
         "word",
       );
+    const formatting: Record<string, ReviewFormattingProperty> = {
+      formatBold: "bold",
+      formatItalic: "italic",
+      formatUnderline: "underline",
+      formatStrikeThrough: "strikethrough",
+    };
+    const property = formatting[event.inputType];
+    if (property) {
+      event.preventDefault();
+      if (!handledEvents.has(event)) {
+        handledEvents.add(event);
+        reportOutcome(
+          options,
+          $toggleReviewFormatting(property, options),
+          null,
+        );
+      }
+      return true;
+    }
+    if (event.inputType.startsWith("format")) {
+      event.preventDefault();
+      reportOutcome(
+        options,
+        unsupportedOutcome(
+          "unsupported-formatting",
+          "Unsupported native formatting property.",
+        ),
+        null,
+      );
+      return true;
+    }
     return false;
-  };
-  const refuseFormatting = (): boolean => {
-    reportOutcome(
-      options,
-      unsupportedOutcome(
-        "unsupported-formatting",
-        "Formatting authoring is not supported by the node-backed review session yet.",
-      ),
-      null,
-    );
-    return true;
   };
   const refuseDeletionGranularity = (event?: KeyboardEvent | null): boolean => {
     event?.preventDefault();
@@ -201,6 +245,7 @@ export function registerReviewSession(
   }
 
   return mergeRegister(
+    registerReviewInputFormatting(editor),
     ...normalizationRegistrations,
     editor.registerCommand(
       BEFORE_INPUT_COMMAND,
@@ -279,12 +324,25 @@ export function registerReviewSession(
     ),
     editor.registerCommand(
       FORMAT_TEXT_COMMAND,
-      refuseFormatting,
+      (property) => {
+        reportOutcome(
+          options,
+          $toggleReviewFormatting(
+            property as ReviewFormattingProperty,
+            options,
+          ),
+          null,
+        );
+        return true;
+      },
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       SET_TEXT_FORMAT_COMMAND,
-      refuseFormatting,
+      (change) => {
+        reportOutcome(options, $setReviewFormatting(change, options), null);
+        return true;
+      },
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(

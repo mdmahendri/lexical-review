@@ -11,6 +11,11 @@ import {
 import { addClassNamesToElement } from "@lexical/utils";
 import { assertValidProposalId, createProposalId } from "./ProposalIdentity";
 
+import {
+  isValidFormatRuns,
+  type ReviewFormatRun,
+} from "./ReviewFormattingState";
+
 type SerializedReviewElementNode = Spread<
   {
     extensions: readonly [];
@@ -86,12 +91,15 @@ export abstract class ReviewElementNode extends ElementNode {
     return false;
   }
 
-  protected abstract getReviewTag(): "ins" | "del";
+  protected abstract getReviewTag(): "ins" | "del" | "span";
 
   override createDOM(config: EditorConfig): HTMLElement {
     const tag = this.getReviewTag();
     const element = document.createElement(tag);
-    addClassNamesToElement(element, config.theme[tag]);
+    addClassNamesToElement(
+      element,
+      tag === "span" ? undefined : config.theme[tag],
+    );
     return element;
   }
 }
@@ -187,7 +195,96 @@ export function $canReviewElementNodesBeMerged(
   node2: ReviewElementNode,
 ): boolean {
   return (
+    !$isReviewFormattingNode(node1) &&
     node1.getType() === node2.getType() &&
     node1.getProposalId() === node2.getProposalId()
   );
+}
+
+export type SerializedReviewFormattingNode = SerializedReviewElementNode & {
+  type: "review-formatting";
+  accepted: readonly ReviewFormatRun[];
+};
+
+export class ReviewFormattingNode extends ReviewElementNode {
+  __accepted: readonly ReviewFormatRun[];
+
+  constructor(
+    proposalId: string,
+    accepted: readonly ReviewFormatRun[],
+    key?: NodeKey,
+  ) {
+    super(proposalId, key);
+    if (!isValidFormatRuns(accepted))
+      throw new Error("Invalid accepted formatting runs.");
+    this.__accepted = Object.freeze(
+      accepted.map((run) => Object.freeze({ ...run })),
+    );
+  }
+
+  static override getType(): string {
+    return "review-formatting";
+  }
+  static override clone(node: ReviewFormattingNode): ReviewFormattingNode {
+    return new ReviewFormattingNode(
+      node.__proposalId,
+      node.__accepted,
+      node.__key,
+    );
+  }
+  override afterCloneFrom(prevNode: this): void {
+    super.afterCloneFrom(prevNode);
+    this.__accepted = prevNode.__accepted;
+  }
+  getAcceptedFormats(): readonly ReviewFormatRun[] {
+    return this.getLatest().__accepted;
+  }
+  static override importJSON(
+    node: SerializedReviewFormattingNode,
+  ): ReviewFormattingNode {
+    return $createReviewFormattingNode(
+      node.proposalId,
+      node.accepted,
+    ).updateFromJSON(node);
+  }
+  override updateFromJSON(
+    node: LexicalUpdateJSON<SerializedReviewFormattingNode>,
+  ): this {
+    if (!isValidFormatRuns(node.accepted))
+      throw new Error("Invalid accepted formatting runs.");
+    super.updateFromJSON(node);
+    this.getWritable().__accepted = Object.freeze(
+      node.accepted.map((run) => Object.freeze({ ...run })),
+    );
+    return this;
+  }
+  protected override getReviewTag(): "span" {
+    return "span";
+  }
+  override createDOM(config: EditorConfig): HTMLElement {
+    const element = super.createDOM(config);
+    element.dataset.reviewFormatting = "";
+    return element;
+  }
+  override exportJSON(): SerializedReviewFormattingNode {
+    return {
+      ...super.exportJSON(),
+      type: "review-formatting",
+      proposalId: this.getProposalId(),
+      extensions: [],
+      accepted: this.getAcceptedFormats().map((run) => ({ ...run })),
+    };
+  }
+}
+
+export function $createReviewFormattingNode(
+  proposalId: string,
+  accepted: readonly ReviewFormatRun[],
+): ReviewFormattingNode {
+  return $applyNodeReplacement(new ReviewFormattingNode(proposalId, accepted));
+}
+export function $isReviewFormattingNode(
+  node: LexicalNode | null | undefined,
+): node is ReviewFormattingNode {
+  return node instanceof ReviewFormattingNode;
 }

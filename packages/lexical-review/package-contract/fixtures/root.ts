@@ -1,6 +1,9 @@
 import {
   openReviewSession,
   type ReviewDocumentV3,
+  ReviewFormattingNode,
+  $setReviewFormatting,
+  $inspectReviewFormatting,
   ReviewDeletionNode,
   ReviewInsertionNode,
   type ValidationResult,
@@ -25,7 +28,7 @@ function validationStatus(result: ValidationResult<unknown>): string {
 }
 
 const editor = createEditor({
-  nodes: [ReviewInsertionNode, ReviewDeletionNode],
+  nodes: [ReviewInsertionNode, ReviewDeletionNode, ReviewFormattingNode],
   onError: (error) => void error,
 });
 const opened = openReviewSession(editor, {
@@ -58,3 +61,8 @@ if (opened.status === "valid") {
 }
 
 void nodeClass;
+
+editor.update(() => {
+  void $setReviewFormatting({ bold: true, underline: true });
+  void $inspectReviewFormatting("pending-format");
+});

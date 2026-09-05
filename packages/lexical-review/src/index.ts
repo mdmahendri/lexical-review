@@ -61,3 +61,22 @@ export {
   $resolveReviewProposals,
   type ReviewReplacementProposal,
 } from "./ReviewOperations";
+
+export {
+  ReviewFormattingNode,
+  $createReviewFormattingNode,
+  $isReviewFormattingNode,
+  type SerializedReviewFormattingNode,
+} from "./ReviewNodes";
+export {
+  $setReviewFormatting,
+  $toggleReviewFormatting,
+  $inspectReviewFormatting,
+  $acceptReviewFormatting,
+  $rejectReviewFormatting,
+  $removeReviewFormatting,
+  type ReviewFormattingChange,
+  type ReviewFormattingProperty,
+  type ReviewFormattingProposal,
+} from "./ReviewFormatting";
+export type { ReviewFormatRun } from "./ReviewFormattingState";

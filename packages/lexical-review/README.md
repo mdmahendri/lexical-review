@@ -56,7 +56,7 @@ import { ReviewSessionPlugin } from "lexical-review/client";
 ```
 
 It keeps accepted-side and proposal-side targeting distinct, edits compatible
-pending insertion/deletion nodes in place, and reports ambiguous, mixed, and
+pending insertion, deletion, replacement, and formatting proposals in place, and reports ambiguous, mixed, and
 structurally unsafe targets as no-mutation refusals. The lower-level
 `registerReviewSession` export is available for hosts that do not use React.
 The session must be registered with the same Lexical editor that opened it.
@@ -210,3 +210,56 @@ Please visit the [homepage](https://github.com/mahendrimd/lexical-review).
 For inserted and deleted text, the review marker is always the outermost DOM
 element. Lexical formatting and inline styles are nested inside the marker,
 for example: `<ins><strong>inserted text</strong></ins>`.
+
+### Pending formatting proposals
+
+Register `ReviewFormattingNode` alongside `ReviewInsertionNode` and
+`ReviewDeletionNode` to author and reopen pending formatting proposals.
+Formatting accepted text creates one independently reviewable proposal. Its
+wrapper retains the accepted formatting runs, while its text children carry the
+current proposed formatting. The text itself remains unchanged.
+
+```ts
+import {
+  $setReviewFormatting,
+  $toggleReviewFormatting,
+  $inspectReviewFormatting,
+  $acceptReviewFormatting,
+  $rejectReviewFormatting,
+  $removeReviewFormatting,
+} from "lexical-review";
+
+editor.update(() => {
+  // Apply explicit values to the current selection in one proposal.
+  const outcome = $setReviewFormatting({ bold: true, italic: false });
+});
+```
+
+The supported properties are `bold`, `italic`, `underline`, and `strikethrough`.
+`$toggleReviewFormatting(property)` removes the property when all selected text
+has it, and applies it otherwise. Explicit values that already match are no-ops:
+they do not split text or allocate identity. Creation preserves the selected
+text endpoints and forward/backward orientation.
+
+A selection within one formatting proposal can update its current formatting
+without changing identity. Returning its entire target to the accepted
+formatting removes the proposal. Formatting insertion text or a replacement's
+new side updates that existing proposal without adding an independently
+reviewable formatting change. Formatting deletion text or a replacement's old
+side is refused. Selections crossing paragraphs, proposal identities, or
+accepted/proposal sides, unsupported properties, and ambiguous targets are
+refused without mutation. Text insertion and deletion within a pending
+formatting target are also refused; resolve the formatting proposal first.
+
+A collapsed toggle changes only future local input formatting and creates no
+proposal. Session registration recomputes that input formatting when the caret
+moves. Ordinary typing uses it for new text, including new formatting runs
+inside an existing insertion proposal.
+
+`registerReviewSession` routes `FORMAT_TEXT_COMMAND`, `SET_TEXT_FORMAT_COMMAND`,
+and the supported native formatting `beforeinput` intentions through the same
+operations. Outcomes are delivered through `onOutcome`. Inspection, acceptance,
+rejection, removal, and `$resolveReviewProposals` read the current node-backed
+state. Saving preserves pending accepted/current formatting, without storing
+resolved proposal history. Insertion and deletion DOM wrappers remain outermost;
+Lexical text formatting and theme classes stay inside them.

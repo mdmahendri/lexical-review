@@ -5,7 +5,11 @@ import {
   type ReviewDocumentV3,
   type ValidationResult,
 } from "./ReviewDocument";
-import { ReviewDeletionNode, ReviewInsertionNode } from "./ReviewNodes";
+import {
+  ReviewDeletionNode,
+  ReviewInsertionNode,
+  ReviewFormattingNode,
+} from "./ReviewNodes";
 
 export interface ReviewSession {
   exportDocument(): ValidationResult<ReviewDocumentV3>;
@@ -54,9 +58,11 @@ function sameSerializedValue(left: unknown, right: unknown): boolean {
 }
 
 function pendingNodeKinds(document: ReviewDocumentV3): Readonly<{
+  formatting: boolean;
   deletion: boolean;
   insertion: boolean;
 }> {
+  let formatting = false;
   let deletion = false;
   let insertion = false;
   const visit = (value: unknown): void => {
@@ -68,12 +74,13 @@ function pendingNodeKinds(document: ReviewDocumentV3): Readonly<{
       return;
     }
     const record = value as Record<string, unknown>;
+    formatting ||= record.type === "review-formatting";
     insertion ||= record.type === "review-insertion";
     deletion ||= record.type === "review-deletion";
     Object.values(record).forEach(visit);
   };
   visit(document.root);
-  return { deletion, insertion };
+  return { deletion, insertion, formatting };
 }
 
 class LexicalReviewSession implements ReviewSession {
@@ -102,6 +109,7 @@ export function importReviewDocument(
   }
   const requiredNodes = pendingNodeKinds(validated.value);
   if (
+    (requiredNodes.formatting && !editor.hasNode(ReviewFormattingNode)) ||
     (requiredNodes.insertion && !editor.hasNode(ReviewInsertionNode)) ||
     (requiredNodes.deletion && !editor.hasNode(ReviewDeletionNode))
   ) {
