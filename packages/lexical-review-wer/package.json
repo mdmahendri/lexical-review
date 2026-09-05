@@ -23,5 +23,8 @@
   },
   "dependencies": {
     "lexical-review": "workspace:2.0.0"
+  },
+  "devDependencies": {
+    "lexical": "0.49.0"
   }
 }

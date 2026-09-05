@@ -1,4 +1,9 @@
-import { createEditor, $getRoot } from "lexical";
+import {
+  createEditor,
+  $getRoot,
+  $createParagraphNode,
+  $createTextNode,
+} from "lexical";
 import {
   $insertReviewFragment,
   $deleteReviewText,
@@ -7,23 +12,17 @@ import {
   ReviewInsertionNode,
   openReviewSession,
   validateReviewDocument,
-} from "./index";
-import {
-  reviewDocument,
-  paragraph,
-  text,
-} from "./ReviewDocument.test-fixtures";
-import { exportAtomicFragmentToWERv1 } from "../../lexical-review-wer/src/index";
+} from "lexical-review";
+import { exportAtomicFragmentToWERv1 } from "./index";
 
 it("refuses the whole current fragment without decomposition or input mutation", () => {
-  const input = reviewDocument([paragraph([text("AB")])]);
   const editor = createEditor({
     nodes: [ReviewFragmentNode, ReviewBoundaryNode, ReviewInsertionNode],
     onError(error) {
       throw error;
     },
   });
-  const opened = openReviewSession(editor, input);
+  const opened = openReviewSession(editor, acceptedDocument());
   if (opened.status !== "valid") throw new Error("fixture");
   editor.update(
     () => {
@@ -82,9 +81,7 @@ it("refuses the whole current fragment without decomposition or input mutation",
   expect(JSON.stringify(normalized)).toContain('"proposalId":"f"');
 });
 it("does not report successful mapping for accepted-only input or malformed fragments", () => {
-  const input = validateReviewDocument(
-    reviewDocument([paragraph([text("AB")])]),
-  );
+  const input = validateReviewDocument(acceptedDocument());
   if (input.status !== "valid") throw new Error("fixture");
   expect(
     exportAtomicFragmentToWERv1(input.value, { inputRef: "artifact:accepted" }),
@@ -93,3 +90,22 @@ it("does not report successful mapping for accepted-only input or malformed frag
     exportAtomicFragmentToWERv1(input.value, { inputRef: "" }),
   ).toMatchObject({ status: "failed" });
 });
+
+// Build adapter-owned inputs through public APIs, without importing native test internals.
+function acceptedDocument() {
+  const editor = createEditor({
+    onError(error) {
+      throw error;
+    },
+  });
+  editor.update(
+    () => {
+      $getRoot().append($createParagraphNode().append($createTextNode("AB")));
+    },
+    { discrete: true },
+  );
+  const { root } = editor.getEditorState().toJSON();
+  return {
+    root: { ...root, $: { "lexical-review": { version: 3, extensions: [] } } },
+  };
+}
