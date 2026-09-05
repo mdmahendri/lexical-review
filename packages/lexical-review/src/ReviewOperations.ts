@@ -1,3 +1,10 @@
+import {
+  $deleteReviewBoundary,
+  inspectBoundary,
+  validateStructuralState,
+  $acceptReviewStructure,
+  $rejectReviewStructure,
+} from "./ReviewStructure";
 import { $getReviewInputFormat } from "./ReviewInputFormatting";
 import {
   $createTextNode,
@@ -581,6 +588,10 @@ export function $deleteReviewText(
   backward: boolean,
   options: ReviewDeletionOptions = {},
 ): ReviewIntentOutcome {
+  if ((options.granularity ?? "character") === "character") {
+    const structural = $deleteReviewBoundary(backward, options);
+    if (structural) return structural;
+  }
   const inspection = inspectSelection();
   if (inspection.status !== "ready") {
     return inspection;
@@ -956,14 +967,31 @@ export function $resolveReviewProposals(
   proposalIds: readonly string[],
   action: "accept" | "reject" | "remove",
 ): ReviewIntentOutcome {
+  if ($getEditor().isComposing())
+    return refusal(
+      "unsupported-input",
+      "Resolution is refused during composition.",
+    );
   const groups = [];
   for (const id of new Set(proposalIds)) {
+    const boundary = inspectBoundary(id);
+    if (boundary.status === "ready") {
+      groups.push({ id, kind: "boundary" as const });
+      continue;
+    }
     const group = inspectProposalGroup(id);
     if (group.status !== "ready") return group;
     groups.push({ id, kind: group.value.kind });
   }
+  if (groups.some((group) => group.kind === "boundary")) {
+    const invalid = validateStructuralState();
+    if (invalid) return invalid;
+  }
   for (const { id, kind } of groups) {
-    if (kind === "formatting") {
+    if (kind === "boundary") {
+      if (action === "accept") $acceptReviewStructure(id);
+      else $rejectReviewStructure(id);
+    } else if (kind === "formatting") {
       if (action === "accept") $acceptReviewFormatting(id);
       else $rejectReviewFormatting(id);
     } else if (kind === "replacement")

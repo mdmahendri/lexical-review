@@ -14,7 +14,7 @@
 - Review metadata survives Lexical JSON serialization and deserialization.
 - Custom theme classes for inserted (`<ins>`) and deleted (`<del>`) text.
 
-The native v3 session authors pending insertion proposals with identity on creation, correction in place, and explicit accept, reject, and removal operations. See the [session API](packages/lexical-review/README.md#pending-insertion-proposals). The editor-wide features below describe the legacy integration.
+The native v3 session authors pending text, formatting, and paragraph-boundary proposals with identity on creation and explicit accept, reject, and removal operations. See the [session API](packages/lexical-review/README.md#pending-insertion-proposals). The editor-wide features below describe the legacy integration.
 
 ## Installation
 

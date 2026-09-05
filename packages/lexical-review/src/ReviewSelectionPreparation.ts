@@ -1,3 +1,4 @@
+import { $isReviewBoundaryNode } from "./ReviewBoundaryNode";
 import {
   $getRoot,
   $getSelection,
@@ -165,6 +166,36 @@ export function validateParagraphStructure(
   paragraph: ParagraphNode,
 ): ReviewIntentRefusal | null {
   for (const child of paragraph.getChildren()) {
+    if ($isReviewBoundaryNode(child)) {
+      const boundaries = paragraph.getChildren().filter($isReviewBoundaryNode);
+      const left = paragraph.getPreviousSibling();
+      const next = paragraph.getNextSibling();
+      if (
+        boundaries.length !== 1 ||
+        (child.getKind() === "split" &&
+          (child.getIndexWithinParent() !== 0 ||
+            !isRootParagraph(left) ||
+            left
+              .getChildren()
+              .some(
+                (node) =>
+                  $isReviewBoundaryNode(node) && node.getKind() === "merge",
+              ))) ||
+        (child.getKind() === "merge" &&
+          isRootParagraph(next) &&
+          next
+            .getChildren()
+            .some(
+              (node) =>
+                $isReviewBoundaryNode(node) && node.getKind() === "split",
+            ))
+      )
+        return refusal(
+          "invalid-structural-target",
+          "Invalid or conflicting pending paragraph boundary attachment.",
+        );
+      continue;
+    }
     if ($isTextNode(child)) {
       if (hasUnsupportedTextFormatting(child)) {
         return refusal(
@@ -261,7 +292,10 @@ export function nextCharacterOffset(text: string, offset: number): number {
   return next;
 }
 
-function classifyPoint(point: PointType): Preparation<SelectionPoint> {
+function classifyPoint(
+  point: PointType,
+  structural = false,
+): Preparation<SelectionPoint> {
   const node = point.getNode();
   if (point.type === "text") {
     if (!$isTextNode(node)) {
@@ -406,7 +440,12 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
     }
     const left = children[point.offset - 1];
     const right = children[point.offset];
-    if (isReviewElementNode(left) || isReviewElementNode(right)) {
+    if (
+      !structural &&
+      !$isReviewBoundaryNode(left) &&
+      !$isReviewBoundaryNode(right) &&
+      (isReviewElementNode(left) || isReviewElementNode(right))
+    ) {
       return refusal(
         "ambiguous-boundary",
         "A paragraph boundary next to proposal content does not identify one editing side.",
@@ -416,7 +455,10 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       status: "ready",
       value: {
         association: "accepted",
-        childIndex: point.offset,
+        childIndex:
+          $isReviewBoundaryNode(right) && right.getKind() === "split"
+            ? point.offset + 1
+            : point.offset,
         node: null,
         offset: children
           .slice(0, point.offset)
@@ -431,7 +473,9 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
   );
 }
 
-export function inspectSelection(): Preparation<SelectionInspection> {
+export function inspectSelection(
+  structural = false,
+): Preparation<SelectionInspection> {
   const selection = $getSelection();
   if (!$isRangeSelection(selection)) {
     return refusal(
@@ -443,11 +487,11 @@ export function inspectSelection(): Preparation<SelectionInspection> {
   if (formatting !== null) {
     return formatting;
   }
-  const anchor = classifyPoint(selection.anchor);
+  const anchor = classifyPoint(selection.anchor, structural);
   if (anchor.status !== "ready") {
     return anchor;
   }
-  const focus = classifyPoint(selection.focus);
+  const focus = classifyPoint(selection.focus, structural);
   if (focus.status !== "ready") {
     return focus;
   }
@@ -481,12 +525,20 @@ export function inspectProposalGroup(proposalId: string): Preparation<{
       "Expected a valid proposal identity.",
     );
   const wrappers: ReviewElementNode[] = [];
+  let boundaryIdentity = false;
   const visit = (node: LexicalNode): void => {
+    if ($isReviewBoundaryNode(node) && node.getProposalId() === proposalId)
+      boundaryIdentity = true;
     if (isReviewElementNode(node) && node.getProposalId() === proposalId)
       wrappers.push(node);
     if ($isElementNode(node)) node.getChildren().forEach(visit);
   };
   visit($getRoot());
+  if (boundaryIdentity)
+    return refusal(
+      "unsafe-proposal-intersection",
+      "A text proposal identity cannot also identify a structural boundary.",
+    );
   const first = wrappers[0];
   const paragraph = first?.getParent();
   if (!first || !paragraph || !isRootParagraph(paragraph))

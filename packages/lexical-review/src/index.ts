@@ -80,3 +80,20 @@ export {
   type ReviewFormattingProposal,
 } from "./ReviewFormatting";
 export type { ReviewFormatRun } from "./ReviewFormattingState";
+
+export {
+  ReviewBoundaryNode,
+  $createReviewBoundaryNode,
+  $isReviewBoundaryNode,
+  type ReviewBoundaryKind,
+  type SerializedReviewBoundaryNode,
+} from "./ReviewBoundaryNode";
+export {
+  $splitReviewParagraph,
+  $mergeReviewParagraph,
+  $inspectReviewStructure,
+  $acceptReviewStructure,
+  $rejectReviewStructure,
+  $removeReviewStructure,
+  type ReviewStructuralProposal,
+} from "./ReviewStructure";

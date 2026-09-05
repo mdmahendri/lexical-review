@@ -1,3 +1,4 @@
+import { $isReviewBoundaryNode } from "./ReviewBoundaryNode";
 import { $getRoot, $isElementNode } from "lexical";
 import { createProposalId, isValidProposalId } from "./ProposalIdentity";
 import { isReviewElementNode } from "./ReviewSelectionPreparation";
@@ -17,7 +18,7 @@ function getUniqueProposalId(
       continue;
     }
     for (const child of paragraph.getChildren()) {
-      if (isReviewElementNode(child)) {
+      if (isReviewElementNode(child) || $isReviewBoundaryNode(child)) {
         existing.add(child.getProposalId());
       }
     }

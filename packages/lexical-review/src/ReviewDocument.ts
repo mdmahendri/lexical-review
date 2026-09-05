@@ -1,7 +1,7 @@
 import type { EditorState, SerializedEditorState } from "lexical";
 import { isValidProposalId } from "./ProposalIdentity";
 
-import { isValidFormatRuns } from "./ReviewFormattingState";
+import { isSupportedFormat, isValidFormatRuns } from "./ReviewFormattingState";
 
 const REVIEW_STATE_KEY = "lexical-review";
 const SUPPORTED_TEXT_FORMAT_MASK = 0b1111;
@@ -33,7 +33,7 @@ export type ValidationResult<T> =
     }>;
 
 type JsonRecord = Record<string, unknown>;
-type ProposalKind = "deletion" | "insertion" | "formatting";
+type ProposalKind = "deletion" | "insertion" | "formatting" | "boundary";
 type ProposalOccurrence = Readonly<{
   kind: ProposalKind;
   paragraph: string;
@@ -144,6 +144,7 @@ function validateTextNode(
 }
 
 function proposalKind(value: JsonRecord): ProposalKind | null {
+  if (value.type === "review-boundary") return "boundary";
   if (value.type === "review-formatting") return "formatting";
   if (value.type === "review-insertion") {
     return "insertion";
@@ -167,6 +168,29 @@ function validateReviewNode(
       path,
       "Expected an insertion, deletion, or formatting review node.",
     );
+  }
+  if (kind === "boundary") {
+    if (
+      !hasExactlyKeys(value, [
+        "type",
+        "version",
+        "proposalId",
+        "kind",
+        "leftFormat",
+        "rightFormat",
+        "extensions",
+      ]) ||
+      value.version !== 1 ||
+      (value.kind !== "split" && value.kind !== "merge") ||
+      !isSupportedFormat(value.leftFormat) ||
+      !isSupportedFormat(value.rightFormat) ||
+      !isValidProposalId(value.proposalId)
+    )
+      return invalid(path, "Invalid serialized structural boundary.");
+    if (proposals.has(value.proposalId))
+      return invalid(path, "A structural identity must occur exactly once.");
+    proposals.set(value.proposalId, { kind, paragraph, index });
+    return validateEmptyExtensions(value.extensions, `${path}.extensions`);
   }
   if (
     !hasExactlyKeys(value, [
@@ -208,7 +232,8 @@ function validateReviewNode(
   const prior = proposals.get(value.proposalId);
   if (
     prior &&
-    (prior.kind === "formatting" ||
+    (prior.kind === "boundary" ||
+      prior.kind === "formatting" ||
       kind === "formatting" ||
       prior.paragraph !== paragraph ||
       prior.index + 1 !== index ||
@@ -309,6 +334,17 @@ function validateParagraphNode(
   if (!Array.isArray(value.children)) {
     return invalid(`${path}.children`, "Expected an array of inline nodes.");
   }
+  const boundaries = value.children.filter(
+    (child) => isRecord(child) && child.type === "review-boundary",
+  );
+  if (
+    boundaries.length > 1 ||
+    (boundaries[0]?.kind === "split" && value.children[0] !== boundaries[0])
+  )
+    return invalid(
+      path,
+      "A paragraph permits one boundary; a split must be its first child.",
+    );
   for (let index = 0; index < value.children.length; index += 1) {
     const child = value.children[index];
     const childPath = `${path}.children[${index}]`;
@@ -394,6 +430,24 @@ export function validateReviewDocument(
   );
   if (extensions.status !== "valid") {
     return extensions;
+  }
+
+  const boundaryKind = (paragraph: unknown): unknown =>
+    isRecord(paragraph) && Array.isArray(paragraph.children)
+      ? paragraph.children.find(
+          (child) => isRecord(child) && child.type === "review-boundary",
+        )?.kind
+      : undefined;
+  for (let index = 0; index < root.children.length; index++) {
+    const kind = boundaryKind(root.children[index]);
+    if (
+      kind === "split" &&
+      (index === 0 || boundaryKind(root.children[index - 1]) === "merge")
+    )
+      return invalid(
+        `$.root.children[${index}]`,
+        "A split requires an attached left paragraph without a pending merge.",
+      );
   }
 
   const proposals = new Map<string, ProposalOccurrence>();

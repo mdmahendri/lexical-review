@@ -1,3 +1,7 @@
+import {
+  $splitReviewParagraph,
+  $moveReviewBoundaryCaret,
+} from "./ReviewStructure";
 import { registerReviewInputFormatting } from "./ReviewInputFormatting";
 import {
   $setReviewFormatting,
@@ -19,6 +23,8 @@ import {
   FORMAT_TEXT_COMMAND,
   INSERT_LINE_BREAK_COMMAND,
   INSERT_PARAGRAPH_COMMAND,
+  KEY_ARROW_LEFT_COMMAND,
+  KEY_ARROW_RIGHT_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_DELETE_COMMAND,
   KEY_ENTER_COMMAND,
@@ -95,7 +101,19 @@ export function registerReviewSession(
     reportOutcome(options, outcome, "deletion");
     return true;
   };
+  const handleSplit = (event?: Event | null): boolean => {
+    event?.preventDefault();
+    if (event && handledEvents.has(event)) return true;
+    if (event) handledEvents.add(event);
+    reportOutcome(options, $splitReviewParagraph(options), null);
+    return true;
+  };
   const handleBeforeInput = (event: InputEvent): boolean => {
+    if (event.inputType === "insertParagraph") return handleSplit(event);
+    if (event.inputType === "insertLineBreak") {
+      event.preventDefault();
+      return refuseStructure();
+    }
     if (
       (event.inputType === "insertText" ||
         event.inputType === "insertReplacementText") &&
@@ -179,7 +197,7 @@ export function registerReviewSession(
       options,
       unsupportedOutcome(
         "unsupported-structure",
-        "Paragraph structure authoring is not supported by the node-backed review session yet.",
+        "Soft line breaks are unsupported in review mode.",
       ),
       null,
     );
@@ -246,6 +264,25 @@ export function registerReviewSession(
 
   return mergeRegister(
     registerReviewInputFormatting(editor),
+    ...([KEY_ARROW_LEFT_COMMAND, KEY_ARROW_RIGHT_COMMAND] as const).map(
+      (command, index) =>
+        editor.registerCommand(
+          command,
+          (event) => {
+            if (
+              event.shiftKey ||
+              event.altKey ||
+              event.ctrlKey ||
+              event.metaKey
+            )
+              return false;
+            if (!$moveReviewBoundaryCaret(index === 0)) return false;
+            event.preventDefault();
+            return true;
+          },
+          COMMAND_PRIORITY_HIGH,
+        ),
+    ),
     ...normalizationRegistrations,
     editor.registerCommand(
       BEFORE_INPUT_COMMAND,
@@ -347,7 +384,7 @@ export function registerReviewSession(
     ),
     editor.registerCommand(
       INSERT_PARAGRAPH_COMMAND,
-      refuseStructure,
+      () => handleSplit(),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
@@ -359,7 +396,7 @@ export function registerReviewSession(
       KEY_ENTER_COMMAND,
       (event) => {
         event?.preventDefault();
-        return refuseStructure();
+        return event?.shiftKey ? refuseStructure() : handleSplit(event);
       },
       COMMAND_PRIORITY_HIGH,
     ),

@@ -263,3 +263,50 @@ rejection, removal, and `$resolveReviewProposals` read the current node-backed
 state. Saving preserves pending accepted/current formatting, without storing
 resolved proposal history. Insertion and deletion DOM wrappers remain outermost;
 Lexical text formatting and theme classes stay inside them.
+
+### Pending paragraph boundaries
+
+Register `ReviewBoundaryNode` alongside the text proposal nodes to author and
+reopen pending splits and merges. A boundary owns a structural change, not a
+snapshot of its surrounding text. A split marker is the first child of its
+right paragraph; a merge marker remains inline in the proposed joined
+paragraph. Both serialize their stable proposal identity and empty-side
+formatting defaults directly in the current tree.
+
+Inside `editor.update()`, use `$splitReviewParagraph(options)` at a collapsed
+caret or `$mergeReviewParagraph(backward, options)` at the beginning (`true`)
+or end (`false`) of a paragraph. The client routes Enter and character
+Backspace/Delete at paragraph boundaries through these operations. Shift+Enter,
+Enter over a range, splits inside text proposals, and ambiguous targets are
+no-mutation refusals. An unambiguous endpoint of a whole text proposal is a
+supported split point; neither side of a replacement may be separated.
+
+Use `$inspectReviewStructure(proposalId)` to read the current kind and identity.
+`$acceptReviewStructure`, `$rejectReviewStructure`, and `$removeReviewStructure`
+also run inside an editor update. `$resolveReviewProposals` includes structural
+identities in its batch preflight. Structural changes and resolution are refused
+during composition. Unexpected implementation errors use Lexical's transaction
+rollback, as with text authoring.
+
+A pending merge displays `¶` inside `<del data-review-boundary="merge">`.
+Typing before the marker belongs to the original left paragraph; typing after
+it belongs to the original right paragraph. Unmodified left/right arrow keys
+cross the marker explicitly, including between empty sides. Input formatting
+comes from the corresponding adjacent content, falling back to that side's
+saved paragraph formatting when empty. A local formatting toggle overrides it.
+Enter at either side of this marker cancels the merge. Backspace at a pending
+split's right-paragraph start (or Delete at its left-paragraph end) cancels the
+split. Cancellation preserves subsequent text proposals and creates no opposite
+proposal or terminal history.
+
+Repeated splits retain separate identities: splitting `abcdef` after `b` and
+then `d` gives `ab | cd | ef`. Rejecting the first split leaves `abcd | ef`;
+rejecting the second leaves `ab | cdef`. Empty paragraphs also represent real
+boundary changes. Chained pending merges and split/merge combinations are
+initially refused, except exact cancellation. Text ranges cannot cross a
+pending merge marker, since that would lose their original-side attachment.
+
+For a browser reproduction, run the E2E fixture server and open `/?structure`.
+Split `Hello world` before `world`, type in the new paragraph, and reject the
+split through the fixture's `settle` helper: the text proposal survives in the
+rejoined paragraph. `/?structure&empty` exercises empty sides and formatting.

@@ -1,3 +1,4 @@
+import { ReviewBoundaryNode } from "./ReviewBoundaryNode";
 import type { EditorState, LexicalEditor } from "lexical";
 import {
   exportReviewDocument,
@@ -58,10 +59,12 @@ function sameSerializedValue(left: unknown, right: unknown): boolean {
 }
 
 function pendingNodeKinds(document: ReviewDocumentV3): Readonly<{
+  boundary: boolean;
   formatting: boolean;
   deletion: boolean;
   insertion: boolean;
 }> {
+  let boundary = false;
   let formatting = false;
   let deletion = false;
   let insertion = false;
@@ -74,13 +77,14 @@ function pendingNodeKinds(document: ReviewDocumentV3): Readonly<{
       return;
     }
     const record = value as Record<string, unknown>;
+    boundary ||= record.type === "review-boundary";
     formatting ||= record.type === "review-formatting";
     insertion ||= record.type === "review-insertion";
     deletion ||= record.type === "review-deletion";
     Object.values(record).forEach(visit);
   };
   visit(document.root);
-  return { deletion, insertion, formatting };
+  return { deletion, insertion, formatting, boundary };
 }
 
 class LexicalReviewSession implements ReviewSession {
@@ -109,6 +113,7 @@ export function importReviewDocument(
   }
   const requiredNodes = pendingNodeKinds(validated.value);
   if (
+    (requiredNodes.boundary && !editor.hasNode(ReviewBoundaryNode)) ||
     (requiredNodes.formatting && !editor.hasNode(ReviewFormattingNode)) ||
     (requiredNodes.insertion && !editor.hasNode(ReviewInsertionNode)) ||
     (requiredNodes.deletion && !editor.hasNode(ReviewDeletionNode))

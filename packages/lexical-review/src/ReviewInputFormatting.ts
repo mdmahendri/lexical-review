@@ -1,3 +1,4 @@
+import { $isReviewBoundaryNode } from "./ReviewBoundaryNode";
 import {
   $getEditor,
   $getSelection,
@@ -35,6 +36,24 @@ export function $getReviewInputFormat(selection: RangeSelection): number {
   if ($isElementNode(node)) {
     const next = node.getChildAtIndex(point.offset);
     const previous = node.getChildAtIndex(point.offset - 1);
+    if ($isReviewBoundaryNode(previous)) {
+      const first = $isTextNode(next)
+        ? next
+        : $isElementNode(next)
+          ? next.getAllTextNodes()[0]
+          : null;
+      return first?.getFormat() ?? previous.getSideFormat("right");
+    }
+    if ($isReviewBoundaryNode(next) && next.getKind() === "split")
+      return next.getSideFormat("right");
+    if ($isReviewBoundaryNode(next)) {
+      const last = $isTextNode(previous)
+        ? previous
+        : $isElementNode(previous)
+          ? previous.getAllTextNodes().at(-1)
+          : null;
+      return last?.getFormat() ?? next.getSideFormat("left");
+    }
     if ($isTextNode(previous)) return previous.getFormat();
     if ($isTextNode(next)) return next.getFormat();
     return node.getTextFormat();
