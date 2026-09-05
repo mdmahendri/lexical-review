@@ -6,7 +6,15 @@ import eslintConfigPrettier from "eslint-config-prettier";
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
-  { ignores: ["**/dist/**", "**/.nx/**", "**/coverage/**"] },
+  {
+    ignores: [
+      "**/dist/**",
+      "**/.nx/**",
+      "**/coverage/**",
+      "playwright-report/**",
+      "test-results/**",
+    ],
+  },
   {
     files: [
       "packages/demo/src/**/*.{ts,tsx}",

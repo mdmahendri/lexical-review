@@ -32,6 +32,11 @@ export type ValidationResult<T> =
 
 type JsonRecord = Record<string, unknown>;
 type ProposalKind = "deletion" | "insertion";
+type ProposalOccurrence = Readonly<{
+  kind: ProposalKind;
+  paragraph: string;
+  index: number;
+}>;
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -149,7 +154,9 @@ function proposalKind(value: JsonRecord): ProposalKind | null {
 function validateReviewNode(
   value: JsonRecord,
   path: string,
-  proposals: Map<string, ProposalKind>,
+  proposals: Map<string, ProposalOccurrence>,
+  paragraph: string,
+  index: number,
 ): ValidationResult<void> {
   const kind = proposalKind(value);
   if (kind === null) {
@@ -191,14 +198,19 @@ function validateReviewNode(
       "Proposal identity must be nonempty text without surrounding whitespace or control characters.",
     );
   }
-  const priorKind = proposals.get(value.proposalId);
-  if (priorKind !== undefined && priorKind !== kind) {
+  const prior = proposals.get(value.proposalId);
+  if (
+    prior &&
+    (prior.paragraph !== paragraph ||
+      prior.index + 1 !== index ||
+      (prior.kind === "insertion" && kind === "deletion"))
+  ) {
     return invalid(
       `${path}.proposalId`,
-      "Every node sharing a proposal identity must have the same proposal kind.",
+      "A proposal must have contiguous ordered sides in one paragraph.",
     );
   }
-  proposals.set(value.proposalId, kind);
+  proposals.set(value.proposalId, { kind, paragraph, index });
 
   const extensions = validateEmptyExtensions(
     value.extensions,
@@ -228,7 +240,7 @@ function validateReviewNode(
 function validateParagraphNode(
   value: unknown,
   path: string,
-  proposals: Map<string, ProposalKind>,
+  proposals: Map<string, ProposalOccurrence>,
 ): ValidationResult<void> {
   if (!isRecord(value)) {
     return invalid(path, "Expected a serialized paragraph node.");
@@ -282,7 +294,7 @@ function validateParagraphNode(
     const childPath = `${path}.children[${index}]`;
     const result =
       isRecord(child) && proposalKind(child) !== null
-        ? validateReviewNode(child, childPath, proposals)
+        ? validateReviewNode(child, childPath, proposals, path, index)
         : validateTextNode(child, childPath);
     if (result.status !== "valid") {
       return result;
@@ -364,7 +376,7 @@ export function validateReviewDocument(
     return extensions;
   }
 
-  const proposals = new Map<string, ProposalKind>();
+  const proposals = new Map<string, ProposalOccurrence>();
   for (let index = 0; index < root.children.length; index += 1) {
     const result = validateParagraphNode(
       root.children[index],

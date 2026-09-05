@@ -51,3 +51,13 @@ export {
   type ReviewIntentRefusalCode,
   type ReviewProposalIdFactory,
 } from "./ReviewOperations";
+
+export {
+  $replaceReviewText,
+  $inspectReviewReplacement,
+  $acceptReviewReplacement,
+  $rejectReviewReplacement,
+  $removeReviewReplacement,
+  $resolveReviewProposals,
+  type ReviewReplacementProposal,
+} from "./ReviewOperations";

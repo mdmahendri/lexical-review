@@ -27,6 +27,7 @@ import type { ReviewSession } from "./ReviewSession";
 import {
   $deleteReviewText,
   $insertReviewText,
+  $replaceReviewText,
   type ReviewAuthoringOptions,
   type ReviewIntentOutcome,
   type ReviewIntentRefusalCode,
@@ -213,8 +214,7 @@ export function registerReviewSession(
           typeof eventOrText !== "string" &&
           (eventOrText.dataTransfer != null ||
             eventOrText.inputType === "insertFromDrop" ||
-            eventOrText.inputType === "insertFromYank" ||
-            eventOrText.inputType === "insertReplacementText")
+            eventOrText.inputType === "insertFromYank")
         ) {
           return refuseTransfer(eventOrText);
         }
@@ -223,7 +223,11 @@ export function registerReviewSession(
         if (text == null) {
           return false;
         }
-        const outcome = $insertReviewText(text, options);
+        const outcome =
+          typeof eventOrText !== "string" &&
+          eventOrText.inputType === "insertReplacementText"
+            ? $replaceReviewText(text, options)
+            : $insertReviewText(text, options);
         reportOutcome(options, outcome, "insertion");
         return true;
       },

@@ -19,7 +19,6 @@ import {
   $isReviewInsertionNode,
   ReviewDeletionNode,
   ReviewInsertionNode,
-  type ReviewElementNode,
 } from "./ReviewNodes";
 import {
   changed,
@@ -35,11 +34,11 @@ export type {
   ReviewIntentOutcome,
 } from "./ReviewIntent";
 import {
+  inspectProposalGroup,
   isRootParagraph,
   isReviewElementNode,
   getChildIndex,
   getTextChildren,
-  validateParagraphStructure,
   isTextBoundary,
   previousCharacterOffset,
   nextCharacterOffset,
@@ -437,6 +436,8 @@ function deleteProposalAtCaret(
   const start = Math.min(offset, boundary);
   const end = Math.max(offset, boundary);
   const span: ProposalSpan = { end, map: map.value, start };
+  if (end - start === map.value.total && isReplacement(map.value.proposalId))
+    return $removeReviewReplacement(map.value.proposalId);
   const fallbackIndex = point.childIndex;
   spliceProposalRange(span);
   placeProposalCaret(map.value, start, fallbackIndex);
@@ -449,6 +450,16 @@ function deleteProposalSelection(span: ProposalSpan): ReviewIntentOutcome {
   }
   if ($isReviewDeletionNode(span.map.wrappers[0]))
     return $removeReviewDeletion(span.map.proposalId);
+  const group = inspectProposalGroup(span.map.proposalId);
+  if (group.status !== "ready") return group;
+  const insertionTotal = group.value.wrappers
+    .filter($isReviewInsertionNode)
+    .reduce((sum, node) => sum + node.getTextContentSize(), 0);
+  if (
+    group.value.kind === "replacement" &&
+    span.end - span.start === insertionTotal
+  )
+    return $removeReviewReplacement(span.map.proposalId);
   const fallbackIndex = getChildIndex(
     span.map.paragraph,
     span.map.wrappers[0]!,
@@ -499,10 +510,29 @@ function performInsertion(
       }
       return replaceProposalRange(proposalSpan.value, text);
     }
-    return refusal(
-      "unsupported-target",
-      "Text replacement ranges are not part of the node-backed insertion contract.",
+    const span = buildAcceptedSpan(inspection.value);
+    if (span.status !== "ready") return span;
+    if (span.value.start === span.value.end) return unchanged();
+    const missing =
+      missingProposalNode(editor, "insertion") ??
+      missingProposalNode(editor, "deletion");
+    if (missing) return missing;
+    const identity = prepareProposalId(options);
+    if (identity.status !== "ready") return identity;
+    const selected = isolateAcceptedTextRange(span.value);
+    if (!selected?.length)
+      throw new Error("Validated replacement target could not be isolated.");
+    const oldSide = $createReviewDeletionNode(identity.value);
+    const newSide = $createReviewInsertionNode(identity.value);
+    const content = $createTextNode(text).setFormat(
+      inspection.value.selection.format,
     );
+    selected[0]!.insertBefore(oldSide);
+    oldSide.append(...selected);
+    oldSide.insertAfter(newSide);
+    newSide.append(content);
+    content.selectEnd();
+    return changed();
   }
   const point = inspection.value.anchor;
   if (point.association === "proposal") {
@@ -538,6 +568,8 @@ function performInsertion(
         ? point.node.getNextSibling()
         : null;
     if ($isReviewInsertionNode(adjacent)) {
+      const group = inspectProposalGroup(adjacent.getProposalId());
+      if (group.status !== "ready") return group;
       const boundary = atStart
         ? adjacent.getLastChild()
         : adjacent.getFirstChild();
@@ -606,6 +638,22 @@ export function $deleteReviewText(
       options.granularity ?? "character",
     );
   }
+  if (
+    point.node !== null &&
+    (backward
+      ? point.offset === 0
+      : point.offset === point.node.getTextContentSize())
+  ) {
+    const adjacent = backward
+      ? point.node.getPreviousSibling()
+      : point.node.getNextSibling();
+    if ($isReviewDeletionNode(adjacent)) {
+      const group = inspectProposalGroup(adjacent.getProposalId());
+      if (group.status !== "ready") return group;
+      if (group.value.kind === "replacement")
+        return $removeReviewReplacement(adjacent.getProposalId());
+    }
+  }
   const target = acceptedDeletionTarget(
     point,
     backward,
@@ -637,43 +685,18 @@ function findProposal(
   proposalId: string,
   kind: "insertion" | "deletion",
 ): Preparation<ProposalMap> {
-  const matchesKind =
-    kind === "insertion" ? $isReviewInsertionNode : $isReviewDeletionNode;
-  if (!isValidProposalId(proposalId)) {
-    return refusal(
-      "invalid-proposal-id",
-      "Expected a valid proposal identity.",
-    );
-  }
-  const matches: ReviewElementNode[] = [];
-  const visit = (node: LexicalNode): void => {
-    if (isReviewElementNode(node) && node.getProposalId() === proposalId) {
-      matches.push(node);
-    }
-    if ($isElementNode(node)) node.getChildren().forEach(visit);
-  };
-  visit($getRoot());
-  const first = matches[0];
-  const last = matches.at(-1);
-  if (!matchesKind(first) || !matchesKind(last)) {
+  const group = inspectProposalGroup(proposalId);
+  if (group.status !== "ready") return group;
+  if (group.value.kind !== kind)
     return refusal(
       "unsupported-target",
-      `The pending ${kind} proposal was not found.`,
+      `The identity does not identify an independent ${kind} proposal.`,
     );
-  }
+  const first = group.value.wrappers[0]!;
   const paragraph = first.getParent();
-  if (
-    !isRootParagraph(paragraph) ||
-    matches.some((node) => node.getParent() !== paragraph || !matchesKind(node))
-  ) {
-    return refusal(
-      "unsafe-proposal-intersection",
-      `The identity does not identify one contiguous ${kind} proposal.`,
-    );
-  }
-  const structure = validateParagraphStructure(paragraph);
-  if (structure !== null) return structure;
-  return buildProposalMap(paragraph, first, last);
+  if (!isRootParagraph(paragraph))
+    return refusal("invalid-structural-target", "Expected a paragraph.");
+  return buildProposalMap(paragraph, first, group.value.wrappers.at(-1)!);
 }
 
 /** Inspect current node content; this snapshot is not a separate proposal record. */
@@ -698,6 +721,13 @@ function resolveProposal(
   retainText: boolean,
   kind: "insertion" | "deletion",
 ): ReviewIntentOutcome {
+  const group = inspectProposalGroup(proposalId);
+  if (group.status !== "ready") return group;
+  if (group.value.kind === "replacement")
+    return resolveReplacement(
+      proposalId,
+      kind === "insertion" ? retainText : !retainText,
+    );
   const prepared = findProposal(proposalId, kind);
   if (prepared.status !== "ready") return prepared;
   const map = prepared.value;
@@ -826,7 +856,12 @@ function deleteAcceptedSpan(
     : span.start === first.start
       ? first.node.getPreviousSibling()
       : null;
-  const continuation = $isReviewDeletionNode(adjacent) ? adjacent : null;
+  let continuation = $isReviewDeletionNode(adjacent) ? adjacent : null;
+  if (continuation) {
+    const group = inspectProposalGroup(continuation.getProposalId());
+    if (group.status !== "ready") return group;
+    if (group.value.kind === "replacement") continuation = null;
+  }
   const identity =
     continuation === null
       ? prepareProposalId(options)
@@ -850,4 +885,127 @@ function deleteAcceptedSpan(
     span.map.paragraph.select(index, index);
   }
   return changed();
+}
+
+function isReplacement(proposalId: string): boolean {
+  const group = inspectProposalGroup(proposalId);
+  return group.status === "ready" && group.value.kind === "replacement";
+}
+
+export type ReviewReplacementProposal = Readonly<{
+  proposalId: string;
+  oldText: string;
+  newText: string;
+}>;
+
+export function $inspectReviewReplacement(
+  proposalId: string,
+): ReviewIntentOutcome<ReviewReplacementProposal> {
+  const group = inspectProposalGroup(proposalId);
+  if (group.status !== "ready") return group;
+  if (group.value.kind !== "replacement")
+    return refusal(
+      "unsupported-target",
+      "The identity does not identify a replacement.",
+    );
+  return {
+    status: "unchanged",
+    value: {
+      proposalId,
+      oldText: group.value.wrappers
+        .filter($isReviewDeletionNode)
+        .map((node) => node.getTextContent())
+        .join(""),
+      newText: group.value.wrappers
+        .filter($isReviewInsertionNode)
+        .map((node) => node.getTextContent())
+        .join(""),
+    },
+  };
+}
+
+function resolveReplacement(
+  proposalId: string,
+  accept: boolean,
+): ReviewIntentOutcome {
+  const group = inspectProposalGroup(proposalId);
+  if (group.status !== "ready") return group;
+  if (group.value.kind !== "replacement")
+    return refusal(
+      "unsupported-target",
+      "The identity does not identify a replacement.",
+    );
+  const selection = $getSelection();
+  const keys = new Set(
+    group.value.wrappers.flatMap((node) => [
+      node.getKey(),
+      ...node.getChildrenKeys(),
+    ]),
+  );
+  const touches =
+    $isRangeSelection(selection) &&
+    (keys.has(selection.anchor.key) || keys.has(selection.focus.key));
+  let last: LexicalNode | undefined;
+  for (const wrapper of group.value.wrappers) {
+    if ($isReviewInsertionNode(wrapper) === accept) {
+      for (const child of wrapper.getChildren()) {
+        wrapper.insertBefore(child);
+        last = child;
+      }
+    }
+    wrapper.remove();
+  }
+  if (touches && $isTextNode(last)) last.selectEnd();
+  return changed();
+}
+
+export function $acceptReviewReplacement(
+  proposalId: string,
+): ReviewIntentOutcome {
+  return resolveReplacement(proposalId, true);
+}
+export function $rejectReviewReplacement(
+  proposalId: string,
+): ReviewIntentOutcome {
+  return resolveReplacement(proposalId, false);
+}
+export function $removeReviewReplacement(
+  proposalId: string,
+): ReviewIntentOutcome {
+  return resolveReplacement(proposalId, false);
+}
+
+/** Resolve each identity once, validating the entire batch before mutation. */
+export function $resolveReviewProposals(
+  proposalIds: readonly string[],
+  action: "accept" | "reject" | "remove",
+): ReviewIntentOutcome {
+  const groups = [];
+  for (const id of new Set(proposalIds)) {
+    const group = inspectProposalGroup(id);
+    if (group.status !== "ready") return group;
+    groups.push({ id, kind: group.value.kind });
+  }
+  for (const { id, kind } of groups) {
+    if (kind === "replacement") resolveReplacement(id, action === "accept");
+    else
+      resolveProposal(
+        id,
+        kind === "insertion" ? action === "accept" : action !== "accept",
+        kind,
+      );
+  }
+  return groups.length ? changed() : unchanged();
+}
+
+/** Replace a supported selection; an empty new side expresses deletion. */
+export function $replaceReviewText(
+  text: string,
+  options: ReviewAuthoringOptions = {},
+): ReviewIntentOutcome {
+  if (text.length !== 0) return $insertReviewText(text, options);
+  const selection = $getSelection();
+  if ($isRangeSelection(selection) && selection.isCollapsed())
+    return unchanged();
+  return $deleteReviewText(false, options);
 }

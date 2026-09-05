@@ -968,7 +968,7 @@ describe("node-backed review session targeting", () => {
     unregister();
   });
 
-  it("refuses controlled replacement insertion with data", async () => {
+  it("authors controlled replacement insertion with data", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
@@ -977,9 +977,8 @@ describe("node-backed review session targeting", () => {
       outcomes,
     );
     await update(editor, () => {
-      firstText(firstParagraph()).select(1, 1);
+      firstText(firstParagraph()).select(0, 2);
     });
-    const beforeDocument = editor.getEditorState().toJSON();
     const event = new InputEvent("beforeinput", {
       data: "X",
       inputType: "insertReplacementText",
@@ -990,10 +989,10 @@ describe("node-backed review session targeting", () => {
     ).toBe(true);
     await Promise.resolve();
 
-    expect(outcomes).toMatchObject([
-      { code: "unsupported-transfer", status: "refused" },
-    ]);
-    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(outcomes).toMatchObject([{ status: "changed" }]);
+    expect(
+      editor.getEditorState().read(() => $getRoot().getTextContent()),
+    ).toBe("ABX");
     unregister();
   });
 

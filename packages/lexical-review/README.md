@@ -127,7 +127,8 @@ step, or saved coordinate record is involved.
 A nonempty deletion intention inside a pending deletion restores that whole
 proposal's accepted text and removes the proposal. Inside a pending insertion,
 it removes only the targeted insertion text. A caret facing pending content
-from the accepted side, or facing outward from a proposal, refuses without
+from the accepted side of an independent insertion/deletion, or facing outward
+from a proposal, refuses without
 changing the document or selection. Cross-paragraph and ambiguous ranges also
 refuse without mutation.
 
@@ -136,6 +137,42 @@ read/update. `$acceptReviewDeletion(proposalId)` removes the deleted text;
 `$rejectReviewDeletion(proposalId)` and `$removeReviewDeletion(proposalId)`
 restore it. These update operations retain no terminal record. Saving and
 reopening preserves current pending identities and formatting.
+
+## Pending replacement proposals
+
+Selecting accepted text in one paragraph and calling `$insertReviewText("new")`
+creates a replacement. `$replaceReviewText("new")` also supports this operation;
+an empty string applies deletion semantics, and a collapsed selection with
+nonempty text applies insertion semantics. Native typing and controlled
+`insertReplacementText` input use the same authoring operations.
+
+A replacement has a `review-deletion` side followed by a `review-insertion`
+side with one shared `proposalId`. Each side contains nonempty text. Split
+same-type wrappers can normalize within a side. Every occurrence of an identity
+must form one contiguous group in one paragraph; accepted text, other proposals,
+reversed sides, nested content, and fragments cannot divide the group.
+
+Typing or replacing entirely within the new side retains the identity. Deleting
+the last new text cancels the whole replacement and restores the old text.
+Deleting against the old side also cancels the replacement, including forward
+deletion from an adjacent accepted text boundary. Typing over the old side or
+editing across both sides is refused without changing content or selection.
+
+`$inspectReviewReplacement(proposalId)` returns `oldText` and `newText` from the
+live nodes. `$acceptReviewReplacement(proposalId)` keeps the new content;
+`$rejectReviewReplacement(proposalId)` and `$removeReviewReplacement(proposalId)`
+keep the old content. Existing insertion/deletion resolution operations also
+resolve the whole replacement when passed its shared identity. No API resolves
+one replacement side independently.
+
+For a batch, call `$resolveReviewProposals(ids, "accept" | "reject" | "remove")`
+inside `editor.update()`. It validates every group before mutation and resolves
+each identity once. Saving preserves pending shared identities and never changes
+the authoring session's input document.
+
+To reproduce in the browser fixture, open `/?insertions`, select `AB`, and type
+`new`. The editor displays `<del>AB</del><ins>new</ins>`. Select all of `new` and
+press Backspace: the editor restores `AB` without either review wrapper.
 
 ## Legacy editor-wide review mode
 

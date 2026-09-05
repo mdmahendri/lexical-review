@@ -24,6 +24,8 @@ import {
   type ReviewIntentRefusal,
 } from "./ReviewIntent";
 
+import { isValidProposalId } from "./ProposalIdentity";
+
 const SUPPORTED_TEXT_FORMAT_MASK = 0b1111;
 
 export type AcceptedPoint = Readonly<{
@@ -461,11 +463,69 @@ function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
   );
 }
 
+/** Validate every occurrence of an identity before editing or resolving any side. */
+export function inspectProposalGroup(proposalId: string): Preparation<{
+  kind: "insertion" | "deletion" | "replacement";
+  wrappers: ReviewElementNode[];
+}> {
+  if (!isValidProposalId(proposalId))
+    return refusal(
+      "invalid-proposal-id",
+      "Expected a valid proposal identity.",
+    );
+  const wrappers: ReviewElementNode[] = [];
+  const visit = (node: LexicalNode): void => {
+    if (isReviewElementNode(node) && node.getProposalId() === proposalId)
+      wrappers.push(node);
+    if ($isElementNode(node)) node.getChildren().forEach(visit);
+  };
+  visit($getRoot());
+  const first = wrappers[0];
+  const paragraph = first?.getParent();
+  if (!first || !paragraph || !isRootParagraph(paragraph))
+    return refusal(
+      "unsupported-target",
+      "The pending proposal was not found in a supported paragraph.",
+    );
+  const structure = validateParagraphStructure(paragraph);
+  if (structure) return structure;
+  let insertionSeen = false;
+  let deletionSeen = false;
+  for (const [index, wrapper] of wrappers.entries()) {
+    if (
+      wrapper.getParent()?.getKey() !== paragraph.getKey() ||
+      (index > 0 &&
+        wrappers[index - 1]!.getNextSibling()?.getKey() !== wrapper.getKey()) ||
+      ($isReviewDeletionNode(wrapper) && insertionSeen)
+    )
+      return refusal(
+        "unsafe-proposal-intersection",
+        "A proposal must have contiguous ordered sides in one paragraph.",
+      );
+    insertionSeen ||= $isReviewInsertionNode(wrapper);
+    deletionSeen ||= $isReviewDeletionNode(wrapper);
+  }
+  return {
+    status: "ready",
+    value: {
+      wrappers,
+      kind:
+        insertionSeen && deletionSeen
+          ? "replacement"
+          : insertionSeen
+            ? "insertion"
+            : "deletion",
+    },
+  };
+}
+
 export function buildProposalMap(
   paragraph: ParagraphNode,
   startWrapper: ReviewElementNode,
   endWrapper: ReviewElementNode,
 ): Preparation<ProposalMap> {
+  const group = inspectProposalGroup(startWrapper.getProposalId());
+  if (group.status !== "ready") return group;
   const startIndex = getChildIndex(paragraph, startWrapper);
   const endIndex = getChildIndex(paragraph, endWrapper);
   if (startIndex === null || endIndex === null || startIndex > endIndex) {

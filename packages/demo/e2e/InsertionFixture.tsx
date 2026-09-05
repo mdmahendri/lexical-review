@@ -12,6 +12,7 @@ import {
 import {
   $acceptReviewInsertion,
   $inspectReviewInsertion,
+  $inspectReviewReplacement,
   $insertReviewText,
   $rejectReviewInsertion,
   $removeReviewInsertion,
@@ -112,6 +113,9 @@ export function InsertionFixture() {
           proposal: editor
             .getEditorState()
             .read(() => $inspectReviewInsertion("insertion-1")),
+          replacement: editor
+            .getEditorState()
+            .read(() => $inspectReviewReplacement("insertion-1")),
           lastOutcome,
         };
       },

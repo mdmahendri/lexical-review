@@ -91,7 +91,6 @@ describe("node-backed ReviewDocumentV3", () => {
     const input = reviewDocument([
       paragraph([
         reviewNode("review-insertion", "shared", [text("one")]),
-        text(" accepted "),
         reviewNode("review-insertion", "shared", [text("two")]),
       ]),
     ]);
@@ -108,7 +107,7 @@ describe("node-backed ReviewDocumentV3", () => {
       if (!$isElementNode(paragraphNode)) {
         return;
       }
-      const [first, , second] = paragraphNode.getChildren();
+      const [first, second] = paragraphNode.getChildren();
       expect(first).toBeDefined();
       expect(second).toBeDefined();
       if (first === undefined || second === undefined) {
