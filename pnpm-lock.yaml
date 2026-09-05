@@ -126,6 +126,12 @@ importers:
         specifier: ^1.2.5
         version: 1.2.5
 
+  packages/lexical-review-wer:
+    dependencies:
+      lexical-review:
+        specifier: workspace:2.0.0
+        version: link:../lexical-review
+
 packages:
 
   '@acemir/cssom@0.9.29':

@@ -310,3 +310,86 @@ For a browser reproduction, run the E2E fixture server and open `/?structure`.
 Split `Hello world` before `world`, type in the new paragraph, and reject the
 split through the fixture's `settle` helper: the text proposal survives in the
 rejoined paragraph. `/?structure&empty` exercises empty sides and formatting.
+
+## Atomic document-fragment insertion
+
+Register `ReviewFragmentNode`, `ReviewInsertionNode`, and `ReviewBoundaryNode`
+alongside the other proposal nodes. Within a Lexical update,
+`$insertReviewFragment(paragraphs, options)` inserts normalized content:
+
+```ts
+$insertReviewFragment([
+  { runs: [{ text: "x", format: 1 }] },
+  { runs: [{ text: "y", format: 0 }] },
+]);
+```
+
+At the caret in `A|B`, this produces `Ax` / `yB`. At the end of paragraph `A`
+before a separate paragraph `B`, it produces `Ax` / `y` / `B`. One proposal ID
+owns the inserted text and introduced boundaries; accepted prefixes and suffixes
+remain independent. Each `ReviewFragmentNode` is an inline, paragraph-local
+component. The first has `startsParagraph: false`; each later component owns the
+boundary before its paragraph with `startsParagraph: true`. Empty components are
+meaningful. Import validates contiguous attachment and forbids mixed shared IDs,
+intervening accepted content, and disconnected components.
+
+Input is an ordered array of `{ runs, emptyFormat? }` paragraphs. Runs carry exact
+text and the supported format bitmask (bold 1, italic 2, strikethrough 4,
+underline 8). Embedded CR/LF characters are refused: callers supply boundaries
+as array entries. Empty arrays of runs preserve empty paragraphs. An omitted
+`emptyFormat` inherits the insertion caret's effective input format; an explicit
+value overrides it. Within a nonempty component, text at the caret determines
+inheritance, with an explicit local formatting choice taking precedence. An
+accepted-side empty position falls back to its paragraph's text format when no
+adjacent accepted text supplies a format.
+
+Typing, formatting, replacement, range/word/character deletion, subsequent
+fragment insertion, and Enter within one fragment correct its current payload
+under the same ID. Backspace/Delete at an internal boundary removes that
+boundary locally. Mixed accepted/proposal ranges and independently nested work
+are refused without mutation. Proposal-side typing continues the fragment;
+accepted-side typing or deletion authors separate work. Left/right arrows cross
+both outer associations explicitly, including empty endpoints. After insertion,
+the caret is proposal-side immediately after the new content.
+
+Use `$inspectReviewFragment`, `$acceptReviewFragment`, `$rejectReviewFragment`,
+`$removeReviewFragment`, or `$resolveReviewProposals` for whole-proposal behavior.
+Components cannot resolve independently. Resolution uses current attachment and
+preserves unrelated work; it never restores a creation-time paragraph snapshot.
+A fragment reduced to one inline insertion or one boundary-only split normalizes
+to that kind with the same ID. Several remaining boundaries stay atomic; deleting
+the entire payload removes the semantic no-op. Use the current kind's inspection
+API after normalization, or the kind-independent batch resolution API.
+
+An independent split on accepted text may coexist with a fragment. For example,
+split `ABCD` after `C`, then insert `x` / `y` after `A`: `Ax` / `yBC` / `D`.
+Rejecting the split yields `Ax` / `yBCD` with the fragment intact. Rejecting the
+fragment first yields `ABC` / `D` with the split intact. Paste at unresolved
+structural markers and merge operations crossing fragment ownership are refused.
+
+`createReviewPreview(document, "accepted-state" | "all-accepted")` resolves only
+a detached copy and returns a validated content-only document. An indeterminate
+all-accepted projection throws; the input and live editor remain unchanged.
+
+The client exposes `INSERT_REVIEW_FRAGMENT_COMMAND` for already-normalized
+content and routes ordinary typing, formatting, Enter, deletion, and endpoint
+arrows through these same semantics. Clipboard MIME parsing, rich/plain fallback,
+and soft-break-to-paragraph normalization remain #67; native paste/cut/drop routes
+still refuse until that adapter is implemented. This avoids silently treating
+untrusted clipboard markup as proposal identity.
+
+The separate `lexical-review-wer` package implements the current fragment's
+mutation-free `unsupported` export boundary. It does not decompose the fragment.
+The general WER mapping and portable identity profile remain #82/#69.
+
+### Browser reproduction
+
+Run `pnpm dev` for the regular demo, or start the test fixture server with
+`pnpm --dir packages/demo exec vite --config e2e/vite.config.js --port 5174`.
+Open `http://localhost:5174/?fragment` and, in the browser console, call
+`window.__fragmentFixture.insert("x\ny")`. Type, press Enter and Backspace, and
+use arrows at the fragment endpoints. Calling
+`window.__fragmentFixture.settle("reject")` restores `AB` while preserving any
+separate accepted-side text proposals. `snapshot()` exposes the current native
+document and logical association. The fixture is an executable capability check,
+not a required host UI.

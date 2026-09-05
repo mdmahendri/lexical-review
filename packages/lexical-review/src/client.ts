@@ -14,3 +14,5 @@ export type {
   ReviewIntentRefusalCode,
   ReviewProposalIdFactory,
 } from "./registerReviewSession";
+
+export { INSERT_REVIEW_FRAGMENT_COMMAND } from "./registerReviewSession";

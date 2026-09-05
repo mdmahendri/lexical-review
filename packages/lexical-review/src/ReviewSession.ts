@@ -7,6 +7,7 @@ import {
   type ValidationResult,
 } from "./ReviewDocument";
 import {
+  ReviewFragmentNode,
   ReviewDeletionNode,
   ReviewInsertionNode,
   ReviewFormattingNode,
@@ -59,11 +60,13 @@ function sameSerializedValue(left: unknown, right: unknown): boolean {
 }
 
 function pendingNodeKinds(document: ReviewDocumentV3): Readonly<{
+  fragment: boolean;
   boundary: boolean;
   formatting: boolean;
   deletion: boolean;
   insertion: boolean;
 }> {
+  let fragment = false;
   let boundary = false;
   let formatting = false;
   let deletion = false;
@@ -77,6 +80,7 @@ function pendingNodeKinds(document: ReviewDocumentV3): Readonly<{
       return;
     }
     const record = value as Record<string, unknown>;
+    fragment ||= record.type === "review-fragment";
     boundary ||= record.type === "review-boundary";
     formatting ||= record.type === "review-formatting";
     insertion ||= record.type === "review-insertion";
@@ -84,7 +88,7 @@ function pendingNodeKinds(document: ReviewDocumentV3): Readonly<{
     Object.values(record).forEach(visit);
   };
   visit(document.root);
-  return { deletion, insertion, formatting, boundary };
+  return { deletion, insertion, formatting, boundary, fragment };
 }
 
 class LexicalReviewSession implements ReviewSession {
@@ -113,6 +117,7 @@ export function importReviewDocument(
   }
   const requiredNodes = pendingNodeKinds(validated.value);
   if (
+    (requiredNodes.fragment && !editor.hasNode(ReviewFragmentNode)) ||
     (requiredNodes.boundary && !editor.hasNode(ReviewBoundaryNode)) ||
     (requiredNodes.formatting && !editor.hasNode(ReviewFormattingNode)) ||
     (requiredNodes.insertion && !editor.hasNode(ReviewInsertionNode)) ||

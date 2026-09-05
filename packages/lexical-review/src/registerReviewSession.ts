@@ -1,4 +1,9 @@
 import {
+  $moveReviewFragmentCaret,
+  $insertReviewFragment,
+  type ReviewFragment,
+} from "./ReviewFragment";
+import {
   $splitReviewParagraph,
   $moveReviewBoundaryCaret,
 } from "./ReviewStructure";
@@ -10,6 +15,7 @@ import {
 } from "./ReviewFormatting";
 import { normalizeReviewElementNode } from "./ReviewNormalization";
 import {
+  createCommand,
   $getSelection,
   $isRangeSelection,
   BEFORE_INPUT_COMMAND,
@@ -51,6 +57,10 @@ export type {
   ReviewIntentRefusalCode,
   ReviewProposalIdFactory,
 } from "./ReviewOperations";
+export const INSERT_REVIEW_FRAGMENT_COMMAND = createCommand<ReviewFragment>(
+  "INSERT_REVIEW_FRAGMENT_COMMAND",
+);
+
 export type ReviewSessionRegistrationOptions = ReviewAuthoringOptions &
   Readonly<{
     onDeletionOutcome?: (outcome: ReviewIntentOutcome) => void;
@@ -264,6 +274,18 @@ export function registerReviewSession(
 
   return mergeRegister(
     registerReviewInputFormatting(editor),
+    editor.registerCommand(
+      INSERT_REVIEW_FRAGMENT_COMMAND,
+      (fragment) => {
+        reportOutcome(
+          options,
+          $insertReviewFragment(fragment, options),
+          "insertion",
+        );
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    ),
     ...([KEY_ARROW_LEFT_COMMAND, KEY_ARROW_RIGHT_COMMAND] as const).map(
       (command, index) =>
         editor.registerCommand(
@@ -276,7 +298,11 @@ export function registerReviewSession(
               event.metaKey
             )
               return false;
-            if (!$moveReviewBoundaryCaret(index === 0)) return false;
+            if (
+              !$moveReviewFragmentCaret(index === 0) &&
+              !$moveReviewBoundaryCaret(index === 0)
+            )
+              return false;
             event.preventDefault();
             return true;
           },

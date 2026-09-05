@@ -97,3 +97,22 @@ export {
   $removeReviewStructure,
   type ReviewStructuralProposal,
 } from "./ReviewStructure";
+
+export {
+  ReviewFragmentNode,
+  $createReviewFragmentNode,
+  $isReviewFragmentNode,
+  type SerializedReviewFragmentNode,
+} from "./ReviewNodes";
+export {
+  $insertReviewFragment,
+  $inspectReviewFragment,
+  $acceptReviewFragment,
+  $rejectReviewFragment,
+  $removeReviewFragment,
+  type ReviewFragment,
+  type ReviewFragmentParagraph,
+  type ReviewFragmentProposal,
+} from "./ReviewFragment";
+
+export { createReviewPreview } from "./ReviewPreview";

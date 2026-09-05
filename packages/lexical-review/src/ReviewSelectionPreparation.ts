@@ -1,3 +1,4 @@
+import { inspectFragment } from "./ReviewFragment";
 import { $isReviewBoundaryNode } from "./ReviewBoundaryNode";
 import {
   $getRoot,
@@ -14,6 +15,7 @@ import {
   type TextNode,
 } from "lexical";
 import {
+  $isReviewFragmentNode,
   $canReviewElementNodesBeMerged,
   $isReviewDeletionNode,
   $isReviewFormattingNode,
@@ -107,6 +109,7 @@ export function isReviewElementNode(
   node: LexicalNode | null | undefined,
 ): node is ReviewElementNode {
   return (
+    $isReviewFragmentNode(node) ||
     $isReviewDeletionNode(node) ||
     $isReviewInsertionNode(node) ||
     $isReviewFormattingNode(node)
@@ -152,7 +155,7 @@ export function getChildIndex(
 export function getTextChildren(wrapper: ReviewElementNode): TextNode[] | null {
   const children = wrapper.getChildren();
   if (
-    children.length === 0 ||
+    (children.length === 0 && !$isReviewFragmentNode(wrapper)) ||
     children.some(
       (child) => !$isTextNode(child) || child.getTextContentSize() === 0,
     )
@@ -440,10 +443,30 @@ function classifyPoint(
     }
     const left = children[point.offset - 1];
     const right = children[point.offset];
+    const fragment = $isReviewFragmentNode(right)
+      ? right
+      : $isReviewFragmentNode(left)
+        ? left
+        : null;
+    if (fragment) {
+      const group = inspectFragment(fragment.getProposalId());
+      if (group.status !== "ready") return group;
+      if (!(
+        (right === group.value.wrappers[0] && left !== fragment) ||
+        (left === group.value.wrappers.at(-1) && right !== fragment)
+      ))
+        return refusal(
+          "ambiguous-boundary",
+          "An internal fragment boundary requires proposal-side association.",
+        );
+    }
+
     if (
       !structural &&
       !$isReviewBoundaryNode(left) &&
       !$isReviewBoundaryNode(right) &&
+      !$isReviewFragmentNode(left) &&
+      !$isReviewFragmentNode(right) &&
       (isReviewElementNode(left) || isReviewElementNode(right))
     ) {
       return refusal(
@@ -516,7 +539,7 @@ function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
 
 /** Validate every occurrence of an identity before editing or resolving any side. */
 export function inspectProposalGroup(proposalId: string): Preparation<{
-  kind: "insertion" | "deletion" | "replacement" | "formatting";
+  kind: "insertion" | "deletion" | "replacement" | "formatting" | "fragment";
   wrappers: ReviewElementNode[];
 }> {
   if (!isValidProposalId(proposalId))
@@ -539,6 +562,15 @@ export function inspectProposalGroup(proposalId: string): Preparation<{
       "unsafe-proposal-intersection",
       "A text proposal identity cannot also identify a structural boundary.",
     );
+  if (wrappers.some($isReviewFragmentNode)) {
+    const fragment = inspectFragment(proposalId);
+    return fragment.status === "ready"
+      ? {
+          status: "ready",
+          value: { kind: "fragment", wrappers: fragment.value.wrappers },
+        }
+      : fragment;
+  }
   const first = wrappers[0];
   const paragraph = first?.getParent();
   if (!first || !paragraph || !isRootParagraph(paragraph))

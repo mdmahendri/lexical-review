@@ -1,4 +1,8 @@
 import {
+  $formatReviewFragment,
+  $getFragmentSelectionFormat,
+} from "./ReviewFragment";
+import {
   $getReviewInputFormat,
   $setReviewInputFormat,
 } from "./ReviewInputFormatting";
@@ -166,6 +170,8 @@ export function $setReviewFormatting(
     }
     return format;
   };
+  const fragment = $formatReviewFragment(apply);
+  if (fragment) return fragment;
   if (collapsed) {
     const current = $getReviewInputFormat(selection);
     const next = apply(current);
@@ -245,6 +251,12 @@ export function $toggleReviewFormatting(
   let format = inspection.value.collapsed
     ? $getReviewInputFormat(inspection.value.selection)
     : inspection.value.selection.format;
+  const fragmentFormat = $getFragmentSelectionFormat();
+  if (fragmentFormat !== null && !inspection.value.collapsed)
+    return $setReviewFormatting(
+      { [property]: !(fragmentFormat & FORMAT_BITS[property]) },
+      options,
+    );
   if (!inspection.value.collapsed) {
     const { anchor, focus } = inspection.value;
     const span =

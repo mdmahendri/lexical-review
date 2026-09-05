@@ -1,3 +1,5 @@
+import { $splitReviewFragment } from "./ReviewFragment";
+import { $isReviewFragmentNode } from "./ReviewNodes";
 import {
   $createParagraphNode,
   $getEditor,
@@ -167,6 +169,23 @@ function position(): Preparation<Position> {
       "Structural editing requires a collapsed caret; Enter-over-range is unsupported.",
     );
   const point = inspection.value.anchor;
+  if (point.association === "accepted" && !point.node) {
+    const left = point.paragraph.getChildAtIndex(point.childIndex - 1);
+    const right = point.paragraph.getChildAtIndex(point.childIndex);
+    if (
+      ($isReviewFragmentNode(right) && right.startsParagraph()) ||
+      ($isReviewFragmentNode(left) &&
+        isRootParagraph(point.paragraph.getNextSibling()) &&
+        $isReviewFragmentNode(
+          point.paragraph.getNextSibling<ParagraphNode>()!.getFirstChild(),
+        ))
+    )
+      return refusal(
+        "unsafe-proposal-intersection",
+        "Structural editing cannot cross fragment-owned boundaries.",
+      );
+  }
+
   let index = point.childIndex;
   if (point.association === "proposal") {
     const group = inspectProposalGroup(point.wrapper.getProposalId());
@@ -246,6 +265,8 @@ function selectBoundary(
 export function $splitReviewParagraph(
   options: ReviewAuthoringOptions = {},
 ): ReviewIntentOutcome {
+  const local = $splitReviewFragment();
+  if (local) return local;
   const blocked = validateStructuralState();
   if (blocked) return blocked;
   const prepared = position();
@@ -325,6 +346,11 @@ export function $mergeReviewParagraph(
   if (hasSplit(right))
     return $removeReviewStructure(
       right.getFirstChild<ReviewBoundaryNode>()!.getProposalId(),
+    );
+  if ([left, right].some((p) => p.getChildren().some($isReviewFragmentNode)))
+    return refusal(
+      "unsafe-proposal-intersection",
+      "A merge cannot cross fragment ownership.",
     );
   const invalid =
     validateParagraphStructure(left) ?? validateParagraphStructure(right);

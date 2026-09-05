@@ -1,3 +1,4 @@
+import { validFragmentPositions } from "./ReviewFragmentInvariant";
 import type { EditorState, SerializedEditorState } from "lexical";
 import { isValidProposalId } from "./ProposalIdentity";
 
@@ -33,7 +34,8 @@ export type ValidationResult<T> =
     }>;
 
 type JsonRecord = Record<string, unknown>;
-type ProposalKind = "deletion" | "insertion" | "formatting" | "boundary";
+type ProposalKind =
+  "deletion" | "insertion" | "formatting" | "boundary" | "fragment";
 type ProposalOccurrence = Readonly<{
   kind: ProposalKind;
   paragraph: string;
@@ -144,6 +146,7 @@ function validateTextNode(
 }
 
 function proposalKind(value: JsonRecord): ProposalKind | null {
+  if (value.type === "review-fragment") return "fragment";
   if (value.type === "review-boundary") return "boundary";
   if (value.type === "review-formatting") return "formatting";
   if (value.type === "review-insertion") {
@@ -195,6 +198,7 @@ function validateReviewNode(
   if (
     !hasExactlyKeys(value, [
       ...(kind === "formatting" ? ["accepted"] : []),
+      ...(kind === "fragment" ? ["startsParagraph", "emptyFormat"] : []),
       "children",
       "direction",
       "extensions",
@@ -229,10 +233,22 @@ function validateReviewNode(
       "Proposal identity must be nonempty text without surrounding whitespace or control characters.",
     );
   }
+  if (
+    kind === "fragment" &&
+    (typeof value.startsParagraph !== "boolean" ||
+      !isSupportedFormat(value.emptyFormat))
+  )
+    return invalid(
+      path,
+      "Invalid fragment boundary or empty formatting metadata.",
+    );
   const prior = proposals.get(value.proposalId);
   if (
     prior &&
-    (prior.kind === "boundary" ||
+    !(prior.kind === "fragment" && kind === "fragment") &&
+    (prior.kind === "fragment" ||
+      kind === "fragment" ||
+      prior.kind === "boundary" ||
       prior.kind === "formatting" ||
       kind === "formatting" ||
       prior.paragraph !== paragraph ||
@@ -253,7 +269,10 @@ function validateReviewNode(
   if (extensions.status !== "valid") {
     return extensions;
   }
-  if (!Array.isArray(value.children) || value.children.length === 0) {
+  if (
+    !Array.isArray(value.children) ||
+    (value.children.length === 0 && kind !== "fragment")
+  ) {
     return invalid(
       `${path}.children`,
       "A pending proposal wrapper must contain at least one text node.",
@@ -461,6 +480,32 @@ export function validateReviewDocument(
       return result;
     }
   }
+
+  const fragments = new Map<
+    string,
+    import("./ReviewFragmentInvariant").FragmentComponentPosition[]
+  >();
+  root.children.forEach((paragraph, p) => {
+    const children = (paragraph as JsonRecord).children as JsonRecord[];
+    children.forEach((child, index) => {
+      if (child.type !== "review-fragment") return;
+      const id = child.proposalId as string;
+      const positions = fragments.get(id) ?? [];
+      positions.push({
+        paragraph: p,
+        index,
+        siblings: children.length,
+        startsParagraph: child.startsParagraph as boolean,
+      });
+      fragments.set(id, positions);
+    });
+  });
+  for (const positions of fragments.values())
+    if (!validFragmentPositions(positions))
+      return invalid(
+        "$.root.children",
+        "Fragment components must own contiguous paragraph boundaries without intervening accepted content.",
+      );
 
   const cloned = structuredClone(input) as unknown as ReviewDocumentV3;
   return { status: "valid", value: deepFreeze(cloned) };

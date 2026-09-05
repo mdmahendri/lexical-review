@@ -1,4 +1,11 @@
 import {
+  $editReviewFragmentText,
+  $deleteReviewFragment,
+  inspectFragment,
+  $acceptReviewFragment,
+  $rejectReviewFragment,
+} from "./ReviewFragment";
+import {
   $deleteReviewBoundary,
   inspectBoundary,
   validateStructuralState,
@@ -588,6 +595,11 @@ export function $deleteReviewText(
   backward: boolean,
   options: ReviewDeletionOptions = {},
 ): ReviewIntentOutcome {
+  const fragment = $deleteReviewFragment(
+    backward,
+    options.granularity ?? "character",
+  );
+  if (fragment) return fragment;
   if ((options.granularity ?? "character") === "character") {
     const structural = $deleteReviewBoundary(backward, options);
     if (structural) return structural;
@@ -660,7 +672,8 @@ export function $insertReviewText(
   text: string,
   options: ReviewAuthoringOptions = {},
 ): ReviewIntentOutcome {
-  return performInsertion($getEditor(), text, options);
+  const fragment = $editReviewFragmentText(text);
+  return fragment ?? performInsertion($getEditor(), text, options);
 }
 
 export type ReviewInsertionProposal = Readonly<{
@@ -974,6 +987,11 @@ export function $resolveReviewProposals(
     );
   const groups = [];
   for (const id of new Set(proposalIds)) {
+    const fragment = inspectFragment(id);
+    if (fragment.status === "ready") {
+      groups.push({ id, kind: "fragment" as const });
+      continue;
+    }
     const boundary = inspectBoundary(id);
     if (boundary.status === "ready") {
       groups.push({ id, kind: "boundary" as const });
@@ -983,12 +1001,19 @@ export function $resolveReviewProposals(
     if (group.status !== "ready") return group;
     groups.push({ id, kind: group.value.kind });
   }
-  if (groups.some((group) => group.kind === "boundary")) {
+  if (
+    groups.some(
+      (group) => group.kind === "boundary" || group.kind === "fragment",
+    )
+  ) {
     const invalid = validateStructuralState();
     if (invalid) return invalid;
   }
   for (const { id, kind } of groups) {
-    if (kind === "boundary") {
+    if (kind === "fragment") {
+      if (action === "accept") $acceptReviewFragment(id);
+      else $rejectReviewFragment(id);
+    } else if (kind === "boundary") {
       if (action === "accept") $acceptReviewStructure(id);
       else $rejectReviewStructure(id);
     } else if (kind === "formatting") {

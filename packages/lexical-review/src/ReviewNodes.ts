@@ -68,7 +68,7 @@ export abstract class ReviewElementNode extends ElementNode {
     return false;
   }
 
-  override canBeEmpty(): false {
+  override canBeEmpty(): boolean {
     return false;
   }
 
@@ -196,6 +196,7 @@ export function $canReviewElementNodesBeMerged(
 ): boolean {
   return (
     !$isReviewFormattingNode(node1) &&
+    !$isReviewFragmentNode(node1) &&
     node1.getType() === node2.getType() &&
     node1.getProposalId() === node2.getProposalId()
   );
@@ -287,4 +288,115 @@ export function $isReviewFormattingNode(
   node: LexicalNode | null | undefined,
 ): node is ReviewFormattingNode {
   return node instanceof ReviewFormattingNode;
+}
+
+/** One paragraph-local component; startsParagraph owns the boundary before it. */
+export type SerializedReviewFragmentNode = SerializedReviewElementNode & {
+  type: "review-fragment";
+  startsParagraph: boolean;
+  emptyFormat: number;
+};
+export class ReviewFragmentNode extends ReviewElementNode {
+  __startsParagraph: boolean;
+  __emptyFormat: number;
+  constructor(
+    proposalId: string,
+    startsParagraph = false,
+    emptyFormat = 0,
+    key?: NodeKey,
+  ) {
+    super(proposalId, key);
+    if (
+      typeof startsParagraph !== "boolean" ||
+      !Number.isInteger(emptyFormat) ||
+      emptyFormat < 0 ||
+      emptyFormat > 15
+    )
+      throw new Error("Invalid fragment component metadata.");
+    this.__startsParagraph = startsParagraph;
+    this.__emptyFormat = emptyFormat;
+  }
+  static override getType(): string {
+    return "review-fragment";
+  }
+  static override clone(node: ReviewFragmentNode): ReviewFragmentNode {
+    return new ReviewFragmentNode(
+      node.__proposalId,
+      node.__startsParagraph,
+      node.__emptyFormat,
+      node.__key,
+    );
+  }
+  override afterCloneFrom(node: this): void {
+    super.afterCloneFrom(node);
+    this.__startsParagraph = node.__startsParagraph;
+    this.__emptyFormat = node.__emptyFormat;
+  }
+  startsParagraph(): boolean {
+    return this.getLatest().__startsParagraph;
+  }
+  getEmptyFormat(): number {
+    return this.getLatest().__emptyFormat;
+  }
+  override canBeEmpty(): boolean {
+    return true;
+  }
+  protected override getReviewTag(): "ins" {
+    return "ins";
+  }
+  override createDOM(config: EditorConfig): HTMLElement {
+    const dom = super.createDOM(config);
+    dom.dataset.reviewFragment = this.getProposalId();
+    if (this.startsParagraph()) dom.dataset.reviewFragmentBoundary = "";
+    return dom;
+  }
+  static override importJSON(
+    node: SerializedReviewFragmentNode,
+  ): ReviewFragmentNode {
+    return $createReviewFragmentNode(
+      node.proposalId,
+      node.startsParagraph,
+      node.emptyFormat,
+    ).updateFromJSON(node);
+  }
+  override updateFromJSON(
+    node: LexicalUpdateJSON<SerializedReviewFragmentNode>,
+  ): this {
+    super.updateFromJSON(node);
+    if (
+      typeof node.startsParagraph !== "boolean" ||
+      !Number.isInteger(node.emptyFormat) ||
+      node.emptyFormat < 0 ||
+      (node.emptyFormat & ~15) !== 0
+    )
+      throw new Error("Invalid fragment component metadata.");
+    const self = this.getWritable();
+    self.__startsParagraph = node.startsParagraph;
+    self.__emptyFormat = node.emptyFormat;
+    return self;
+  }
+  override exportJSON(): SerializedReviewFragmentNode {
+    return {
+      ...super.exportJSON(),
+      type: "review-fragment",
+      proposalId: this.getProposalId(),
+      extensions: [],
+      startsParagraph: this.startsParagraph(),
+      emptyFormat: this.getEmptyFormat(),
+    };
+  }
+}
+export function $createReviewFragmentNode(
+  proposalId: string,
+  startsParagraph = false,
+  emptyFormat = 0,
+): ReviewFragmentNode {
+  return $applyNodeReplacement(
+    new ReviewFragmentNode(proposalId, startsParagraph, emptyFormat),
+  );
+}
+export function $isReviewFragmentNode(
+  node: LexicalNode | null | undefined,
+): node is ReviewFragmentNode {
+  return node instanceof ReviewFragmentNode;
 }

@@ -1,3 +1,4 @@
+import { $isReviewFragmentNode } from "./ReviewNodes";
 import { $isReviewBoundaryNode } from "./ReviewBoundaryNode";
 import {
   $getEditor,
@@ -56,6 +57,7 @@ export function $getReviewInputFormat(selection: RangeSelection): number {
     }
     if ($isTextNode(previous)) return previous.getFormat();
     if ($isTextNode(next)) return next.getFormat();
+    if ($isReviewFragmentNode(node)) return node.getEmptyFormat();
     return node.getTextFormat();
   }
   return 0;
