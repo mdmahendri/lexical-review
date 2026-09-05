@@ -932,28 +932,6 @@ function getAcceptedSelectedNodes(span: AcceptedSpan): TextNode[] | null {
   return selected.every($isTextNode) ? selected : null;
 }
 
-function placeCaretAfterWrapper(
-  paragraph: ParagraphNode,
-  wrapper: ReviewElementNode,
-): void {
-  const wrapperIndex = getChildIndex(paragraph, wrapper);
-  if (wrapperIndex === null) {
-    paragraph.select();
-    return;
-  }
-  const next = paragraph.getChildAtIndex(wrapperIndex + 1);
-  if ($isTextNode(next)) {
-    next.selectStart();
-    return;
-  }
-  const previous = paragraph.getChildAtIndex(wrapperIndex - 1);
-  if ($isTextNode(previous)) {
-    previous.selectEnd();
-    return;
-  }
-  paragraph.select(wrapperIndex + 1, wrapperIndex + 1);
-}
-
 function placeProposalCaret(
   map: ProposalMap,
   offset: number,
@@ -1175,6 +1153,7 @@ function insertAcceptedProposal(
 function acceptedDeletionTarget(
   point: AcceptedPoint,
   backward: boolean,
+  granularity: "character" | "word",
 ): Readonly<{ end: number; map: AcceptedMap; start: number }> | null {
   const map = buildAcceptedMap(point.paragraph);
   if (map.status !== "ready") {
@@ -1183,6 +1162,29 @@ function acceptedDeletionTarget(
   const offset = getAcceptedOffset(point, map.value);
   if (offset === null) {
     return null;
+  }
+  if (granularity === "word") {
+    const children = point.paragraph.getChildren();
+    let index = point.childIndex;
+    if (point.node === null && backward) index -= 1;
+    if (!$isTextNode(children[index])) return null;
+    let left = index;
+    let right = index;
+    while ($isTextNode(children[left - 1])) left -= 1;
+    while ($isTextNode(children[right + 1])) right += 1;
+    const entries = map.value.entries.filter(
+      (entry) => entry.childIndex >= left && entry.childIndex <= right,
+    );
+    const base = entries[0]?.start;
+    if (base === undefined) return null;
+    const text = entries.map((entry) => entry.node.getTextContent()).join("");
+    const local = offset - base;
+    const boundary = deletionOffset(text, local, backward, granularity);
+    return {
+      start: base + Math.min(local, boundary),
+      end: base + Math.max(local, boundary),
+      map: map.value,
+    };
   }
   if (point.node !== null) {
     const text = point.node.getTextContent();
@@ -1236,9 +1238,10 @@ function acceptedDeletionTarget(
   };
 }
 
-function deleteProposalCharacter(
+function deleteProposalAtCaret(
   point: ProposalPoint,
   backward: boolean,
+  granularity: "character" | "word",
 ): ReviewIntentOutcome {
   const map = buildProposalMapAroundPoint(point);
   if (map.status !== "ready") {
@@ -1272,8 +1275,11 @@ function deleteProposalCharacter(
       "Forward deletion may not cross from proposal content into accepted content.",
     );
   }
-  const start = backward ? previousCharacterOffset(text, offset) : offset;
-  const end = backward ? offset : nextCharacterOffset(text, offset);
+  if ($isReviewDeletionNode(point.wrapper))
+    return $removeReviewDeletion(point.wrapper.getProposalId());
+  const boundary = deletionOffset(text, offset, backward, granularity);
+  const start = Math.min(offset, boundary);
+  const end = Math.max(offset, boundary);
   const span: ProposalSpan = { end, map: map.value, start };
   const fallbackIndex = point.childIndex;
   removeProposalRange(span, start, end);
@@ -1285,6 +1291,8 @@ function deleteProposalSelection(span: ProposalSpan): ReviewIntentOutcome {
   if (span.start === span.end) {
     return unchanged();
   }
+  if ($isReviewDeletionNode(span.map.wrappers[0]))
+    return $removeReviewDeletion(span.map.proposalId);
   const fallbackIndex = getChildIndex(
     span.map.paragraph,
     span.map.wrappers[0]!,
@@ -1407,9 +1415,8 @@ function performInsertion(
 }
 
 export function $deleteReviewText(
-  editor: LexicalEditor,
   backward: boolean,
-  options: ReviewAuthoringOptions,
+  options: ReviewDeletionOptions = {},
 ): ReviewIntentOutcome {
   const inspection = inspectSelection();
   if (inspection.status !== "ready") {
@@ -1433,67 +1440,29 @@ export function $deleteReviewText(
     if (acceptedSpan.value.start === acceptedSpan.value.end) {
       return unchanged();
     }
-    const missingNode = missingProposalNode(editor, "deletion");
-    if (missingNode !== null) {
-      return missingNode;
-    }
-    const proposalId = prepareProposalId(options);
-    if (proposalId.status !== "ready") {
-      return proposalId;
-    }
-    const selected = getAcceptedSelectedNodes(acceptedSpan.value);
-    if (selected === null || selected.length === 0) {
-      return refusal(
-        "invalid-structural-target",
-        "The accepted range could not be isolated without changing its content.",
-      );
-    }
-    const wrapper = $createReviewDeletionNode(proposalId.value);
-    selected[0]!.insertBefore(wrapper);
-    for (const node of selected) {
-      wrapper.append(node);
-    }
-    placeCaretAfterWrapper(acceptedSpan.value.map.paragraph, wrapper);
-    return changed();
+    return deleteAcceptedSpan(acceptedSpan.value, backward, options);
   }
 
   const point = inspection.value.anchor;
   if (point.association === "proposal") {
-    return deleteProposalCharacter(point, backward);
+    return deleteProposalAtCaret(
+      point,
+      backward,
+      options.granularity ?? "character",
+    );
   }
-  const target = acceptedDeletionTarget(point, backward);
+  const target = acceptedDeletionTarget(
+    point,
+    backward,
+    options.granularity ?? "character",
+  );
   if (target === null || target.start === target.end) {
     return refusal(
       "deletion-target-unavailable",
       "Deletion may not cross proposal content or an empty accepted boundary.",
     );
   }
-  const missingNode = missingProposalNode(editor, "deletion");
-  if (missingNode !== null) {
-    return missingNode;
-  }
-  const proposalId = prepareProposalId(options);
-  if (proposalId.status !== "ready") {
-    return proposalId;
-  }
-  const selected = getAcceptedSelectedNodes({
-    end: target.end,
-    map: target.map,
-    start: target.start,
-  });
-  if (selected === null || selected.length === 0) {
-    return refusal(
-      "invalid-structural-target",
-      "The accepted deletion target could not be isolated safely.",
-    );
-  }
-  const wrapper = $createReviewDeletionNode(proposalId.value);
-  selected[0]!.insertBefore(wrapper);
-  for (const node of selected) {
-    wrapper.append(node);
-  }
-  placeCaretAfterWrapper(target.map.paragraph, wrapper);
-  return changed();
+  return deleteAcceptedSpan(target, backward, options);
 }
 
 /** Insert or correct pending insertion content in the current Lexical update. */
@@ -1509,7 +1478,12 @@ export type ReviewInsertionProposal = Readonly<{
   text: string;
 }>;
 
-function findInsertion(proposalId: string): Preparation<ProposalMap> {
+function findProposal(
+  proposalId: string,
+  kind: "insertion" | "deletion",
+): Preparation<ProposalMap> {
+  const matchesKind =
+    kind === "insertion" ? $isReviewInsertionNode : $isReviewDeletionNode;
   if (!isValidProposalId(proposalId)) {
     return refusal(
       "invalid-proposal-id",
@@ -1526,22 +1500,20 @@ function findInsertion(proposalId: string): Preparation<ProposalMap> {
   visit($getRoot());
   const first = matches[0];
   const last = matches.at(-1);
-  if (!$isReviewInsertionNode(first) || !$isReviewInsertionNode(last)) {
+  if (!matchesKind(first) || !matchesKind(last)) {
     return refusal(
       "unsupported-target",
-      "The pending insertion proposal was not found.",
+      `The pending ${kind} proposal was not found.`,
     );
   }
   const paragraph = first.getParent();
   if (
     !isRootParagraph(paragraph) ||
-    matches.some(
-      (node) => node.getParent() !== paragraph || !$isReviewInsertionNode(node),
-    )
+    matches.some((node) => node.getParent() !== paragraph || !matchesKind(node))
   ) {
     return refusal(
       "unsafe-proposal-intersection",
-      "The identity does not identify one contiguous insertion proposal.",
+      `The identity does not identify one contiguous ${kind} proposal.`,
     );
   }
   const structure = validateParagraphStructure(paragraph);
@@ -1553,7 +1525,7 @@ function findInsertion(proposalId: string): Preparation<ProposalMap> {
 export function $inspectReviewInsertion(
   proposalId: string,
 ): ReviewIntentOutcome<ReviewInsertionProposal> {
-  const prepared = findInsertion(proposalId);
+  const prepared = findProposal(proposalId, "insertion");
   if (prepared.status !== "ready") return prepared;
   return {
     status: "unchanged",
@@ -1566,11 +1538,12 @@ export function $inspectReviewInsertion(
   };
 }
 
-function settleInsertion(
+function resolveProposal(
   proposalId: string,
-  accept: boolean,
+  retainText: boolean,
+  kind: "insertion" | "deletion",
 ): ReviewIntentOutcome {
-  const prepared = findInsertion(proposalId);
+  const prepared = findProposal(proposalId, kind);
   if (prepared.status !== "ready") return prepared;
   const map = prepared.value;
   const first = map.wrappers[0]!;
@@ -1583,7 +1556,7 @@ function settleInsertion(
         map.wrappers.some((node) => node.getKey() === key) ||
         map.entries.some((entry) => entry.node.getKey() === key),
     );
-  if (accept) {
+  if (retainText) {
     for (const wrapper of map.wrappers) {
       for (const child of wrapper.getChildren()) wrapper.insertBefore(child);
       wrapper.remove();
@@ -1600,19 +1573,126 @@ function settleInsertion(
 export function $removeReviewInsertion(
   proposalId: string,
 ): ReviewIntentOutcome {
-  return settleInsertion(proposalId, false);
+  return resolveProposal(proposalId, false, "insertion");
 }
 
 /** Accept current insertion content into the accepted document state. */
 export function $acceptReviewInsertion(
   proposalId: string,
 ): ReviewIntentOutcome {
-  return settleInsertion(proposalId, true);
+  return resolveProposal(proposalId, true, "insertion");
 }
 
 /** Reject the insertion; native documents retain pending work only. */
 export function $rejectReviewInsertion(
   proposalId: string,
 ): ReviewIntentOutcome {
-  return settleInsertion(proposalId, false);
+  return resolveProposal(proposalId, false, "insertion");
+}
+
+export type ReviewDeletionOptions = ReviewAuthoringOptions &
+  Readonly<{
+    granularity?: "character" | "word";
+  }>;
+export type ReviewDeletionProposal = ReviewInsertionProposal;
+
+/** Inspect the current pending deletion nodes. */
+export function $inspectReviewDeletion(
+  proposalId: string,
+): ReviewIntentOutcome<ReviewDeletionProposal> {
+  const prepared = findProposal(proposalId, "deletion");
+  if (prepared.status !== "ready") return prepared;
+  return {
+    status: "unchanged",
+    value: {
+      proposalId,
+      text: prepared.value.entries
+        .map((entry) => entry.node.getTextContent())
+        .join(""),
+    },
+  };
+}
+
+/** Remove pending deletion work, restoring its accepted text. */
+export function $removeReviewDeletion(proposalId: string): ReviewIntentOutcome {
+  return resolveProposal(proposalId, true, "deletion");
+}
+
+/** Accept the deletion by removing its text from accepted document state. */
+export function $acceptReviewDeletion(proposalId: string): ReviewIntentOutcome {
+  return resolveProposal(proposalId, false, "deletion");
+}
+
+/** Reject the deletion, restoring its accepted text without a terminal record. */
+export function $rejectReviewDeletion(proposalId: string): ReviewIntentOutcome {
+  return resolveProposal(proposalId, true, "deletion");
+}
+
+function deletionOffset(
+  text: string,
+  offset: number,
+  backward: boolean,
+  granularity: "character" | "word",
+): number {
+  if (granularity === "character")
+    return backward
+      ? previousCharacterOffset(text, offset)
+      : nextCharacterOffset(text, offset);
+  // A word intention consumes adjacent whitespace followed by one word or
+  // punctuation run. Boundaries are computed without changing live selection.
+  const pattern = backward
+    ? /(?:[\p{L}\p{N}\p{M}_]+|[^\p{L}\p{N}\p{M}_\s]+)\s*$|\s+$/u
+    : /^\s*(?:[\p{L}\p{N}\p{M}_]+|[^\p{L}\p{N}\p{M}_\s]+)|^\s+/u;
+  const match = (backward ? text.slice(0, offset) : text.slice(offset)).match(
+    pattern,
+  );
+  const length = match?.[0].length ?? 0;
+  return backward ? offset - length : offset + length;
+}
+
+function deleteAcceptedSpan(
+  span: AcceptedSpan,
+  backward: boolean,
+  options: ReviewDeletionOptions,
+): ReviewIntentOutcome {
+  const missing = missingProposalNode($getEditor(), "deletion");
+  if (missing !== null) return missing;
+  const first = getStartEntry(span.map.entries, span.start);
+  const last = getEndEntry(span.map.entries, span.end);
+  if (first === null || last === null)
+    return refusal(
+      "invalid-structural-target",
+      "The deletion range has no live accepted target.",
+    );
+  const adjacent = backward
+    ? span.end === last.end
+      ? last.node.getNextSibling()
+      : null
+    : span.start === first.start
+      ? first.node.getPreviousSibling()
+      : null;
+  const continuation = $isReviewDeletionNode(adjacent) ? adjacent : null;
+  const identity =
+    continuation === null
+      ? prepareProposalId(options)
+      : { status: "ready" as const, value: continuation.getProposalId() };
+  if (identity.status !== "ready") return identity;
+  const selected = getAcceptedSelectedNodes(span);
+  if (selected === null || selected.length === 0)
+    throw new Error("Validated deletion target could not be isolated.");
+  const wrapper = continuation ?? $createReviewDeletionNode(identity.value);
+  if (continuation === null) selected[0]!.insertBefore(wrapper);
+  if (backward) wrapper.splice(0, 0, selected);
+  else wrapper.append(...selected);
+  const neighbor = backward
+    ? wrapper.getPreviousSibling()
+    : wrapper.getNextSibling();
+  if ($isTextNode(neighbor)) {
+    if (backward) neighbor.selectEnd();
+    else neighbor.selectStart();
+  } else {
+    const index = wrapper.getIndexWithinParent() + (backward ? 0 : 1);
+    span.map.paragraph.select(index, index);
+  }
+  return changed();
 }

@@ -31,6 +31,13 @@ export {
 } from "./ReviewSession";
 
 export {
+  $deleteReviewText,
+  $inspectReviewDeletion,
+  $removeReviewDeletion,
+  $acceptReviewDeletion,
+  $rejectReviewDeletion,
+  type ReviewDeletionOptions,
+  type ReviewDeletionProposal,
   $insertReviewText,
   $inspectReviewInsertion,
   $removeReviewInsertion,

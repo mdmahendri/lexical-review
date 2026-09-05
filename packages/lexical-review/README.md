@@ -108,6 +108,35 @@ work, but expresses author removal rather than a review decision. These are
 separate operations; none adds a terminal record to native JSON. Resolution
 refuses missing, disconnected, or structurally unsupported identities.
 
+## Pending deletion authoring
+
+Inside `editor.update()`, call `$deleteReviewText(backward, options)` to delete
+at the current selection. The optional `granularity` is `"character"` (default)
+or `"word"`; a nonempty selection always supplies the explicit range. The client
+registration handles Backspace, Delete, word deletion, and range removal through
+the same operation. Word deletion consumes adjacent whitespace and one Unicode
+letter/number/mark or punctuation run, bounded by accepted text or one proposal.
+
+Creation assigns identity immediately. Forward continuation appends accepted
+text to the deletion on its left; backward continuation prepends accepted text
+to the deletion on its right. Formatting stays on the nested text nodes. The
+caret moves to the accepted continuation side. Same-paragraph ranges can extend
+a compatible adjacent deletion in the requested direction. No draft, settlement
+step, or saved coordinate record is involved.
+
+A nonempty deletion intention inside a pending deletion restores that whole
+proposal's accepted text and removes the proposal. Inside a pending insertion,
+it removes only the targeted insertion text. A caret facing pending content
+from the accepted side, or facing outward from a proposal, refuses without
+changing the document or selection. Cross-paragraph and ambiguous ranges also
+refuse without mutation.
+
+`$inspectReviewDeletion(proposalId)` reads current node content inside an editor
+read/update. `$acceptReviewDeletion(proposalId)` removes the deleted text;
+`$rejectReviewDeletion(proposalId)` and `$removeReviewDeletion(proposalId)`
+restore it. These update operations retain no terminal record. Saving and
+reopening preserves current pending identities and formatting.
+
 ## Legacy editor-wide review mode
 
 The v2 segment implementation remains available behind explicitly named

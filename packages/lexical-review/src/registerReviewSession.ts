@@ -75,9 +75,16 @@ export function registerReviewSession(
       "A node-backed review session must be registered with the same Lexical editor that opened it.",
     );
   }
-  const handleDeletion = (backward: boolean, event?: Event | null): boolean => {
+  const handledEvents = new WeakSet<Event>();
+  const handleDeletion = (
+    backward: boolean,
+    event?: Event | null,
+    granularity: "character" | "word" = "character",
+  ): boolean => {
+    if (event && handledEvents.has(event)) return true;
+    if (event) handledEvents.add(event);
     event?.preventDefault();
-    const outcome = $deleteReviewText(editor, backward, options);
+    const outcome = $deleteReviewText(backward, { ...options, granularity });
     reportOutcome(options, outcome, "deletion");
     return true;
   };
@@ -88,6 +95,15 @@ export function registerReviewSession(
     if (event.inputType === "deleteContentForward") {
       return handleDeletion(false, event);
     }
+    if (
+      event.inputType === "deleteWordBackward" ||
+      event.inputType === "deleteWordForward"
+    )
+      return handleDeletion(
+        event.inputType === "deleteWordBackward",
+        event,
+        "word",
+      );
     return false;
   };
   const refuseFormatting = (): boolean => {
@@ -101,12 +117,13 @@ export function registerReviewSession(
     );
     return true;
   };
-  const refuseDeletionGranularity = (): boolean => {
+  const refuseDeletionGranularity = (event?: KeyboardEvent | null): boolean => {
+    event?.preventDefault();
     reportOutcome(
       options,
       unsupportedOutcome(
         "unsupported-target",
-        "Node-backed review deletion currently supports character intentions only.",
+        "Review deletion supports character, word, and explicit range intentions; line deletion is unsupported.",
       ),
       "deletion",
     );
@@ -219,7 +236,7 @@ export function registerReviewSession(
     ),
     editor.registerCommand(
       DELETE_WORD_COMMAND,
-      refuseDeletionGranularity,
+      (backward) => handleDeletion(backward, null, "word"),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
@@ -229,17 +246,31 @@ export function registerReviewSession(
     ),
     editor.registerCommand(
       KEY_BACKSPACE_COMMAND,
-      (event) => handleDeletion(true, event),
+      (event) =>
+        event?.metaKey
+          ? refuseDeletionGranularity(event)
+          : handleDeletion(
+              true,
+              event,
+              event?.ctrlKey || event?.altKey ? "word" : "character",
+            ),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       KEY_DELETE_COMMAND,
-      (event) => handleDeletion(false, event),
+      (event) =>
+        event?.metaKey
+          ? refuseDeletionGranularity(event)
+          : handleDeletion(
+              false,
+              event,
+              event?.ctrlKey || event?.altKey ? "word" : "character",
+            ),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(
       DELETE_LINE_COMMAND,
-      refuseDeletionGranularity,
+      () => refuseDeletionGranularity(),
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(

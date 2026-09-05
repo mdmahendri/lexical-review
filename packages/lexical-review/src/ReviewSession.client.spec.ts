@@ -318,7 +318,7 @@ describe("node-backed review session targeting", () => {
     ["backward", KEY_BACKSPACE_COMMAND, true],
     ["forward", KEY_DELETE_COMMAND, false],
   ] as const)(
-    "edits pending deletion content in the %s direction without restoring it",
+    "restores pending deletion content in the %s direction",
     async (_name, command, backward) => {
       const editor = createReviewEditor();
       const outcomes: ReviewIntentOutcome[] = [];
@@ -348,14 +348,8 @@ describe("node-backed review session targeting", () => {
       await Promise.resolve();
 
       editor.getEditorState().read(() => {
-        const deletion = firstParagraph().getChildAtIndex(1);
-        expect($isElementNode(deletion)).toBe(true);
-        if ($isElementNode(deletion)) {
-          expect(deletion.getTextContent()).toBe(backward ? "B" : "C");
-        }
-        expect(firstParagraph().getTextContent()).toBe(
-          backward ? "ABD" : "ACD",
-        );
+        expect(firstParagraph().getChildren().every($isTextNode)).toBe(true);
+        expect(firstParagraph().getTextContent()).toBe("ABCD");
       });
       expect(outcomes).toMatchObject([{ status: "changed" }]);
       unregister();
@@ -363,10 +357,10 @@ describe("node-backed review session targeting", () => {
   );
 
   it.each([
-    ["backward", KEY_BACKSPACE_COMMAND, "ACD", 1],
-    ["forward", KEY_DELETE_COMMAND, "ABD", 2],
+    ["backward", KEY_BACKSPACE_COMMAND, "ABCD", 2],
+    ["forward", KEY_DELETE_COMMAND, "ABCD", 2],
   ] as const)(
-    "deletes the %s character at a formatted proposal element boundary",
+    "restores a deletion from the %s formatted proposal element boundary",
     async (_direction, command, expectedText, expectedCaret) => {
       const editor = createReviewEditor();
       const outcomes: ReviewIntentOutcome[] = [];

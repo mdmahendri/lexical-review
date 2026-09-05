@@ -9,6 +9,11 @@ assert.equal(typeof root.LegacyReviewTextNode, "function");
 assert.equal("ReviewTextNode" in root, false);
 assert.equal(typeof root.openReviewSession, "function");
 for (const name of [
+  "$deleteReviewText",
+  "$inspectReviewDeletion",
+  "$removeReviewDeletion",
+  "$acceptReviewDeletion",
+  "$rejectReviewDeletion",
   "$insertReviewText",
   "$inspectReviewInsertion",
   "$removeReviewInsertion",
