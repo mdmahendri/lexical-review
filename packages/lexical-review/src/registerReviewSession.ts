@@ -53,7 +53,7 @@ type PointSnapshot = Readonly<{
   type: "element" | "text";
 }>;
 
-export type ReviewNodeRefusalCode =
+export type ReviewIntentRefusalCode =
   | "ambiguous-boundary"
   | "deletion-target-unavailable"
   | "invalid-proposal-id"
@@ -66,29 +66,30 @@ export type ReviewNodeRefusalCode =
   | "unsupported-target"
   | "unsupported-transfer";
 
-export type ReviewNodeRefusal = Readonly<{
-  code: ReviewNodeRefusalCode;
+export type ReviewIntentRefusal = Readonly<{
+  code: ReviewIntentRefusalCode;
   message: string;
+  status: "refused";
 }>;
 
-export type ReviewNodeOperationalError = Readonly<{
+export type ReviewIntentError = Readonly<{
   cause: unknown;
   code: string;
   message: string;
 }>;
 
-export type ReviewNodeOutcome<T = void> =
+export type ReviewIntentOutcome<T = void> =
   | Readonly<{ status: "changed"; value: T }>
   | Readonly<{ status: "unchanged"; value: T }>
-  | Readonly<{ reason: ReviewNodeRefusal; status: "refused" }>
-  | Readonly<{ error: ReviewNodeOperationalError; status: "failed" }>;
+  | ReviewIntentRefusal
+  | Readonly<{ error: ReviewIntentError; status: "failed" }>;
 
 export type ReviewProposalIdFactory = () => string;
 
 export type ReviewSessionRegistrationOptions = Readonly<{
-  onDeletionOutcome?: (outcome: ReviewNodeOutcome) => void;
-  onInsertionOutcome?: (outcome: ReviewNodeOutcome) => void;
-  onOutcome?: (outcome: ReviewNodeOutcome) => void;
+  onDeletionOutcome?: (outcome: ReviewIntentOutcome) => void;
+  onInsertionOutcome?: (outcome: ReviewIntentOutcome) => void;
+  onOutcome?: (outcome: ReviewIntentOutcome) => void;
   proposalIdFactory?: ReviewProposalIdFactory;
 }>;
 
@@ -111,11 +112,6 @@ type ProposalPoint = Readonly<{
 
 type SelectionPoint = AcceptedPoint | ProposalPoint;
 
-type SelectionFailure = Readonly<{
-  reason: ReviewNodeRefusal;
-  status: "refused";
-}>;
-
 type SelectionInspection = Readonly<{
   anchor: SelectionPoint;
   backward: boolean;
@@ -125,7 +121,7 @@ type SelectionInspection = Readonly<{
 }>;
 
 type Preparation<T> =
-  Readonly<{ status: "ready"; value: T }> | SelectionFailure;
+  Readonly<{ status: "ready"; value: T }> | ReviewIntentRefusal;
 
 type ProposalMapEntry = Readonly<{
   end: number;
@@ -170,25 +166,21 @@ type AcceptedSpan = Readonly<{
 let generatedProposalCounter = 0;
 
 function refusal(
-  code: ReviewNodeRefusalCode,
+  code: ReviewIntentRefusalCode,
   message: string,
-): SelectionFailure {
-  return { reason: { code, message }, status: "refused" };
+): ReviewIntentRefusal {
+  return { code, message, status: "refused" };
 }
 
-function changed(): ReviewNodeOutcome {
+function changed(): ReviewIntentOutcome {
   return { status: "changed", value: undefined };
 }
 
-function unchanged(): ReviewNodeOutcome {
+function unchanged(): ReviewIntentOutcome {
   return { status: "unchanged", value: undefined };
 }
 
-function refused(reason: ReviewNodeRefusal): ReviewNodeOutcome {
-  return { reason, status: "refused" };
-}
-
-function failed(cause: unknown, message: string): ReviewNodeOutcome {
+function failed(cause: unknown, message: string): ReviewIntentOutcome {
   return {
     error: {
       cause,
@@ -347,41 +339,37 @@ function getTextChildren(wrapper: ReviewElementNode): TextNode[] | null {
 
 function validateParagraphStructure(
   paragraph: ParagraphNode,
-): ReviewNodeRefusal | null {
+): ReviewIntentRefusal | null {
   for (const child of paragraph.getChildren()) {
     if ($isTextNode(child)) {
       if (hasUnsupportedTextFormatting(child)) {
-        return {
-          code: "unsupported-formatting",
-          message:
-            "Review editing supports bold, italic, strikethrough, and underline text without inline styles or token modes.",
-        };
+        return refusal(
+          "unsupported-formatting",
+          "Review editing supports bold, italic, strikethrough, and underline text without inline styles or token modes.",
+        );
       }
       continue;
     }
     if (isReviewElementNode(child)) {
       const textChildren = getTextChildren(child);
       if (textChildren === null) {
-        return {
-          code: "invalid-structural-target",
-          message:
-            "Review editing supports only direct paragraph text and text-only proposal wrappers.",
-        };
+        return refusal(
+          "invalid-structural-target",
+          "Review editing supports only direct paragraph text and text-only proposal wrappers.",
+        );
       }
       if (textChildren.some(hasUnsupportedTextFormatting)) {
-        return {
-          code: "unsupported-formatting",
-          message:
-            "Review editing supports bold, italic, strikethrough, and underline text without inline styles or token modes.",
-        };
+        return refusal(
+          "unsupported-formatting",
+          "Review editing supports bold, italic, strikethrough, and underline text without inline styles or token modes.",
+        );
       }
       continue;
     }
-    return {
-      code: "invalid-structural-target",
-      message:
-        "Review editing supports only direct paragraph text and text-only proposal wrappers.",
-    };
+    return refusal(
+      "invalid-structural-target",
+      "Review editing supports only direct paragraph text and text-only proposal wrappers.",
+    );
   }
   return null;
 }
@@ -397,14 +385,13 @@ function hasUnsupportedTextFormatting(node: TextNode): boolean {
 
 function validateSelectionFormatting(
   selection: RangeSelection,
-): ReviewNodeRefusal | null {
+): ReviewIntentRefusal | null {
   return (selection.format & ~SUPPORTED_TEXT_FORMAT_MASK) !== 0 ||
     selection.style !== ""
-    ? {
-        code: "unsupported-formatting",
-        message:
-          "Review editing supports bold, italic, strikethrough, and underline text without inline styles.",
-      }
+    ? refusal(
+        "unsupported-formatting",
+        "Review editing supports bold, italic, strikethrough, and underline text without inline styles.",
+      )
     : null;
 }
 
@@ -475,7 +462,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
     if (isRootParagraph(parentNode)) {
       const structure = validateParagraphStructure(parentNode);
       if (structure !== null) {
-        return { reason: structure, status: "refused" };
+        return structure;
       }
       const childIndex = getChildIndex(parentNode, node);
       if (childIndex === null) {
@@ -500,7 +487,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
       const { paragraph, wrapper: parent } = proposal;
       const structure = validateParagraphStructure(paragraph);
       if (structure !== null) {
-        return { reason: structure, status: "refused" };
+        return structure;
       }
       const childIndex = getChildIndex(paragraph, parent);
       if (childIndex === null) {
@@ -558,7 +545,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
     }
     const structure = validateParagraphStructure(paragraph);
     if (structure !== null) {
-      return { reason: structure, status: "refused" };
+      return structure;
     }
     const childIndex = getChildIndex(paragraph, node);
     if (childIndex === null) {
@@ -584,7 +571,7 @@ function classifyPoint(point: PointType): Preparation<SelectionPoint> {
   if (isRootParagraph(node)) {
     const structure = validateParagraphStructure(node);
     if (structure !== null) {
-      return { reason: structure, status: "refused" };
+      return structure;
     }
     const children = node.getChildren();
     if (point.offset > children.length) {
@@ -630,7 +617,7 @@ function inspectSelection(): Preparation<SelectionInspection> {
   }
   const formatting = validateSelectionFormatting(selection);
   if (formatting !== null) {
-    return { reason: formatting, status: "refused" };
+    return formatting;
   }
   const anchor = classifyPoint(selection.anchor);
   if (anchor.status !== "ready") {
@@ -1065,18 +1052,17 @@ function removeProposalRange(
 function replaceProposalRange(
   span: ProposalSpan,
   text: string,
-): ReviewNodeOutcome {
+): ReviewIntentOutcome {
   if (span.start === span.end) {
     return unchanged();
   }
   const startEntry = getStartEntry(span.map.entries, span.start);
   const endEntry = getEndEntry(span.map.entries, span.end);
   if (startEntry === null || endEntry === null) {
-    return refused({
-      code: "invalid-structural-target",
-      message:
-        "The proposal replacement range cannot be resolved in the live tree.",
-    });
+    return refusal(
+      "invalid-structural-target",
+      "The proposal replacement range cannot be resolved in the live tree.",
+    );
   }
   const fallbackIndex = getChildIndex(
     span.map.paragraph,
@@ -1185,15 +1171,15 @@ function defaultProposalIdFactory(): string {
 function missingProposalNode(
   editor: LexicalEditor,
   kind: "deletion" | "insertion",
-): ReviewNodeOutcome | null {
+): ReviewIntentOutcome | null {
   const nodeClass =
     kind === "insertion" ? ReviewInsertionNode : ReviewDeletionNode;
   return editor.hasNode(nodeClass)
     ? null
-    : refused({
-        code: "invalid-structural-target",
-        message: `The editor must register the review-${kind} node before authoring ${kind} proposals.`,
-      });
+    : refusal(
+        "invalid-structural-target",
+        `The editor must register the review-${kind} node before authoring ${kind} proposals.`,
+      );
 }
 
 function insertAcceptedProposal(
@@ -1296,45 +1282,37 @@ function acceptedDeletionTarget(
 function deleteProposalCharacter(
   point: ProposalPoint,
   backward: boolean,
-): ReviewNodeOutcome {
+): ReviewIntentOutcome {
   const map = buildProposalMapAroundPoint(point);
   if (map.status !== "ready") {
-    return refused(map.reason);
+    return map;
   }
   const offset = getProposalOffset(point, map.value);
   if (offset === null) {
-    return refused(
-      refusal(
-        "invalid-structural-target",
-        "The proposal caret cannot be resolved in the live tree.",
-      ).reason,
+    return refusal(
+      "invalid-structural-target",
+      "The proposal caret cannot be resolved in the live tree.",
     );
   }
   const text = map.value.entries
     .map((entry) => entry.node.getTextContent())
     .join("");
   if (!isTextBoundary(text, offset)) {
-    return refused(
-      refusal(
-        "invalid-structural-target",
-        "The proposal caret is not on a supported Unicode text boundary.",
-      ).reason,
+    return refusal(
+      "invalid-structural-target",
+      "The proposal caret is not on a supported Unicode text boundary.",
     );
   }
   if (backward && offset === 0) {
-    return refused(
-      refusal(
-        "deletion-target-unavailable",
-        "Backward deletion may not cross from proposal content into accepted content.",
-      ).reason,
+    return refusal(
+      "deletion-target-unavailable",
+      "Backward deletion may not cross from proposal content into accepted content.",
     );
   }
   if (!backward && offset === map.value.total) {
-    return refused(
-      refusal(
-        "deletion-target-unavailable",
-        "Forward deletion may not cross from proposal content into accepted content.",
-      ).reason,
+    return refusal(
+      "deletion-target-unavailable",
+      "Forward deletion may not cross from proposal content into accepted content.",
     );
   }
   const start = backward ? previousCharacterOffset(text, offset) : offset;
@@ -1346,7 +1324,7 @@ function deleteProposalCharacter(
   return changed();
 }
 
-function deleteProposalSelection(span: ProposalSpan): ReviewNodeOutcome {
+function deleteProposalSelection(span: ProposalSpan): ReviewIntentOutcome {
   if (span.start === span.end) {
     return unchanged();
   }
@@ -1371,20 +1349,19 @@ function performInsertion(
   editor: LexicalEditor,
   text: string,
   options: ReviewSessionRegistrationOptions,
-): ReviewNodeOutcome {
+): ReviewIntentOutcome {
   if (text.length === 0) {
     return unchanged();
   }
   if (/\r|\n/u.test(text)) {
-    return refused({
-      code: "unsupported-input",
-      message:
-        "Text insertion supports inline text only; paragraph breaks are unsupported.",
-    });
+    return refusal(
+      "unsupported-input",
+      "Text insertion supports inline text only; paragraph breaks are unsupported.",
+    );
   }
   const inspection = inspectSelection();
   if (inspection.status !== "ready") {
-    return refused(inspection.reason);
+    return inspection;
   }
   if (!inspection.value.collapsed) {
     if (
@@ -1393,42 +1370,39 @@ function performInsertion(
     ) {
       const proposalSpan = buildProposalSpan(inspection.value);
       if (proposalSpan.status !== "ready") {
-        return refused(proposalSpan.reason);
+        return proposalSpan;
       }
       if (!$isReviewInsertionNode(proposalSpan.value.map.wrappers[0])) {
-        return refused({
-          code: "unsupported-proposal-edit",
-          message:
-            "Insertion replacement may edit pending insertion content, not deletion content.",
-        });
+        return refusal(
+          "unsupported-proposal-edit",
+          "Insertion replacement may edit pending insertion content, not deletion content.",
+        );
       }
       return replaceProposalRange(proposalSpan.value, text);
     }
-    return refused({
-      code: "unsupported-target",
-      message:
-        "Text replacement ranges are not part of the node-backed insertion contract.",
-    });
+    return refusal(
+      "unsupported-target",
+      "Text replacement ranges are not part of the node-backed insertion contract.",
+    );
   }
   const point = inspection.value.anchor;
   if (point.association === "proposal") {
     if (!$isReviewInsertionNode(point.wrapper)) {
-      return refused({
-        code: "unsupported-proposal-edit",
-        message:
-          "Insertion typing may edit pending insertion content, not deletion content.",
-      });
+      return refusal(
+        "unsupported-proposal-edit",
+        "Insertion typing may edit pending insertion content, not deletion content.",
+      );
     }
     const map = buildProposalMapAroundPoint(point);
     if (map.status !== "ready") {
-      return refused(map.reason);
+      return map;
     }
     const offset = getProposalOffset(point, map.value);
     if (offset === null) {
-      return refused({
-        code: "invalid-structural-target",
-        message: "The proposal caret cannot be resolved in the live tree.",
-      });
+      return refusal(
+        "invalid-structural-target",
+        "The proposal caret cannot be resolved in the live tree.",
+      );
     }
     insertIntoProposal(point, text);
     placeProposalCaret(map.value, offset + text.length, point.childIndex);
@@ -1440,7 +1414,7 @@ function performInsertion(
   }
   const proposalId = prepareProposalId(options);
   if (proposalId.status !== "ready") {
-    return refused(proposalId.reason);
+    return proposalId;
   }
   insertAcceptedProposal(
     point,
@@ -1456,10 +1430,10 @@ function performDeletion(
   editor: LexicalEditor,
   backward: boolean,
   options: ReviewSessionRegistrationOptions,
-): ReviewNodeOutcome {
+): ReviewIntentOutcome {
   const inspection = inspectSelection();
   if (inspection.status !== "ready") {
-    return refused(inspection.reason);
+    return inspection;
   }
   if (!inspection.value.collapsed) {
     if (
@@ -1468,13 +1442,13 @@ function performDeletion(
     ) {
       const proposalSpan = buildProposalSpan(inspection.value);
       if (proposalSpan.status !== "ready") {
-        return refused(proposalSpan.reason);
+        return proposalSpan;
       }
       return deleteProposalSelection(proposalSpan.value);
     }
     const acceptedSpan = buildAcceptedSpan(inspection.value);
     if (acceptedSpan.status !== "ready") {
-      return refused(acceptedSpan.reason);
+      return acceptedSpan;
     }
     if (acceptedSpan.value.start === acceptedSpan.value.end) {
       return unchanged();
@@ -1485,15 +1459,14 @@ function performDeletion(
     }
     const proposalId = prepareProposalId(options);
     if (proposalId.status !== "ready") {
-      return refused(proposalId.reason);
+      return proposalId;
     }
     const selected = getAcceptedSelectedNodes(acceptedSpan.value);
     if (selected === null || selected.length === 0) {
-      return refused({
-        code: "invalid-structural-target",
-        message:
-          "The accepted range could not be isolated without changing its content.",
-      });
+      return refusal(
+        "invalid-structural-target",
+        "The accepted range could not be isolated without changing its content.",
+      );
     }
     const wrapper = $createReviewDeletionNode(proposalId.value);
     selected[0]!.insertBefore(wrapper);
@@ -1510,11 +1483,10 @@ function performDeletion(
   }
   const target = acceptedDeletionTarget(point, backward);
   if (target === null || target.start === target.end) {
-    return refused({
-      code: "deletion-target-unavailable",
-      message:
-        "Deletion may not cross proposal content or an empty accepted boundary.",
-    });
+    return refusal(
+      "deletion-target-unavailable",
+      "Deletion may not cross proposal content or an empty accepted boundary.",
+    );
   }
   const missingNode = missingProposalNode(editor, "deletion");
   if (missingNode !== null) {
@@ -1522,7 +1494,7 @@ function performDeletion(
   }
   const proposalId = prepareProposalId(options);
   if (proposalId.status !== "ready") {
-    return refused(proposalId.reason);
+    return proposalId;
   }
   const selected = getAcceptedSelectedNodes({
     end: target.end,
@@ -1530,10 +1502,10 @@ function performDeletion(
     start: target.start,
   });
   if (selected === null || selected.length === 0) {
-    return refused({
-      code: "invalid-structural-target",
-      message: "The accepted deletion target could not be isolated safely.",
-    });
+    return refusal(
+      "invalid-structural-target",
+      "The accepted deletion target could not be isolated safely.",
+    );
   }
   const wrapper = $createReviewDeletionNode(proposalId.value);
   selected[0]!.insertBefore(wrapper);
@@ -1545,15 +1517,15 @@ function performDeletion(
 }
 
 function unsupportedOutcome(
-  code: ReviewNodeRefusalCode,
+  code: ReviewIntentRefusalCode,
   message: string,
-): ReviewNodeOutcome {
-  return refused({ code, message });
+): ReviewIntentOutcome {
+  return refusal(code, message);
 }
 
 function reportOutcome(
   options: ReviewSessionRegistrationOptions,
-  outcome: ReviewNodeOutcome,
+  outcome: ReviewIntentOutcome,
   kind: "deletion" | "insertion" | null,
 ): void {
   options.onOutcome?.(outcome);
@@ -1564,7 +1536,9 @@ function reportOutcome(
   }
 }
 
-function safePerform(operation: () => ReviewNodeOutcome): ReviewNodeOutcome {
+function safePerform(
+  operation: () => ReviewIntentOutcome,
+): ReviewIntentOutcome {
   try {
     return operation();
   } catch (cause) {

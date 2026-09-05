@@ -20,7 +20,7 @@ import {
 } from "./index";
 import {
   registerReviewSession,
-  type ReviewNodeOutcome,
+  type ReviewIntentOutcome,
 } from "./registerReviewSession";
 import {
   paragraph,
@@ -98,7 +98,7 @@ function firstText(node: ElementNode): TextNode {
 function open(
   editor: LexicalEditor,
   input: unknown,
-  outcomes: ReviewNodeOutcome[] = [],
+  outcomes: ReviewIntentOutcome[] = [],
   options: Parameters<typeof registerReviewSession>[2] = {},
 ) {
   const opened = openReviewSession(editor, input);
@@ -155,7 +155,7 @@ describe("node-backed review session targeting", () => {
     "continues an insertion at its proposal boundary offset %s",
     async (offset) => {
       const editor = createReviewEditor();
-      const outcomes: ReviewNodeOutcome[] = [];
+      const outcomes: ReviewIntentOutcome[] = [];
       const { unregister } = open(
         editor,
         reviewDocument([
@@ -188,7 +188,7 @@ describe("node-backed review session targeting", () => {
 
   it("continues a pending insertion on the proposal side", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { opened, unregister } = open(
       editor,
       reviewDocument([
@@ -237,7 +237,7 @@ describe("node-backed review session targeting", () => {
 
   it("replaces a selected span inside one pending insertion identity", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -274,7 +274,7 @@ describe("node-backed review session targeting", () => {
 
   it("removes a pending insertion when its whole proposal-side range is deleted", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { opened, unregister } = open(
       editor,
       reviewDocument([
@@ -321,7 +321,7 @@ describe("node-backed review session targeting", () => {
     "edits pending deletion content in the %s direction without restoring it",
     async (_name, command, backward) => {
       const editor = createReviewEditor();
-      const outcomes: ReviewNodeOutcome[] = [];
+      const outcomes: ReviewIntentOutcome[] = [];
       const { unregister } = open(
         editor,
         reviewDocument([
@@ -369,7 +369,7 @@ describe("node-backed review session targeting", () => {
     "deletes the %s character at a formatted proposal element boundary",
     async (_direction, command, expectedText, expectedCaret) => {
       const editor = createReviewEditor();
-      const outcomes: ReviewNodeOutcome[] = [];
+      const outcomes: ReviewIntentOutcome[] = [];
       const { unregister } = open(
         editor,
         reviewDocument([
@@ -409,7 +409,7 @@ describe("node-backed review session targeting", () => {
 
   it("inserts at a formatted proposal element boundary and restores that caret", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -453,7 +453,7 @@ describe("node-backed review session targeting", () => {
     "refuses accepted-side deletion %s pending deletion content",
     async (_side, acceptedIndex, command) => {
       const editor = createReviewEditor();
-      const outcomes: ReviewNodeOutcome[] = [];
+      const outcomes: ReviewIntentOutcome[] = [];
       const { unregister } = open(
         editor,
         reviewDocument([
@@ -485,7 +485,7 @@ describe("node-backed review session targeting", () => {
       await Promise.resolve();
 
       expect(outcomes).toMatchObject([
-        { reason: { code: "deletion-target-unavailable" }, status: "refused" },
+        { code: "deletion-target-unavailable", status: "refused" },
       ]);
       expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
       expect(editor.getEditorState().read(liveSelection)).toEqual(
@@ -497,7 +497,7 @@ describe("node-backed review session targeting", () => {
 
   it("refuses zero-length deletion adjacency without moving selection", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -528,7 +528,7 @@ describe("node-backed review session targeting", () => {
     await Promise.resolve();
 
     expect(outcomes).toMatchObject([
-      { reason: { code: "deletion-target-unavailable" }, status: "refused" },
+      { code: "deletion-target-unavailable", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     expect(editor.getEditorState().read(liveSelection)).toEqual(
@@ -539,7 +539,7 @@ describe("node-backed review session targeting", () => {
 
   it("refuses forward deletion at the end of a pending deletion", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -566,7 +566,7 @@ describe("node-backed review session targeting", () => {
     await Promise.resolve();
 
     expect(outcomes).toMatchObject([
-      { reason: { code: "deletion-target-unavailable" }, status: "refused" },
+      { code: "deletion-target-unavailable", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     expect(editor.getEditorState().read(liveSelection)).toEqual(
@@ -582,7 +582,7 @@ describe("node-backed review session targeting", () => {
     "creates an insertion on the explicit accepted side %s a proposal",
     async (_side, acceptedIndex, expectedText, insertionIndex) => {
       const editor = createReviewEditor();
-      const outcomes: ReviewNodeOutcome[] = [];
+      const outcomes: ReviewIntentOutcome[] = [];
       const { unregister } = open(
         editor,
         reviewDocument([
@@ -632,7 +632,7 @@ describe("node-backed review session targeting", () => {
 
   it("keeps a paragraph boundary away from proposals on the accepted side", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -678,7 +678,7 @@ describe("node-backed review session targeting", () => {
 
   it("creates a formatted deletion with UTF-16-safe non-BMP boundaries", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("A😀B", 1)], 1)]),
@@ -721,7 +721,7 @@ describe("node-backed review session targeting", () => {
 
   it("deletes a selected accepted range across formatted text runs", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { opened, unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB"), text("CD", 1)])]),
@@ -780,7 +780,7 @@ describe("node-backed review session targeting", () => {
     "deletes from an accepted paragraph element boundary in the %s direction",
     async (backward) => {
       const editor = createReviewEditor();
-      const outcomes: ReviewNodeOutcome[] = [];
+      const outcomes: ReviewIntentOutcome[] = [];
       const { unregister } = open(
         editor,
         reviewDocument([paragraph([text("A"), text("B", 1)])]),
@@ -818,7 +818,7 @@ describe("node-backed review session targeting", () => {
 
   it("allows a selection across formatted nodes sharing one proposal identity", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -867,7 +867,7 @@ describe("node-backed review session targeting", () => {
 
   it("refuses ambiguous paragraph boundaries and mixed ranges without mutation", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([
@@ -889,7 +889,7 @@ describe("node-backed review session targeting", () => {
     );
     await Promise.resolve();
     expect(outcomes).toMatchObject([
-      { reason: { code: "ambiguous-boundary" }, status: "refused" },
+      { code: "ambiguous-boundary", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     expect(editor.getEditorState().read(liveSelection)).toEqual(
@@ -907,7 +907,7 @@ describe("node-backed review session targeting", () => {
     );
     await Promise.resolve();
     expect(outcomes).toMatchObject([
-      { reason: { code: "ambiguous-boundary" }, status: "refused" },
+      { code: "ambiguous-boundary", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeOppositeBoundary);
     expect(editor.getEditorState().read(liveSelection)).toEqual(
@@ -935,7 +935,7 @@ describe("node-backed review session targeting", () => {
     ).toBe(true);
     await Promise.resolve();
     expect(outcomes).toMatchObject([
-      { reason: { code: "unsafe-proposal-intersection" }, status: "refused" },
+      { code: "unsafe-proposal-intersection", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeMixedRange);
     unregister();
@@ -943,7 +943,7 @@ describe("node-backed review session targeting", () => {
 
   it("refuses controlled drop insertion without mutating the live selection", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -965,7 +965,7 @@ describe("node-backed review session targeting", () => {
     await Promise.resolve();
 
     expect(outcomes).toMatchObject([
-      { reason: { code: "unsupported-transfer" }, status: "refused" },
+      { code: "unsupported-transfer", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     expect(editor.getEditorState().read(liveSelection)).toEqual(
@@ -976,7 +976,7 @@ describe("node-backed review session targeting", () => {
 
   it("refuses controlled replacement insertion with data", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -997,7 +997,7 @@ describe("node-backed review session targeting", () => {
     await Promise.resolve();
 
     expect(outcomes).toMatchObject([
-      { reason: { code: "unsupported-transfer" }, status: "refused" },
+      { code: "unsupported-transfer", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     unregister();
@@ -1005,7 +1005,7 @@ describe("node-backed review session targeting", () => {
 
   it("keeps collapsed generic text removal unchanged", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -1030,7 +1030,7 @@ describe("node-backed review session targeting", () => {
 
   it("refuses cut-driven text removal without mutating the range", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("AB")])]),
@@ -1049,7 +1049,7 @@ describe("node-backed review session targeting", () => {
     await Promise.resolve();
 
     expect(outcomes).toMatchObject([
-      { reason: { code: "unsupported-transfer" }, status: "refused" },
+      { code: "unsupported-transfer", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     expect(editor.getEditorState().read(liveSelection)).toEqual(
@@ -1100,7 +1100,7 @@ describe("node-backed review session targeting", () => {
 
   it("targets an empty paragraph on the accepted side", async () => {
     const editor = createReviewEditor();
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([])]),
@@ -1128,7 +1128,7 @@ describe("node-backed review session targeting", () => {
         throw error;
       },
     });
-    const outcomes: ReviewNodeOutcome[] = [];
+    const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
       editor,
       reviewDocument([paragraph([text("A")])]),
@@ -1146,7 +1146,7 @@ describe("node-backed review session targeting", () => {
     await Promise.resolve();
 
     expect(outcomes).toMatchObject([
-      { reason: { code: "invalid-structural-target" }, status: "refused" },
+      { code: "invalid-structural-target", status: "refused" },
     ]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     unregister();

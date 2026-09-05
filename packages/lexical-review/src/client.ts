@@ -8,9 +8,9 @@ export {
   type ReviewSessionRegistrationOptions,
 } from "./registerReviewSession";
 export type {
-  ReviewNodeOperationalError,
-  ReviewNodeOutcome,
-  ReviewNodeRefusal,
-  ReviewNodeRefusalCode,
+  ReviewIntentError,
+  ReviewIntentOutcome,
+  ReviewIntentRefusal,
+  ReviewIntentRefusalCode,
   ReviewProposalIdFactory,
 } from "./registerReviewSession";
