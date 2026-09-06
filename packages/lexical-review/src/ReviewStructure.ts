@@ -44,6 +44,10 @@ export type ReviewStructuralProposal = Readonly<{
   kind: ReviewBoundaryKind;
 }>;
 
+/**
+ * Requires an active editor context (`editor.read()` or `editor.update()`):
+ * the tree walk itself is pure, but the composition gate reads `$getEditor()`.
+ */
 export function validateStructuralState(): ReviewIntentOutcome | null {
   if ($getEditor().isComposing())
     return refusal(
