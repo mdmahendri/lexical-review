@@ -172,6 +172,12 @@ export function $claimTextInsertion(
     const selected = isolateAcceptedTextRange(target);
     if (!selected?.length)
       throw new Error("Validated replacement target could not be isolated.");
+    if (
+      selected.map((node) => node.getTextContent()).join("") === text &&
+      selected.every((node) => node.getFormat() === target.selection.format)
+    ) {
+      return unchanged();
+    }
     const oldSide = $createReviewDeletionNode(identity.value);
     const newSide = $createReviewInsertionNode(identity.value);
     const content = $createTextNode(text).setFormat(target.selection.format);
