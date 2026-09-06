@@ -513,11 +513,7 @@ it("rejects malformed native formatting baselines and identities before installi
   const saved = session.exportDocument();
   if (saved.status !== "valid")
     throw new Error("Expected valid formatting document");
-  for (const accepted of [
-    [{ text: "wrong", format: 0 }],
-    [{ text: "target", format: 16 }],
-    [],
-  ]) {
+  for (const accepted of [[{ text: "wrong", format: 0 }], []]) {
     const malformed = structuredClone(saved.value) as unknown as {
       root: { children: Array<{ children: Array<{ accepted: unknown }> }> };
     };
@@ -525,6 +521,20 @@ it("rejects malformed native formatting baselines and identities before installi
     const before = editor.getEditorState();
     expect(validateReviewDocument(malformed).status).toBe("invalid");
     expect(openReviewSession(editor, malformed).status).toBe("invalid");
+    expect(editor.getEditorState()).toBe(before);
+  }
+  {
+    // Out-of-mask accepted formats are forward/presentational, not malformed
+    // (#62): unsupported, never silently stripped.
+    const malformed = structuredClone(saved.value) as unknown as {
+      root: { children: Array<{ children: Array<{ accepted: unknown }> }> };
+    };
+    malformed.root.children[0]!.children[0]!.accepted = [
+      { text: "target", format: 16 },
+    ];
+    const before = editor.getEditorState();
+    expect(validateReviewDocument(malformed).status).toBe("unsupported");
+    expect(openReviewSession(editor, malformed).status).toBe("unsupported");
     expect(editor.getEditorState()).toBe(before);
   }
 });

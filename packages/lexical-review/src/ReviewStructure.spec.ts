@@ -406,9 +406,6 @@ it("rejects malformed native boundary placement and identity before installing s
       doc.root.children[1]!.children.push(doc.root.children[1]!.children[0]!),
     (doc: {
       root: { children: Array<{ children: Array<{ rightFormat?: number }> }> };
-    }) => (doc.root.children[1]!.children[0]!.rightFormat = 16),
-    (doc: {
-      root: { children: Array<{ children: Array<{ rightFormat?: number }> }> };
     }) => doc.root.children[1]!.children.reverse(),
   ]) {
     const malformed = structuredClone(saved.value);
@@ -416,6 +413,20 @@ it("rejects malformed native boundary placement and identity before installing s
     const before = editor.getEditorState();
     expect(validateReviewDocument(malformed).status).toBe("invalid");
     expect(openReviewSession(editor, malformed).status).toBe("invalid");
+    expect(editor.getEditorState()).toBe(before);
+  }
+  {
+    // Out-of-mask boundary formats are forward/presentational (#62):
+    // unsupported, never silently stripped.
+    const malformed = structuredClone(saved.value);
+    (
+      malformed as unknown as {
+        root: { children: Array<{ children: Array<{ rightFormat?: number }> }> };
+      }
+    ).root.children[1]!.children[0]!.rightFormat = 16;
+    const before = editor.getEditorState();
+    expect(validateReviewDocument(malformed).status).toBe("unsupported");
+    expect(openReviewSession(editor, malformed).status).toBe("unsupported");
     expect(editor.getEditorState()).toBe(before);
   }
 });

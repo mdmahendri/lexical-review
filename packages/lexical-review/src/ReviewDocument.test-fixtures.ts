@@ -40,6 +40,61 @@ export function reviewNode(
   };
 }
 
+export function formattingNode(
+  proposalId: string,
+  children: unknown[],
+  accepted: unknown[],
+) {
+  return {
+    accepted,
+    children,
+    direction: null,
+    extensions: [],
+    format: "",
+    indent: 0,
+    proposalId,
+    type: "review-formatting",
+    version: 1,
+  };
+}
+
+export function boundaryNode(
+  proposalId: string,
+  kind: "split" | "merge",
+  leftFormat = 0,
+  rightFormat = 0,
+) {
+  return {
+    extensions: [],
+    kind,
+    leftFormat,
+    proposalId,
+    rightFormat,
+    type: "review-boundary",
+    version: 1,
+  };
+}
+
+export function fragmentNode(
+  proposalId: string,
+  children: unknown[],
+  startsParagraph: boolean,
+  emptyFormat = 0,
+) {
+  return {
+    children,
+    direction: null,
+    emptyFormat,
+    extensions: [],
+    format: "",
+    indent: 0,
+    proposalId,
+    startsParagraph,
+    type: "review-fragment",
+    version: 1,
+  };
+}
+
 export function reviewDocument(children: unknown[]) {
   return {
     root: {

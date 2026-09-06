@@ -47,8 +47,12 @@ function sameSerializedValue(left: unknown, right: unknown): boolean {
   }
   const leftRecord = left as Record<string, unknown>;
   const rightRecord = right as Record<string, unknown>;
-  const leftKeys = Object.keys(leftRecord).sort();
-  const rightKeys = Object.keys(rightRecord).sort();
+  const leftKeys = Object.keys(leftRecord)
+    .filter((key) => key !== "key")
+    .sort();
+  const rightKeys = Object.keys(rightRecord)
+    .filter((key) => key !== "key")
+    .sort();
   return (
     leftKeys.length === rightKeys.length &&
     leftKeys.every(
@@ -169,7 +173,9 @@ export function openReviewSession(
   try {
     editor.setEditorState(imported.value);
   } catch (cause) {
-    editor.setEditorState(previousEditorState);
+    if (editor.getEditorState() !== previousEditorState) {
+      editor.setEditorState(previousEditorState);
+    }
     return invalid(
       cause instanceof Error
         ? cause.message

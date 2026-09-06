@@ -2,7 +2,8 @@ import { validFragmentPositions } from "./ReviewFragmentInvariant";
 import type { EditorState, SerializedEditorState } from "lexical";
 import { isValidProposalId } from "./ProposalIdentity";
 
-import { isSupportedFormat, isValidFormatRuns } from "./ReviewFormattingState";
+import { isSupportedFormat } from "./ReviewFormattingState";
+import type { ReviewFormatRun } from "./ReviewFormattingState";
 
 const REVIEW_STATE_KEY = "lexical-review";
 const SUPPORTED_TEXT_FORMAT_MASK = 0b1111;
@@ -185,13 +186,29 @@ function validateReviewNode(
       ]) ||
       value.version !== 1 ||
       (value.kind !== "split" && value.kind !== "merge") ||
-      !isSupportedFormat(value.leftFormat) ||
-      !isSupportedFormat(value.rightFormat) ||
       !isValidProposalId(value.proposalId)
     )
       return invalid(path, "Invalid serialized structural boundary.");
-    if (proposals.has(value.proposalId))
-      return invalid(path, "A structural identity must occur exactly once.");
+    if (!isSupportedFormat(value.leftFormat)) {
+      return unsupported(
+        `${path}.leftFormat`,
+        "Only bold, italic, strikethrough, and underline boundary formats are supported.",
+      );
+    }
+    if (!isSupportedFormat(value.rightFormat)) {
+      return unsupported(
+        `${path}.rightFormat`,
+        "Only bold, italic, strikethrough, and underline boundary formats are supported.",
+      );
+    }
+    const duplicate = proposals.get(value.proposalId);
+    if (duplicate)
+      return invalid(
+        path,
+        duplicate.kind === "boundary"
+          ? "[invalid-structural-target] A structural identity must occur exactly once."
+          : "[unsafe-proposal-intersection] A text-proposal identity must never equal a boundary identity.",
+      );
     proposals.set(value.proposalId, { kind, paragraph, index });
     return validateEmptyExtensions(value.extensions, `${path}.extensions`);
   }
@@ -233,15 +250,17 @@ function validateReviewNode(
       "Proposal identity must be nonempty text without surrounding whitespace or control characters.",
     );
   }
-  if (
-    kind === "fragment" &&
-    (typeof value.startsParagraph !== "boolean" ||
-      !isSupportedFormat(value.emptyFormat))
-  )
+  if (kind === "fragment" && typeof value.startsParagraph !== "boolean")
     return invalid(
       path,
       "Invalid fragment boundary or empty formatting metadata.",
     );
+  if (kind === "fragment" && !isSupportedFormat(value.emptyFormat)) {
+    return unsupported(
+      `${path}.emptyFormat`,
+      "Only bold, italic, strikethrough, and underline fragment formats are supported.",
+    );
+  }
   const prior = proposals.get(value.proposalId);
   if (
     prior &&
@@ -257,7 +276,7 @@ function validateReviewNode(
   ) {
     return invalid(
       `${path}.proposalId`,
-      "A proposal must have contiguous ordered sides in one paragraph.",
+      "[unsafe-proposal-intersection] A proposal must have contiguous ordered sides in one paragraph.",
     );
   }
   proposals.set(value.proposalId, { kind, paragraph, index });
@@ -287,18 +306,77 @@ function validateReviewNode(
       return child;
     }
   }
-  if (
-    kind === "formatting" &&
-    (!isValidFormatRuns(value.accepted) ||
-      value.accepted.map((run) => run.text).join("") !==
-        value.children.map((child) => (child as JsonRecord).text).join(""))
-  ) {
-    return invalid(
-      `${path}.accepted`,
-      "Formatting proposals must retain supported accepted formats for exactly their current text.",
-    );
+  if (kind === "formatting") {
+    const accepted = value.accepted;
+    if (
+      !Array.isArray(accepted) ||
+      accepted.length === 0 ||
+      !accepted.every(
+        (run) =>
+          isRecord(run) &&
+          Object.keys(run).length === 2 &&
+          typeof run.text === "string" &&
+          run.text.length > 0 &&
+          Number.isInteger(run.format),
+      )
+    ) {
+      return invalid(
+        `${path}.accepted`,
+        "Formatting proposals must retain supported accepted formats for exactly their current text.",
+      );
+    }
+    if (
+      !accepted.every((run) =>
+        isSupportedFormat((run as JsonRecord).format),
+      )
+    ) {
+      return unsupported(
+        `${path}.accepted`,
+        "Only bold, italic, strikethrough, and underline accepted formats are supported.",
+      );
+    }
+    const acceptedRuns = accepted as readonly ReviewFormatRun[];
+    const currentText = (value.children as JsonRecord[])
+      .map((child) => child.text)
+      .join("");
+    if (acceptedRuns.map((run) => run.text).join("") !== currentText) {
+      return invalid(
+        `${path}.accepted`,
+        "Formatting proposals must retain supported accepted formats for exactly their current text.",
+      );
+    }
+    const currentRuns = (value.children as JsonRecord[]).map((child) => ({
+      format: child.format as number,
+      text: child.text as string,
+    }));
+    if (sameFormatRunList(currentRuns, acceptedRuns)) {
+      return invalid(
+        `${path}.accepted`,
+        "A formatting proposal equal to its accepted formats is a no-op.",
+      );
+    }
   }
   return valid();
+}
+
+function sameFormatRunList(
+  left: readonly ReviewFormatRun[],
+  right: readonly ReviewFormatRun[],
+): boolean {
+  const canonical = (
+    runs: readonly ReviewFormatRun[],
+  ): Array<{ text: string; format: number }> => {
+    const result: Array<{ text: string; format: number }> = [];
+    for (const run of runs) {
+      const last = result.at(-1);
+      if (last?.format === run.format) last.text += run.text;
+      else result.push({ text: run.text, format: run.format });
+    }
+    return result;
+  };
+  return (
+    JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
+  );
 }
 
 function validateParagraphNode(
@@ -356,13 +434,15 @@ function validateParagraphNode(
   const boundaries = value.children.filter(
     (child) => isRecord(child) && child.type === "review-boundary",
   );
-  if (
-    boundaries.length > 1 ||
-    (boundaries[0]?.kind === "split" && value.children[0] !== boundaries[0])
-  )
+  if (boundaries.length > 1)
     return invalid(
       path,
-      "A paragraph permits one boundary; a split must be its first child.",
+      "[ambiguous-boundary] A paragraph permits at most one boundary.",
+    );
+  if (boundaries[0]?.kind === "split" && value.children[0] !== boundaries[0])
+    return invalid(
+      path,
+      "[ambiguous-boundary] A split marker must be the first child of its paragraph.",
     );
   for (let index = 0; index < value.children.length; index += 1) {
     const child = value.children[index];
@@ -465,7 +545,7 @@ export function validateReviewDocument(
     )
       return invalid(
         `$.root.children[${index}]`,
-        "A split requires an attached left paragraph without a pending merge.",
+        "[invalid-structural-target] A split requires an attached left paragraph without a pending merge.",
       );
   }
 
@@ -481,10 +561,54 @@ export function validateReviewDocument(
     }
   }
 
+  const replacementSides = new Map<
+    string,
+    { delText: string; insText: string; insPath: string }
+  >();
+  root.children.forEach((paragraph, p) => {
+    const children = (paragraph as JsonRecord).children as JsonRecord[];
+    children.forEach((child, index) => {
+      if (!isRecord(child)) return;
+      const childPath = `$.root.children[${p}].children[${index}]`;
+      if (child.type === "review-deletion" && typeof child.proposalId === "string") {
+        const sides = replacementSides.get(child.proposalId) ?? {
+          delText: "",
+          insText: "",
+          insPath: childPath,
+        };
+        sides.delText += ((child.children as JsonRecord[]) ?? [])
+          .map((node) => (isRecord(node) ? node.text : ""))
+          .join("");
+        replacementSides.set(child.proposalId as string, sides);
+      }
+      if (child.type === "review-insertion" && typeof child.proposalId === "string") {
+        const sides = replacementSides.get(child.proposalId) ?? {
+          delText: "",
+          insText: "",
+          insPath: childPath,
+        };
+        sides.insText += ((child.children as JsonRecord[]) ?? [])
+          .map((node) => (isRecord(node) ? node.text : ""))
+          .join("");
+        if (sides.insText === "") sides.insPath = childPath;
+        replacementSides.set(child.proposalId as string, sides);
+      }
+    });
+  });
+  for (const sides of replacementSides.values()) {
+    if (sides.delText !== "" && sides.delText === sides.insText) {
+      return invalid(
+        sides.insPath,
+        "An atomic replacement proposal with equal sides is a no-op.",
+      );
+    }
+  }
+
   const fragments = new Map<
     string,
     import("./ReviewFragmentInvariant").FragmentComponentPosition[]
   >();
+  const fragmentText = new Map<string, string>();
   root.children.forEach((paragraph, p) => {
     const children = (paragraph as JsonRecord).children as JsonRecord[];
     children.forEach((child, index) => {
@@ -498,14 +622,26 @@ export function validateReviewDocument(
         startsParagraph: child.startsParagraph as boolean,
       });
       fragments.set(id, positions);
+      const componentText = ((child.children as JsonRecord[]) ?? [])
+        .map((node) => (isRecord(node) ? node.text : ""))
+        .join("");
+      fragmentText.set(id, `${fragmentText.get(id) ?? ""}${componentText}`);
     });
   });
   for (const positions of fragments.values())
     if (!validFragmentPositions(positions))
       return invalid(
         "$.root.children",
-        "Fragment components must own contiguous paragraph boundaries without intervening accepted content.",
+        "[unsafe-proposal-intersection] Fragment components must own contiguous paragraph boundaries without intervening accepted content.",
       );
+  for (const text of fragmentText.values()) {
+    if (text === "") {
+      return invalid(
+        "$.root.children",
+        "An atomic document-fragment insertion with no text is a no-op.",
+      );
+    }
+  }
 
   const cloned = structuredClone(input) as unknown as ReviewDocumentV3;
   return { status: "valid", value: deepFreeze(cloned) };
