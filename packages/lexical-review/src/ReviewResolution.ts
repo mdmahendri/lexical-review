@@ -42,6 +42,7 @@ import type {
   ReviewReplacementProposal,
 } from "./ReviewText";
 import { inspectProposalGroup, inspectProposalKind } from "./ReviewTargeting";
+import type { ProposalKind } from "./ReviewTargeting";
 import type { LexicalNode, ParagraphNode, TextNode } from "lexical";
 
 export type ProposalResolutionAction = "accept" | "reject" | "remove";
@@ -275,58 +276,85 @@ export function $resolveReviewProposal(
   return $resolveReviewProposals([proposalId], action);
 }
 
-/** Resolve each identity once, validating the entire batch before mutation. */
+type PreflightedGroup =
+  | { id: string; kind: "fragment" }
+  | { id: string; kind: "boundary" }
+  | { id: string; kind: ProposalKind };
+
+/**
+ * Resolve each identity once, validating the entire batch before mutation.
+ *
+ * Contract (#59): strict preflight-then-mutate. Dedupe IDs by first-seen
+ * input order and execute in that order. Any refusal during preflight means
+ * zero mutations. The whole-tree structural check runs for every batch, not
+ * only structural ones: a text-only batch must not commit while unrelated
+ * structure is invalid. Unexpected implementation errors are not caught here;
+ * they propagate to Lexical's update error handling, which discards the
+ * pending update (see README). A per-ID mutation refusal after preflight
+ * passed is unreachable for #58-admitted states; if it occurs on a
+ * non-admitted state the batch stops at that ID and reports the refusal.
+ */
 export function $resolveReviewProposals(
   proposalIds: readonly string[],
   action: ProposalResolutionAction,
 ): ReviewIntentOutcome {
+  if (!Array.isArray(proposalIds))
+    return refusal(
+      "invalid-proposal-id",
+      "Expected an array of proposal identities.",
+    );
   if ($getEditor().isComposing())
     return refusal(
       "unsupported-input",
       "Resolution is refused during composition.",
     );
-  const groups = [];
+  const groups: PreflightedGroup[] = [];
   for (const id of new Set(proposalIds)) {
+    // Fragment and boundary checks come first because inspectProposalKind
+    // reports those IDs as kind "fragment" without distinguishing the
+    // structural marker. Fall through to inspectProposalKind for text kinds;
+    // it is the single source of invalid-proposal-id vs unsupported-target.
     const fragment = inspectFragment(id);
     if (fragment.status === "ready") {
-      groups.push({ id, kind: "fragment" as const });
+      groups.push({ id, kind: "fragment" });
       continue;
     }
     const boundary = inspectBoundary(id);
     if (boundary.status === "ready") {
-      groups.push({ id, kind: "boundary" as const });
+      groups.push({ id, kind: "boundary" });
       continue;
     }
     const kind = inspectProposalKind(id);
     if (kind.status !== "ready") return kind;
     groups.push({ id, kind: kind.value });
   }
-  if (
-    groups.some(
-      (group) => group.kind === "boundary" || group.kind === "fragment",
-    )
-  ) {
-    const invalid = validateStructuralState();
-    if (invalid) return invalid;
-  }
+  if (!groups.length) return unchanged();
+  const invalid = validateStructuralState();
+  if (invalid) return invalid;
   for (const { id, kind } of groups) {
-    if (kind === "fragment") {
-      if (action === "accept") resolveFragment(id, true);
-      else resolveFragment(id, false);
-    } else if (kind === "boundary") {
-      if (action === "accept") resolveStructure(id, true);
-      else resolveStructure(id, false);
-    } else if (kind === "formatting") {
-      if (action === "accept") resolveFormatting(id, true);
-      else resolveFormatting(id, false);
-    } else if (kind === "replacement")
-      resolveReplacement(id, action === "accept");
-    else
-      resolveProposal(
-        id,
-        kind === "insertion" ? action === "accept" : action !== "accept",
-        kind,
-      );
+    const outcome =
+      kind === "fragment"
+        ? action === "accept"
+          ? resolveFragment(id, true)
+          : resolveFragment(id, false)
+        : kind === "boundary"
+          ? action === "accept"
+            ? resolveStructure(id, true)
+            : resolveStructure(id, false)
+          : kind === "formatting"
+            ? action === "accept"
+              ? resolveFormatting(id, true)
+              : resolveFormatting(id, false)
+            : kind === "replacement"
+              ? resolveReplacement(id, action === "accept")
+              : resolveProposal(
+                  id,
+                  kind === "insertion"
+                    ? action === "accept"
+                    : action !== "accept",
+                  kind,
+                );
+    if (outcome.status !== "changed") return outcome;
   }
-  return groups.length ? changed() : unchanged();
+  return changed();
 }
