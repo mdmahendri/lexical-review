@@ -70,10 +70,8 @@ continued or corrected:
 ```ts
 import {
   $insertReviewText,
-  $inspectReviewInsertion,
-  $acceptReviewInsertion,
-  $rejectReviewInsertion,
-  $removeReviewInsertion,
+  $inspectReviewProposal,
+  $resolveReviewProposal,
 } from "lexical-review";
 
 editor.update(() => {
@@ -83,11 +81,18 @@ editor.update(() => {
   // Handle changed, unchanged, or refused outcomes.
 });
 
-editor.getEditorState().read(() => $inspectReviewInsertion(proposalId));
-editor.update(() => $acceptReviewInsertion(proposalId));
-// Alternatively: $rejectReviewInsertion(proposalId) or
-// $removeReviewInsertion(proposalId), each inside editor.update().
+editor.getEditorState().read(() => $inspectReviewProposal(proposalId));
+// Returns { kind: "insertion", proposal: { proposalId, text } }.
+editor.update(() => $resolveReviewProposal(proposalId, "accept"));
+// Alternatively: "reject" or "remove", each inside editor.update().
 ```
+
+Inspection and resolution share one interface across every proposal kind.
+`$inspectReviewProposal(proposalId)` returns a kind-tagged proposal
+(`insertion`, `deletion`, `replacement`, `formatting`, `structure`, or
+`fragment`); `$resolveReviewProposal(proposalId, action)` settles one
+identity; `$resolveReviewProposals(ids, action)` validates a batch before
+mutation and resolves each identity once.
 
 The identity factory is optional; the package generates identities by default.
 Client hosts can pass the same `proposalIdFactory` to `registerReviewSession`
@@ -103,9 +108,9 @@ is ambiguous and is refused. Deleting all insertion content removes the
 proposal. The caret follows newly inserted or corrected content.
 
 Acceptance unwraps the insertion into accepted text, preserving formatting.
-Rejection removes the proposed text. Explicit removal also removes pending
-work, but expresses author removal rather than a review decision. These are
-separate operations; none adds a terminal record to native JSON. Resolution
+Rejection removes the proposed text. Removal also removes pending
+work, but expresses author removal rather than a review decision; it resolves
+identically to rejection. None adds a terminal record to native JSON. Resolution
 refuses missing, disconnected, or structurally unsupported identities.
 
 ## Pending deletion authoring
@@ -132,10 +137,10 @@ from a proposal, refuses without
 changing the document or selection. Cross-paragraph and ambiguous ranges also
 refuse without mutation.
 
-`$inspectReviewDeletion(proposalId)` reads current node content inside an editor
-read/update. `$acceptReviewDeletion(proposalId)` removes the deleted text;
-`$rejectReviewDeletion(proposalId)` and `$removeReviewDeletion(proposalId)`
-restore it. These update operations retain no terminal record. Saving and
+`$inspectReviewProposal(proposalId)` reads current node content inside an editor
+read/update, tagged with `kind: "deletion"`. `$resolveReviewProposal(proposalId,
+action)` accepts the deletion by removing its text, or rejects/removes it by
+restoring the accepted text. These update operations retain no terminal record. Saving and
 reopening preserves current pending identities and formatting.
 
 ## Pending replacement proposals
@@ -158,12 +163,10 @@ Deleting against the old side also cancels the replacement, including forward
 deletion from an adjacent accepted text boundary. Typing over the old side or
 editing across both sides is refused without changing content or selection.
 
-`$inspectReviewReplacement(proposalId)` returns `oldText` and `newText` from the
-live nodes. `$acceptReviewReplacement(proposalId)` keeps the new content;
-`$rejectReviewReplacement(proposalId)` and `$removeReviewReplacement(proposalId)`
-keep the old content. Existing insertion/deletion resolution operations also
-resolve the whole replacement when passed its shared identity. No API resolves
-one replacement side independently.
+`$inspectReviewProposal(proposalId)` returns `kind: "replacement"` with `oldText`
+and `newText` from the live nodes. `$resolveReviewProposal(proposalId, "accept")`
+keeps the new content; `"reject"` and `"remove"` keep the old content.
+No API resolves one replacement side independently.
 
 For a batch, call `$resolveReviewProposals(ids, "accept" | "reject" | "remove")`
 inside `editor.update()`. It validates every group before mutation and resolves
@@ -223,10 +226,8 @@ current proposed formatting. The text itself remains unchanged.
 import {
   $setReviewFormatting,
   $toggleReviewFormatting,
-  $inspectReviewFormatting,
-  $acceptReviewFormatting,
-  $rejectReviewFormatting,
-  $removeReviewFormatting,
+  $inspectReviewProposal,
+  $resolveReviewProposal,
 } from "lexical-review";
 
 editor.update(() => {
@@ -258,9 +259,8 @@ inside an existing insertion proposal.
 
 `registerReviewSession` routes `FORMAT_TEXT_COMMAND`, `SET_TEXT_FORMAT_COMMAND`,
 and the supported native formatting `beforeinput` intentions through the same
-operations. Outcomes are delivered through `onOutcome`. Inspection, acceptance,
-rejection, removal, and `$resolveReviewProposals` read the current node-backed
-state. Saving preserves pending accepted/current formatting, without storing
+operations. Outcomes are delivered through `onOutcome`. Inspection and `$resolveReviewProposal` read the current node-backed
+state, tagged with `kind: "formatting"`. Saving preserves pending accepted/current formatting, without storing
 resolved proposal history. Insertion and deletion DOM wrappers remain outermost;
 Lexical text formatting and theme classes stay inside them.
 
@@ -281,9 +281,9 @@ Enter over a range, splits inside text proposals, and ambiguous targets are
 no-mutation refusals. An unambiguous endpoint of a whole text proposal is a
 supported split point; neither side of a replacement may be separated.
 
-Use `$inspectReviewStructure(proposalId)` to read the current kind and identity.
-`$acceptReviewStructure`, `$rejectReviewStructure`, and `$removeReviewStructure`
-also run inside an editor update. `$resolveReviewProposals` includes structural
+Use `$inspectReviewProposal(proposalId)` to read the current kind and identity
+(`kind: "structure"`). `$resolveReviewProposal(proposalId, action)`
+also runs inside an editor update. `$resolveReviewProposals` includes structural
 identities in its batch preflight. Structural changes and resolution are refused
 during composition. Unexpected implementation errors use Lexical's transaction
 rollback, as with text authoring.
@@ -352,14 +352,13 @@ accepted-side typing or deletion authors separate work. Left/right arrows cross
 both outer associations explicitly, including empty endpoints. After insertion,
 the caret is proposal-side immediately after the new content.
 
-Use `$inspectReviewFragment`, `$acceptReviewFragment`, `$rejectReviewFragment`,
-`$removeReviewFragment`, or `$resolveReviewProposals` for whole-proposal behavior.
+Use `$inspectReviewProposal` or `$resolveReviewProposal` for whole-proposal behavior.
 Components cannot resolve independently. Resolution uses current attachment and
 preserves unrelated work; it never restores a creation-time paragraph snapshot.
 A fragment reduced to one inline insertion or one boundary-only split normalizes
 to that kind with the same ID. Several remaining boundaries stay atomic; deleting
-the entire payload removes the semantic no-op. Use the current kind's inspection
-API after normalization, or the kind-independent batch resolution API.
+the entire payload removes the semantic no-op. Re-inspect after normalization to
+read the current kind, or use batch resolution.
 
 An independent split on accepted text may coexist with a fragment. For example,
 split `ABCD` after `C`, then insert `x` / `y` after `A`: `Ax` / `yBC` / `D`.

@@ -11,10 +11,8 @@ import {
 } from "lexical";
 import {
   $deleteReviewText,
-  $inspectReviewDeletion,
-  $acceptReviewDeletion,
-  $rejectReviewDeletion,
-  $removeReviewDeletion,
+  $inspectReviewProposal,
+  $resolveReviewProposal,
   ReviewDeletionNode,
   ReviewInsertionNode,
   openReviewSession,
@@ -51,7 +49,7 @@ function setup(children: unknown[] = [text("one two three")]) {
   });
   const update = (fn: () => void) => editor.update(fn, { discrete: true });
   const inspect = () =>
-    editor.getEditorState().read(() => $inspectReviewDeletion("deletion-1"));
+    editor.getEditorState().read(() => $inspectReviewProposal("deletion-1"));
   return {
     editor,
     input,
@@ -81,7 +79,7 @@ it.each([false, true])(
       ).toBe("changed"),
     );
     expect(inspect()).toMatchObject({
-      value: { text: backward ? "ef" : "ab" },
+      value: { kind: "deletion", proposal: { text: backward ? "ef" : "ab" } },
     });
     update(() => {
       const accepted = $getRoot()
@@ -97,7 +95,10 @@ it.each([false, true])(
       ).toBe("changed");
     });
     expect(inspect()).toMatchObject({
-      value: { text: backward ? "cdef" : "abcd" },
+      value: {
+        kind: "deletion",
+        proposal: { text: backward ? "cdef" : "abcd" },
+      },
     });
     update(() =>
       expect(
@@ -107,7 +108,9 @@ it.each([false, true])(
         }).status,
       ).toBe("changed"),
     );
-    expect(inspect()).toMatchObject({ value: { text: "abcdef" } });
+    expect(inspect()).toMatchObject({
+      value: { kind: "deletion", proposal: { text: "abcdef" } },
+    });
     expect(factory).toHaveBeenCalledTimes(1);
     unregister();
   },
@@ -128,11 +131,17 @@ it.each([false, true])(
       editor.dispatchCommand(DELETE_WORD_COMMAND, backward);
     });
     expect(inspect()).toMatchObject({
-      value: { text: backward ? "three" : "one" },
+      value: {
+        kind: "deletion",
+        proposal: { text: backward ? "three" : "one" },
+      },
     });
     update(() => editor.dispatchCommand(DELETE_WORD_COMMAND, backward));
     expect(inspect()).toMatchObject({
-      value: { text: backward ? "two three" : "one two" },
+      value: {
+        kind: "deletion",
+        proposal: { text: backward ? "two three" : "one two" },
+      },
     });
     unregister();
   },
@@ -165,15 +174,12 @@ it.each(["accept", "reject", "remove"] as const)(
     expect(
       reopenedEditor
         .getEditorState()
-        .read(() => $inspectReviewDeletion("deletion-1")),
+        .read(() => $inspectReviewProposal("deletion-1")),
     ).toEqual(inspect());
     update(() => {
-      const operation = {
-        accept: $acceptReviewDeletion,
-        reject: $rejectReviewDeletion,
-        remove: $removeReviewDeletion,
-      }[action];
-      expect(operation("deletion-1").status).toBe("changed");
+      expect($resolveReviewProposal("deletion-1", action).status).toBe(
+        "changed",
+      );
       expect($getRoot().getTextContent()).toBe(action === "accept" ? "" : "AB");
       expect(
         $getRoot()
@@ -246,7 +252,9 @@ it("handles each native event once while allowing separate word events to contin
     editor.dispatchCommand(BEFORE_INPUT_COMMAND, event);
   });
   expect(event.defaultPrevented).toBe(true);
-  expect(inspect()).toMatchObject({ value: { text: "one" } });
+  expect(inspect()).toMatchObject({
+    value: { kind: "deletion", proposal: { text: "one" } },
+  });
   update(() =>
     editor.dispatchCommand(
       BEFORE_INPUT_COMMAND,
@@ -256,6 +264,8 @@ it("handles each native event once while allowing separate word events to contin
       }),
     ),
   );
-  expect(inspect()).toMatchObject({ value: { text: "one two" } });
+  expect(inspect()).toMatchObject({
+    value: { kind: "deletion", proposal: { text: "one two" } },
+  });
   unregister();
 });

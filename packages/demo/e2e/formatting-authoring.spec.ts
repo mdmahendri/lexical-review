@@ -26,9 +26,12 @@ for (const route of ["root", "client", "keyboard"] as const) {
     ).toMatchObject({
       proposal: {
         value: {
-          proposalId: "proposal-1",
-          accepted: [{ text: "plain", format: 0 }],
-          current: [{ text: "plain", format: 1 }],
+          kind: "formatting",
+          proposal: {
+            proposalId: "proposal-1",
+            accepted: [{ text: "plain", format: 0 }],
+            current: [{ text: "plain", format: 1 }],
+          },
         },
       },
       selection: { text: "plain", backward: true },

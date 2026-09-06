@@ -30,7 +30,12 @@ for (const route of ["root", "client"] as const) {
       window.__insertionFixture!.snapshot(),
     );
     expect(snapshot).toMatchObject({
-      proposal: { value: { proposalId: "insertion-1", text: "corrected!?" } },
+      proposal: {
+        value: {
+          kind: "insertion",
+          proposal: { proposalId: "insertion-1", text: "corrected!?" },
+        },
+      },
       document: { status: "valid" },
     });
     await page.evaluate(() => window.__insertionFixture!.select(1, 0, 11));

@@ -22,7 +22,14 @@ test("native replacement typing, correction, refusal, and cancellation preserve 
   ).toMatchObject({
     document: { status: "valid" },
     replacement: {
-      value: { proposalId: "insertion-1", oldText: "AB", newText: "corrected" },
+      value: {
+        kind: "replacement",
+        proposal: {
+          proposalId: "insertion-1",
+          oldText: "AB",
+          newText: "corrected",
+        },
+      },
     },
   });
   await page.evaluate(() => window.__insertionFixture!.select(0, 0, 2));

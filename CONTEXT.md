@@ -16,12 +16,16 @@ _Avoid_: Raw input event, review interaction, revision proposal
 An independently reviewable pending change that expresses a review intent. Its content, formatting, and supported placement may evolve during authoring.
 _Avoid_: Proposal draft, finalized proposal, immutable proposal record, edit operation, history entry, review segment
 
+**Proposal resolution**:
+A review interaction that settles a pending revision proposal as accepted (its change stands), rejected (a reviewer sets its change aside), or removed (its author sets it aside). It leaves no resolution history and is distinct from WER resolution in the interchange model.
+_Avoid_: Node removal, text removal, WER resolution
+
 **Review state**:
 The mutable working representation of accepted content and pending revision proposals during an authoring session. It is distinct from a serialized review document and its visible review projection.
 _Avoid_: Review projection, WER interchange document, DOM state
 
 **Review document**:
-Lexical Review's native serialized representation of accepted content and pending revision proposals. It contains only current pending proposals, without accepted or rejected resolution history.
+Lexical Review's native serialized representation of accepted content and pending revision proposals. It contains only current pending proposals, without accepted, rejected, or removed resolution history.
 _Avoid_: WER interchange document, review projection, accepted document state
 
 **Authoring session**:
@@ -49,7 +53,7 @@ An observable editing behavior that creates, changes, or resolves reviewable con
 _Avoid_: Vendor behavior, standard interaction
 
 **Atomic document-fragment insertion**:
-A single revision proposal that inserts an ordered text-and-paragraph fragment at one accepted-state point and can be accepted or rejected only as a whole.
+A single revision proposal that inserts an ordered text-and-paragraph fragment at one accepted-state point and can be accepted, rejected, or removed only as a whole.
 _Avoid_: Decomposed paste, proposal group
 
 **No-mutation refusal**:
@@ -63,6 +67,10 @@ _Avoid_: Interchange standard, vendor emulation
 **Interaction evidence**:
 Primary-source observations used to justify or challenge an interaction contract without making any one vendor's behavior authoritative.
 _Avoid_: Standard requirement, vendor vote
+
+**Interaction target**:
+The accepted-state or proposal-side content addressed by a review interaction, resolved before review intent is determined.
+_Avoid_: WER proposal targeting, review segment
 
 **Clipboard projection**:
 A content-only representation of a selected review projection used by ordinary copy or cut. It carries no portable proposal identity, and generic markup cannot establish one.
@@ -89,7 +97,7 @@ The meaning that a caret adjacent to or within a pending revision proposal belon
 _Avoid_: Proposal affinity, proposal-local edit permission
 
 **Web Editor Revisions (WER)**:
-An implementation-independent family of interchange models for accepted document state and independently reviewable revision proposals, including portable identity, targeting, resolution, remapping, canonical serialization, and mapping outcomes. It does not define editor interactions, UI, runtime structures, transport, private persistence, concurrency, or undo/redo.
+An implementation-independent family of interchange models for accepted document state and independently reviewable revision proposals, including portable identity, proposal targeting within a WER interchange document, resolution, remapping, canonical serialization, and mapping outcomes. It does not define editor interactions, UI, runtime structures, transport, private persistence, concurrency, or undo/redo.
 _Avoid_: Lexical Review interaction contract, editor model
 
 **[Web Editor Revisions version 1 (WER v1)](https://github.com/mahendrimd/web-editor-revisions/blob/e6ac89287257646888a4eadf692d836eb8feb41b/standards/v1/standard.md)**:

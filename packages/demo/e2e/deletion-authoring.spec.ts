@@ -27,7 +27,13 @@ for (const backward of [false, true]) {
       await page.evaluate(() => window.__deletionFixture!.snapshot()),
     ).toMatchObject({
       proposal: {
-        value: { proposalId: "deletion-1", text: backward ? "three" : "one" },
+        value: {
+          kind: "deletion",
+          proposal: {
+            proposalId: "deletion-1",
+            text: backward ? "three" : "one",
+          },
+        },
       },
       document: { status: "valid" },
     });

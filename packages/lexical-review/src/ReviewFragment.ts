@@ -2,19 +2,17 @@ import {
   $createParagraphNode,
   $createTextNode,
   $getEditor,
-  $getRoot,
   $getSelection,
-  $isElementNode,
   $isRangeSelection,
   $isTextNode,
   type ParagraphNode,
   type PointType,
-  type RangeSelection,
   type TextNode,
 } from "lexical";
 import {
   $createReviewFragmentNode,
   $isReviewFragmentNode,
+  isRootParagraph,
   ReviewFragmentNode,
   $createReviewInsertionNode,
   ReviewInsertionNode,
@@ -36,12 +34,14 @@ import {
   type ReviewIntentOutcome,
 } from "./ReviewIntent";
 import {
-  inspectSelection,
-  isRootParagraph,
-  isReviewElementNode,
-  previousCharacterOffset,
+  fragmentAtPoint,
+  inspectFragmentSelection,
+  inspectReviewTarget,
   nextCharacterOffset,
-} from "./ReviewSelectionPreparation";
+  offsetInGroup,
+  previousCharacterOffset,
+  type FragmentSelection,
+} from "./ReviewTargeting";
 import {
   $getReviewInputFormat,
   $setReviewInputFormat,
@@ -51,7 +51,7 @@ import {
   isSupportedFormat,
   type ReviewFormatRun,
 } from "./ReviewFormattingState";
-import { validFragmentPositions } from "./ReviewFragmentInvariant";
+import { inspectFragmentGroup } from "./ReviewProposalCollection";
 
 export type ReviewFragmentParagraph = Readonly<{
   runs: readonly ReviewFormatRun[];
@@ -66,53 +66,7 @@ export type ReviewFragmentProposal = Readonly<{
 
 type Group = { wrappers: ReviewFragmentNode[]; paragraphs: ParagraphNode[] };
 export function inspectFragment(proposalId: string): Preparation<Group> {
-  const wrappers: ReviewFragmentNode[] = [];
-  let incompatible = false;
-  const visit = (node: import("lexical").LexicalNode) => {
-    if (
-      (isReviewElementNode(node) || $isReviewBoundaryNode(node)) &&
-      node.getProposalId() === proposalId
-    ) {
-      if ($isReviewFragmentNode(node)) wrappers.push(node);
-      else incompatible = true;
-    }
-    if ($isElementNode(node)) node.getChildren().forEach(visit);
-  };
-  visit($getRoot());
-  const paragraphs = wrappers.map((node) => node.getParent());
-  if (
-    incompatible ||
-    paragraphs.some((p) => !isRootParagraph(p)) ||
-    !validFragmentPositions(
-      wrappers.map((node, i) => ({
-        paragraph: paragraphs[i]!.getIndexWithinParent(),
-        index: node.getIndexWithinParent(),
-        siblings: paragraphs[i]!.getChildrenSize(),
-        startsParagraph: node.startsParagraph(),
-      })),
-    ) ||
-    wrappers.some((node) =>
-      node
-        .getChildren()
-        .some(
-          (child) =>
-            !$isTextNode(child) ||
-            !child.getTextContentSize() ||
-            !isSupportedFormat(child.getFormat()) ||
-            child.getStyle() !== "" ||
-            child.getDetail() !== 0 ||
-            child.getMode() !== "normal",
-        ),
-    )
-  )
-    return refusal(
-      "unsafe-proposal-intersection",
-      "Expected one contiguous fragment with one component per paragraph and owned internal boundaries.",
-    );
-  return {
-    status: "ready",
-    value: { wrappers, paragraphs: paragraphs as ParagraphNode[] },
-  };
+  return inspectFragmentGroup(proposalId);
 }
 function payload(group: Group): ReviewFragment {
   return group.wrappers.map((node) => ({
@@ -123,7 +77,7 @@ function payload(group: Group): ReviewFragment {
     })),
   }));
 }
-export function $inspectReviewFragment(
+export function inspectFragmentProposal(
   proposalId: string,
 ): ReviewIntentOutcome<ReviewFragmentProposal> {
   const group = inspectFragment(proposalId);
@@ -169,72 +123,6 @@ function fromUnits(source: readonly Unit[], format: number): ReviewFragment {
   }
   return result;
 }
-function offsetInGroup(point: PointType, group: Group): number | null {
-  let base = 0;
-  for (const wrapper of group.wrappers) {
-    if (point.key === wrapper.getKey() && point.type === "element")
-      return (
-        base +
-        wrapper
-          .getChildren()
-          .slice(0, point.offset)
-          .reduce((n, child) => n + child.getTextContentSize(), 0)
-      );
-    for (const child of wrapper.getChildren()) {
-      if (point.key === child.getKey() && point.type === "text")
-        return base + point.offset;
-      base += child.getTextContentSize();
-    }
-    base++;
-  }
-  return null;
-}
-function fragmentAtPoint(point: PointType): ReviewFragmentNode | null {
-  const node = point.getNode();
-  return $isReviewFragmentNode(node)
-    ? node
-    : $isReviewFragmentNode(node.getParent())
-      ? node.getParent<ReviewFragmentNode>()
-      : null;
-}
-type LocalSelection = {
-  group: Group;
-  selection: RangeSelection;
-  start: number;
-  end: number;
-  backward: boolean;
-};
-function localSelection(): Preparation<LocalSelection> | null {
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection)) return null;
-  const anchor = fragmentAtPoint(selection.anchor);
-  const focus = fragmentAtPoint(selection.focus);
-  if (!anchor && !focus) return null;
-  if (!anchor || !focus || anchor.getProposalId() !== focus.getProposalId())
-    return refusal(
-      "unsafe-proposal-intersection",
-      "A fragment edit must remain wholly within one proposal.",
-    );
-  const inspected = inspectSelection();
-  if (inspected.status !== "ready") return inspected;
-  const group = inspectFragment(anchor.getProposalId());
-  if (group.status !== "ready") return group;
-  const a = offsetInGroup(selection.anchor, group.value);
-  const b = offsetInGroup(selection.focus, group.value);
-  if (a === null || b === null)
-    return refusal("unsupported-target", "Invalid fragment selection.");
-  return {
-    status: "ready",
-    value: {
-      group: group.value,
-      selection,
-      start: Math.min(a, b),
-      end: Math.max(a, b),
-      backward: selection.isBackward(),
-    },
-  };
-}
-
 function selectOffset(
   wrappers: readonly ReviewFragmentNode[],
   offset: number,
@@ -359,7 +247,7 @@ function validateRegistration(): ReviewIntentOutcome | null {
   return validateStructuralState();
 }
 function editLocal(
-  local: LocalSelection,
+  local: FragmentSelection,
   inserted: ReviewFragment,
 ): ReviewIntentOutcome {
   const blocked = validateRegistration();
@@ -432,21 +320,22 @@ export function $insertReviewFragment(
     ...part,
     emptyFormat: part.emptyFormat ?? inherited,
   }));
-  const local = localSelection();
+  const local = inspectFragmentSelection();
   if (local)
     return local.status === "ready"
       ? editLocal(local.value, normalizedInput)
       : local;
   const blocked = validateRegistration();
   if (blocked) return blocked;
-  const inspected = inspectSelection();
+  const inspected = inspectReviewTarget();
   if (inspected.status !== "ready") return inspected;
-  const { anchor: point, collapsed } = inspected.value;
-  if (!collapsed || point.association !== "accepted")
+  const target = inspected.value;
+  if (target.kind !== "accepted-caret")
     return refusal(
       "unsupported-target",
       "Fragment creation requires a collapsed accepted-side target.",
     );
+  const point = target;
   let index = point.childIndex;
   if (point.node && point.offset === point.node.getTextContentSize()) index++;
   if (
@@ -491,11 +380,11 @@ export function $insertReviewFragment(
   return changed();
 }
 
-/** null means the ordinary text/structural contract owns the selection. */
-export function $editReviewFragmentText(
+/** Claim fragment-owned text insertion; null means the text contract owns it. */
+export function $claimFragmentInsertion(
   text: string,
 ): ReviewIntentOutcome | null {
-  const local = localSelection();
+  const local = inspectFragmentSelection();
   if (!local) return null;
   if (local.status !== "ready") return local;
   if (/[\r\n]/.test(text))
@@ -512,8 +401,8 @@ export function $editReviewFragmentText(
     },
   ]);
 }
-export function $splitReviewFragment(): ReviewIntentOutcome | null {
-  const local = localSelection();
+export function $claimFragmentSplit(): ReviewIntentOutcome | null {
+  const local = inspectFragmentSelection();
   if (!local) return null;
   if (local.status !== "ready") return local;
   if (local.value.start !== local.value.end)
@@ -527,11 +416,11 @@ export function $splitReviewFragment(): ReviewIntentOutcome | null {
     { runs: [], emptyFormat: format },
   ]);
 }
-export function $deleteReviewFragment(
+export function $claimFragmentDeletion(
   backward: boolean,
   granularity: "character" | "word",
 ): ReviewIntentOutcome | null {
-  const local = localSelection();
+  const local = inspectFragmentSelection();
   if (!local) return null;
   if (local.status !== "ready") return local;
   const value = local.value;
@@ -567,10 +456,10 @@ export function $deleteReviewFragment(
   return editLocal(value, [{ runs: [] }]);
 }
 
-export function $formatReviewFragment(
+export function $claimFragmentFormatting(
   apply: (format: number) => number,
 ): ReviewIntentOutcome | null {
-  const local = localSelection();
+  const local = inspectFragmentSelection();
   if (!local) return null;
   if (local.status !== "ready") return local;
   const { group, selection, start, end, backward } = local.value;
@@ -607,7 +496,7 @@ export function $formatReviewFragment(
   return changed();
 }
 export function $getFragmentSelectionFormat(): number | null {
-  const local = localSelection();
+  const local = inspectFragmentSelection();
   if (!local || local.status !== "ready") return null;
   let offset = 0,
     format = 15;
@@ -619,7 +508,10 @@ export function $getFragmentSelectionFormat(): number | null {
   return format;
 }
 
-function resolveFragment(id: string, accept: boolean): ReviewIntentOutcome {
+export function resolveFragment(
+  id: string,
+  accept: boolean,
+): ReviewIntentOutcome {
   const blocked = validateStructuralState();
   if (blocked) return blocked;
   const prepared = inspectFragment(id);
@@ -645,21 +537,11 @@ function resolveFragment(id: string, accept: boolean): ReviewIntentOutcome {
   }
   return changed();
 }
-export function $acceptReviewFragment(id: string): ReviewIntentOutcome {
-  return resolveFragment(id, true);
-}
-export function $rejectReviewFragment(id: string): ReviewIntentOutcome {
-  return resolveFragment(id, false);
-}
-export function $removeReviewFragment(id: string): ReviewIntentOutcome {
-  return resolveFragment(id, false);
-}
-
 /** Explicit keyboard crossing exposes both endpoint associations, including empty components. */
 export function $moveReviewFragmentCaret(backward: boolean): boolean {
   const selection = $getSelection();
   if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
-  const local = localSelection();
+  const local = inspectFragmentSelection();
   if (local?.status === "ready") {
     const { group, start } = local.value;
     const total = units(payload(group)).reduce((n, u) => n + u.text.length, 0);
@@ -673,7 +555,6 @@ export function $moveReviewFragmentCaret(backward: boolean): boolean {
     const wrapper = fragmentAtPoint(selection.anchor)!;
     const pointOffset = offsetInGroup(selection.anchor, {
       wrappers: [wrapper],
-      paragraphs: [wrapper.getParentOrThrow<ParagraphNode>()],
     })!;
     if (
       (backward && pointOffset === 0) ||

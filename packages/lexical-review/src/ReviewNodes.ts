@@ -1,12 +1,17 @@
 import {
   $applyNodeReplacement,
+  $getRoot,
+  $isParagraphNode,
+  $isTextNode,
   type EditorConfig,
   ElementNode,
   type LexicalNode,
   type LexicalUpdateJSON,
   type NodeKey,
+  type ParagraphNode,
   type SerializedElementNode,
   type Spread,
+  type TextNode,
 } from "lexical";
 import { addClassNamesToElement } from "@lexical/utils";
 import { assertValidProposalId, createProposalId } from "./ProposalIdentity";
@@ -399,4 +404,45 @@ export function $isReviewFragmentNode(
   node: LexicalNode | null | undefined,
 ): node is ReviewFragmentNode {
   return node instanceof ReviewFragmentNode;
+}
+
+/** Node-shape predicates shared by targeting, normalization, and preview. */
+export function isReviewElementNode(
+  node: LexicalNode | null | undefined,
+): node is ReviewElementNode {
+  return (
+    $isReviewFragmentNode(node) ||
+    $isReviewDeletionNode(node) ||
+    $isReviewInsertionNode(node) ||
+    $isReviewFormattingNode(node)
+  );
+}
+
+export function isRootParagraph(
+  node: LexicalNode | null,
+): node is ParagraphNode {
+  return $isParagraphNode(node) && node.getParent() === $getRoot();
+}
+
+export function getChildIndex(
+  parent: ElementNode,
+  node: LexicalNode,
+): number | null {
+  const index = parent
+    .getChildren()
+    .findIndex((child) => child.getKey() === node.getKey());
+  return index === -1 ? null : index;
+}
+
+export function getTextChildren(wrapper: ReviewElementNode): TextNode[] | null {
+  const children = wrapper.getChildren();
+  if (
+    (children.length === 0 && !$isReviewFragmentNode(wrapper)) ||
+    children.some(
+      (child) => !$isTextNode(child) || child.getTextContentSize() === 0,
+    )
+  ) {
+    return null;
+  }
+  return children.filter($isTextNode);
 }

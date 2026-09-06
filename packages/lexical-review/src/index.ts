@@ -13,6 +13,7 @@ export {
   $createReviewInsertionNode,
   $isReviewDeletionNode,
   $isReviewInsertionNode,
+  isReviewElementNode,
   type SerializedReviewDeletionNode,
   type SerializedReviewInsertionNode,
 } from "./ReviewNodes";
@@ -32,17 +33,14 @@ export {
 
 export {
   $deleteReviewText,
-  $inspectReviewDeletion,
-  $removeReviewDeletion,
-  $acceptReviewDeletion,
-  $rejectReviewDeletion,
+  $insertReviewText,
+  $replaceReviewText,
+  $splitReviewParagraph,
+} from "./ReviewIntentDispatch";
+
+export {
   type ReviewDeletionOptions,
   type ReviewDeletionProposal,
-  $insertReviewText,
-  $inspectReviewInsertion,
-  $removeReviewInsertion,
-  $acceptReviewInsertion,
-  $rejectReviewInsertion,
   type ReviewAuthoringOptions,
   type ReviewInsertionProposal,
   type ReviewIntentError,
@@ -50,17 +48,16 @@ export {
   type ReviewIntentRefusal,
   type ReviewIntentRefusalCode,
   type ReviewProposalIdFactory,
-} from "./ReviewOperations";
+  type ReviewReplacementProposal,
+} from "./ReviewText";
 
 export {
-  $replaceReviewText,
-  $inspectReviewReplacement,
-  $acceptReviewReplacement,
-  $rejectReviewReplacement,
-  $removeReviewReplacement,
+  $inspectReviewProposal,
+  $resolveReviewProposal,
   $resolveReviewProposals,
-  type ReviewReplacementProposal,
-} from "./ReviewOperations";
+  type InspectedReviewProposal,
+  type ProposalResolutionAction,
+} from "./ReviewResolution";
 
 export {
   ReviewFormattingNode,
@@ -71,10 +68,6 @@ export {
 export {
   $setReviewFormatting,
   $toggleReviewFormatting,
-  $inspectReviewFormatting,
-  $acceptReviewFormatting,
-  $rejectReviewFormatting,
-  $removeReviewFormatting,
   type ReviewFormattingChange,
   type ReviewFormattingProperty,
   type ReviewFormattingProposal,
@@ -89,12 +82,7 @@ export {
   type SerializedReviewBoundaryNode,
 } from "./ReviewBoundaryNode";
 export {
-  $splitReviewParagraph,
   $mergeReviewParagraph,
-  $inspectReviewStructure,
-  $acceptReviewStructure,
-  $rejectReviewStructure,
-  $removeReviewStructure,
   type ReviewStructuralProposal,
 } from "./ReviewStructure";
 
@@ -106,10 +94,6 @@ export {
 } from "./ReviewNodes";
 export {
   $insertReviewFragment,
-  $inspectReviewFragment,
-  $acceptReviewFragment,
-  $rejectReviewFragment,
-  $removeReviewFragment,
   type ReviewFragment,
   type ReviewFragmentParagraph,
   type ReviewFragmentProposal,

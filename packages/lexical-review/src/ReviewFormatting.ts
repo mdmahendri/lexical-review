@@ -1,5 +1,5 @@
 import {
-  $formatReviewFragment,
+  $claimFragmentFormatting,
   $getFragmentSelectionFormat,
 } from "./ReviewFragment";
 import {
@@ -29,15 +29,15 @@ import {
   $createReviewFormattingNode,
   $isReviewDeletionNode,
   $isReviewFormattingNode,
+  getTextChildren,
   ReviewFormattingNode,
 } from "./ReviewNodes";
 import {
-  buildAcceptedSpan,
-  buildProposalSpan,
-  getTextChildren,
+  getTargetSpanNodes,
   inspectProposalGroup,
-  inspectSelection,
-} from "./ReviewSelectionPreparation";
+  inspectReviewTarget,
+  isolateTargetSpanNodes,
+} from "./ReviewTargeting";
 import {
   canonicalFormatRuns,
   sameFormatRuns,
@@ -126,8 +126,7 @@ function findFormatting(proposalId: string): Preparation<ReviewFormattingNode> {
       );
 }
 
-/** Read the current proposal-bearing node, without a detached proposal registry. */
-export function $inspectReviewFormatting(
+export function inspectFormattingProposal(
   proposalId: string,
 ): ReviewIntentOutcome<ReviewFormattingProposal> {
   const found = findFormatting(proposalId);
@@ -160,50 +159,43 @@ export function $setReviewFormatting(
       "unsupported-formatting",
       "Only boolean bold, italic, underline, and strikethrough changes are supported.",
     );
-  const inspection = inspectSelection();
-  if (inspection.status !== "ready") return inspection;
-  const { selection, collapsed, backward, anchor, focus } = inspection.value;
   const apply = (format: number): number => {
+    let next = format;
     for (const [property, enabled] of Object.entries(change)) {
       const bit = FORMAT_BITS[property as ReviewFormattingProperty];
-      format = enabled ? format | bit : format & ~bit;
+      next = enabled ? next | bit : next & ~bit;
     }
-    return format;
+    return next;
   };
-  const fragment = $formatReviewFragment(apply);
+  const fragment = $claimFragmentFormatting(apply);
   if (fragment) return fragment;
-  if (collapsed) {
+  const inspection = inspectReviewTarget();
+  if (inspection.status !== "ready") return inspection;
+  const target = inspection.value;
+  const selection = target.selection;
+  if (target.kind === "accepted-caret" || target.kind === "proposal-caret") {
     const current = $getReviewInputFormat(selection);
     const next = apply(current);
     if (next === current) return unchanged();
     $setReviewInputFormat(selection, next);
     return changed();
   }
-  const proposalSide =
-    anchor.association === "proposal" || focus.association === "proposal";
-  const span = proposalSide
-    ? buildProposalSpan(inspection.value)
-    : buildAcceptedSpan(inspection.value);
-  if (span.status !== "ready") return span;
-  const { start, end, map } = span.value;
-  const wrapper = anchor.association === "proposal" ? anchor.wrapper : null;
-  if ($isReviewDeletionNode(wrapper))
+  const backward = target.backward;
+  const anchorWrapper =
+    target.kind === "proposal-range" ? target.anchorWrapper : null;
+  if ($isReviewDeletionNode(anchorWrapper))
     return refusal(
       "unsupported-proposal-edit",
       "Formatting cannot edit a pending deletion or the old side of a replacement.",
     );
-  const target = map.entries.filter(
-    (entry) => entry.start < end && entry.end > start,
-  );
+  const spanned = getTargetSpanNodes(target);
   if (
-    !target.length ||
-    target.every(
-      (entry) => apply(entry.node.getFormat()) === entry.node.getFormat(),
-    )
+    !spanned.length ||
+    spanned.every((node) => apply(node.getFormat()) === node.getFormat())
   )
     return unchanged();
   let identity: string | null = null;
-  if (!proposalSide) {
+  if (target.kind === "accepted-range") {
     if (!$getEditor().hasNode(ReviewFormattingNode))
       return refusal(
         "invalid-structural-target",
@@ -213,7 +205,7 @@ export function $setReviewFormatting(
     if (prepared.status !== "ready") return prepared;
     identity = prepared.value;
   }
-  const selected = isolate(map.entries, start, end);
+  const selected = isolateTargetSpanNodes(target);
   if (identity !== null) {
     const proposal = $createReviewFormattingNode(identity, runs(selected));
     selected[0]!.insertBefore(proposal);
@@ -225,13 +217,13 @@ export function $setReviewFormatting(
     selected.reduce((format, node) => format & node.getFormat(), 15),
   );
   if (
-    $isReviewFormattingNode(wrapper) &&
+    $isReviewFormattingNode(anchorWrapper) &&
     sameFormatRuns(
-      wrapper.getAcceptedFormats(),
-      runs(getTextChildren(wrapper)!),
+      anchorWrapper.getAcceptedFormats(),
+      runs(getTextChildren(anchorWrapper)!),
     )
   ) {
-    unwrapFormatting(wrapper, false);
+    unwrapFormatting(anchorWrapper, false);
   }
   return changed();
 }
@@ -246,29 +238,29 @@ export function $toggleReviewFormatting(
       "unsupported-formatting",
       "Unsupported formatting property.",
     );
-  const inspection = inspectSelection();
-  if (inspection.status !== "ready") return inspection;
-  let format = inspection.value.collapsed
-    ? $getReviewInputFormat(inspection.value.selection)
-    : inspection.value.selection.format;
+  const rawSelection = $getSelection();
   const fragmentFormat = $getFragmentSelectionFormat();
-  if (fragmentFormat !== null && !inspection.value.collapsed)
+  if (fragmentFormat !== null && $isRangeSelection(rawSelection)) {
+    const base = rawSelection.isCollapsed()
+      ? $getReviewInputFormat(rawSelection)
+      : fragmentFormat;
     return $setReviewFormatting(
-      { [property]: !(fragmentFormat & FORMAT_BITS[property]) },
+      { [property]: !(base & FORMAT_BITS[property]) },
       options,
     );
-  if (!inspection.value.collapsed) {
-    const { anchor, focus } = inspection.value;
-    const span =
-      anchor.association === "proposal" || focus.association === "proposal"
-        ? buildProposalSpan(inspection.value)
-        : buildAcceptedSpan(inspection.value);
-    if (span.status !== "ready") return span;
-    format = span.value.map.entries
-      .filter(
-        (entry) => entry.start < span.value.end && entry.end > span.value.start,
-      )
-      .reduce((value, entry) => value & entry.node.getFormat(), 15);
+  }
+  const inspection = inspectReviewTarget();
+  if (inspection.status !== "ready") return inspection;
+  const target = inspection.value;
+  let format =
+    target.kind === "accepted-caret" || target.kind === "proposal-caret"
+      ? $getReviewInputFormat(target.selection)
+      : target.selection.format;
+  if (target.kind === "accepted-range" || target.kind === "proposal-range") {
+    format = getTargetSpanNodes(target).reduce(
+      (value, node) => value & node.getFormat(),
+      15,
+    );
   }
   return $setReviewFormatting(
     { [property]: !(format & FORMAT_BITS[property]) },
@@ -286,13 +278,16 @@ function unwrapFormatting(
   const selection = $getSelection();
   const snapshot = (point: PointType) => {
     const entry = source.find((entry) => entry.node.getKey() === point.key);
-    const offset = entry
-      ? entry.start + point.offset
-      : point.key === wrapper.getKey()
-        ? source
-            .slice(0, point.offset)
-            .reduce((sum, entry) => sum + entry.end - entry.start, 0)
-        : null;
+    let offset: number | null;
+    if (entry) {
+      offset = entry.start + point.offset;
+    } else if (point.key === wrapper.getKey()) {
+      offset = source
+        .slice(0, point.offset)
+        .reduce((sum, entry) => sum + entry.end - entry.start, 0);
+    } else {
+      offset = null;
+    }
     return {
       key: point.key,
       offset: point.offset,
@@ -345,24 +340,12 @@ function unwrapFormatting(
   }
 }
 
-function resolve(proposalId: string, accept: boolean): ReviewIntentOutcome {
+export function resolveFormatting(
+  proposalId: string,
+  accept: boolean,
+): ReviewIntentOutcome {
   const found = findFormatting(proposalId);
   if (found.status !== "ready") return found;
   unwrapFormatting(found.value, !accept);
   return changed();
-}
-export function $acceptReviewFormatting(
-  proposalId: string,
-): ReviewIntentOutcome {
-  return resolve(proposalId, true);
-}
-export function $rejectReviewFormatting(
-  proposalId: string,
-): ReviewIntentOutcome {
-  return resolve(proposalId, false);
-}
-export function $removeReviewFormatting(
-  proposalId: string,
-): ReviewIntentOutcome {
-  return resolve(proposalId, false);
 }

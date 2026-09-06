@@ -13,10 +13,8 @@ import {
   type TextFormatType,
 } from "lexical";
 import {
-  $acceptReviewFormatting,
-  $rejectReviewFormatting,
-  $removeReviewFormatting,
-  $inspectReviewFormatting,
+  $inspectReviewProposal,
+  $resolveReviewProposal,
   $setReviewFormatting,
   $toggleReviewFormatting,
   $deleteReviewText,
@@ -153,9 +151,9 @@ it.each(properties)(
         expect(openReviewSession(reopened.editor, saved.value).status).toBe(
           "valid",
         );
-        expect(
-          reopened.read(() => $inspectReviewFormatting("format-p")),
-        ).toEqual(read(() => $inspectReviewFormatting("format-p")));
+        expect(reopened.read(() => $inspectReviewProposal("format-p"))).toEqual(
+          read(() => $inspectReviewProposal("format-p")),
+        );
       }
       expect(input).toEqual(original);
       unregister();
@@ -195,18 +193,21 @@ it.each([false, true])(
       expect($isRangeSelection(selection) && selection.isBackward()).toBe(
         backward,
       );
-      expect($inspectReviewFormatting("format-p")).toMatchObject({
+      expect($inspectReviewProposal("format-p")).toMatchObject({
         value: {
-          accepted: [
-            { text: "bc", format: 1 },
-            { text: "def", format: 2 },
-            { text: "gh", format: 8 },
-          ],
-          current: [
-            { text: "bc", format: 13 },
-            { text: "def", format: 14 },
-            { text: "gh", format: 12 },
-          ],
+          kind: "formatting",
+          proposal: {
+            accepted: [
+              { text: "bc", format: 1 },
+              { text: "def", format: 2 },
+              { text: "gh", format: 8 },
+            ],
+            current: [
+              { text: "bc", format: 13 },
+              { text: "def", format: 14 },
+              { text: "gh", format: 12 },
+            ],
+          },
         },
       });
     });
@@ -223,7 +224,9 @@ it.each([false, true])(
     expect(id).toHaveBeenCalledTimes(1);
     expect(session.exportDocument().status).toBe("valid");
     update(() =>
-      expect($rejectReviewFormatting("format-p").status).toBe("changed"),
+      expect($resolveReviewProposal("format-p", "reject").status).toBe(
+        "changed",
+      ),
     );
     read(() => {
       expect(
@@ -267,29 +270,27 @@ it("detects no-ops before splitting or allocating identity and removes fully rev
         .map((node) => [node.getTextContent(), node.getFormat()]),
     ).toEqual([["bold", 1]]);
     expect($getSelection()?.getTextContent()).toBe("ol");
-    expect($inspectReviewFormatting("format-p").status).toBe("refused");
+    expect($inspectReviewProposal("format-p").status).toBe("refused");
   });
 });
 
-it.each([
-  $acceptReviewFormatting,
-  $rejectReviewFormatting,
-  $removeReviewFormatting,
-])(
+it.each(["accept", "reject", "remove"] as const)(
   "resolves current formatting with %s and keeps no terminal history",
-  (operation) => {
+  (action) => {
     const { update, read, session } = setup([text("target")]);
     update(() => {
       $getRoot().getAllTextNodes()[0]!.select(0, 6);
       $setReviewFormatting({ bold: true }, { proposalIdFactory: factory });
     });
     update(() => $setReviewFormatting({ italic: true, underline: true }));
-    update(() => expect(operation("format-p").status).toBe("changed"));
+    update(() =>
+      expect($resolveReviewProposal("format-p", action).status).toBe("changed"),
+    );
     read(() => {
       expect($getRoot().getAllTextNodes()[0]!.getFormat()).toBe(
-        operation === $acceptReviewFormatting ? 11 : 0,
+        action === "accept" ? 11 : 0,
       );
-      expect($inspectReviewFormatting("format-p").status).toBe("refused");
+      expect($inspectReviewProposal("format-p").status).toBe("refused");
     });
     expect(JSON.stringify(session.exportDocument())).not.toContain("format-p");
   },
@@ -496,7 +497,7 @@ it("reconciles formatting within proposal wrappers and exports DOM without rever
   expect(root.querySelector("p > del strong")?.textContent).toBe("old");
   expect(root.querySelector("p > ins em")?.textContent).toBe("new");
   expect(root.querySelector("strong > ins, em > ins, strong > del")).toBeNull();
-  update(() => $rejectReviewFormatting("format-p"));
+  update(() => $resolveReviewProposal("format-p", "reject"));
   expect(root.querySelector("[data-review-formatting]")).toBeNull();
   unregister();
   editor.setRootElement(null);
@@ -613,7 +614,5 @@ it("compares native accepted/current runs by content regardless of JSON field or
     $getRoot().getAllTextNodes()[0]!.select(0, 6);
     $toggleReviewFormatting("bold");
   });
-  read(() =>
-    expect($inspectReviewFormatting("format-p").status).toBe("refused"),
-  );
+  read(() => expect($inspectReviewProposal("format-p").status).toBe("refused"));
 });

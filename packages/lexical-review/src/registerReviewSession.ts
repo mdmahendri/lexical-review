@@ -1,12 +1,4 @@
-import {
-  $moveReviewFragmentCaret,
-  $insertReviewFragment,
-  type ReviewFragment,
-} from "./ReviewFragment";
-import {
-  $splitReviewParagraph,
-  $moveReviewBoundaryCaret,
-} from "./ReviewStructure";
+import { $insertReviewFragment, type ReviewFragment } from "./ReviewFragment";
 import { registerReviewInputFormatting } from "./ReviewInputFormatting";
 import {
   $setReviewFormatting,
@@ -45,18 +37,22 @@ import type { ReviewSession } from "./ReviewSession";
 import {
   $deleteReviewText,
   $insertReviewText,
+  $moveReviewCaret,
   $replaceReviewText,
-  type ReviewAuthoringOptions,
-  type ReviewIntentOutcome,
-  type ReviewIntentRefusalCode,
-} from "./ReviewOperations";
+  $splitReviewParagraph,
+} from "./ReviewIntentDispatch";
+import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
+import type {
+  ReviewIntentOutcome,
+  ReviewIntentRefusalCode,
+} from "./ReviewIntent";
 export type {
   ReviewIntentError,
   ReviewIntentOutcome,
   ReviewIntentRefusal,
   ReviewIntentRefusalCode,
-  ReviewProposalIdFactory,
-} from "./ReviewOperations";
+} from "./ReviewIntent";
+export type { ReviewProposalIdFactory } from "./ReviewAuthoring";
 export const INSERT_REVIEW_FRAGMENT_COMMAND = createCommand<ReviewFragment>(
   "INSERT_REVIEW_FRAGMENT_COMMAND",
 );
@@ -298,11 +294,7 @@ export function registerReviewSession(
               event.metaKey
             )
               return false;
-            if (
-              !$moveReviewFragmentCaret(index === 0) &&
-              !$moveReviewBoundaryCaret(index === 0)
-            )
-              return false;
+            if (!$moveReviewCaret(index === 0)) return false;
             event.preventDefault();
             return true;
           },

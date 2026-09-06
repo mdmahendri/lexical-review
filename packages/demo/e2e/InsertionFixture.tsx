@@ -10,12 +10,9 @@ import {
   HISTORY_PUSH_TAG,
 } from "lexical";
 import {
-  $acceptReviewInsertion,
-  $inspectReviewInsertion,
-  $inspectReviewReplacement,
+  $inspectReviewProposal,
   $insertReviewText,
-  $rejectReviewInsertion,
-  $removeReviewInsertion,
+  $resolveReviewProposal,
   openReviewSession,
   ReviewInsertionNode,
   ReviewDeletionNode,
@@ -84,13 +81,7 @@ export function InsertionFixture() {
       settle(action: "accept" | "reject" | "remove") {
         editor.update(
           () => {
-            const operation =
-              action === "accept"
-                ? $acceptReviewInsertion
-                : action === "reject"
-                  ? $rejectReviewInsertion
-                  : $removeReviewInsertion;
-            lastOutcome = operation("insertion-1").status;
+            lastOutcome = $resolveReviewProposal("insertion-1", action).status;
           },
           { discrete: true, tag: HISTORY_PUSH_TAG },
         );
@@ -112,10 +103,10 @@ export function InsertionFixture() {
           document: opened.value.exportDocument(),
           proposal: editor
             .getEditorState()
-            .read(() => $inspectReviewInsertion("insertion-1")),
+            .read(() => $inspectReviewProposal("insertion-1")),
           replacement: editor
             .getEditorState()
-            .read(() => $inspectReviewReplacement("insertion-1")),
+            .read(() => $inspectReviewProposal("insertion-1")),
           lastOutcome,
         };
       },
@@ -146,7 +137,12 @@ declare global {
       settle(action: "accept" | "reject" | "remove"): void;
       ambiguous(): void;
       undo(): void;
-      snapshot(): unknown;
+      snapshot(): {
+        document: unknown;
+        proposal: unknown;
+        replacement: unknown;
+        lastOutcome: string;
+      };
     };
   }
 }

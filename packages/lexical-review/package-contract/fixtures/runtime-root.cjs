@@ -10,17 +10,25 @@ assert.equal("ReviewTextNode" in root, false);
 assert.equal(typeof root.openReviewSession, "function");
 for (const name of [
   "$deleteReviewText",
+  "$insertReviewText",
+  "$replaceReviewText",
+  "$inspectReviewProposal",
+  "$resolveReviewProposal",
+  "$resolveReviewProposals",
+]) {
+  assert.equal(typeof root[name], "function");
+}
+for (const name of [
   "$inspectReviewDeletion",
   "$removeReviewDeletion",
   "$acceptReviewDeletion",
   "$rejectReviewDeletion",
-  "$insertReviewText",
   "$inspectReviewInsertion",
   "$removeReviewInsertion",
   "$acceptReviewInsertion",
   "$rejectReviewInsertion",
 ]) {
-  assert.equal(typeof root[name], "function");
+  assert.equal(root[name], undefined);
 }
 assert.equal(typeof root.validateReviewDocument, "function");
 assert.equal("ReviewTextPlugin" in root, false);

@@ -8,12 +8,10 @@ import {
   createEditor,
 } from "lexical";
 import {
-  $acceptReviewInsertion,
   $deleteReviewText,
-  $inspectReviewInsertion,
+  $inspectReviewProposal,
   $insertReviewText,
-  $rejectReviewInsertion,
-  $removeReviewInsertion,
+  $resolveReviewProposal,
   $isReviewInsertionNode,
   openReviewSession,
   ReviewInsertionNode,
@@ -116,10 +114,13 @@ it.each(["root", "client"] as const)(
       "changed",
     ]);
     expect(
-      editor.getEditorState().read(() => $inspectReviewInsertion("insertion")),
+      editor.getEditorState().read(() => $inspectReviewProposal("insertion")),
     ).toEqual({
       status: "unchanged",
-      value: { proposalId: "insertion", text: "corrected!" },
+      value: {
+        kind: "insertion",
+        proposal: { proposalId: "insertion", text: "corrected!" },
+      },
     });
     expect(editor.getEditorState().read(selectionSnapshot)).toMatchObject({
       anchor: { offset: 9 },
@@ -135,9 +136,9 @@ it.each(["root", "client"] as const)(
     expect(
       reopened.editor
         .getEditorState()
-        .read(() => $inspectReviewInsertion("insertion")),
+        .read(() => $inspectReviewProposal("insertion")),
     ).toEqual(
-      editor.getEditorState().read(() => $inspectReviewInsertion("insertion")),
+      editor.getEditorState().read(() => $inspectReviewProposal("insertion")),
     );
     await Promise.resolve();
     unregister();
@@ -145,12 +146,12 @@ it.each(["root", "client"] as const)(
 );
 
 it.each([
-  ["accept", $acceptReviewInsertion, "AXB"],
-  ["reject", $rejectReviewInsertion, "AB"],
-  ["remove", $removeReviewInsertion, "AB"],
+  ["accept", "AXB"],
+  ["reject", "AB"],
+  ["remove", "AB"],
 ] as const)(
   "%s settles the entire insertion and preserves formatting without a terminal record",
-  (_name, settle, expected) => {
+  (_name, expected) => {
     const { editor, session } = setup([
       text("A"),
       reviewNode("review-insertion", "p", [text("X", 1)]),
@@ -163,9 +164,12 @@ it.each([
       discrete: true,
     });
     expect(root.querySelector("ins > strong")?.textContent).toBe("X");
-    editor.update(() => expect(settle("p").status).toBe("changed"), {
-      discrete: true,
-    });
+    editor.update(
+      () => expect($resolveReviewProposal("p", _name).status).toBe("changed"),
+      {
+        discrete: true,
+      },
+    );
     expect(
       editor.getEditorState().read(() => $getRoot().getTextContent()),
     ).toBe(expected);
@@ -252,7 +256,7 @@ it("refuses resolution of a disconnected or unknown identity atomically", () => 
   for (const id of ["p", "missing"])
     editor.update(
       () => {
-        expect($acceptReviewInsertion(id).status).toBe("refused");
+        expect($resolveReviewProposal(id, "accept").status).toBe("refused");
       },
       { discrete: true },
     );
@@ -377,9 +381,12 @@ it.each([
           type: "text",
         },
       });
-      expect($inspectReviewInsertion("p")).toEqual({
+      expect($inspectReviewProposal("p")).toEqual({
         status: "unchanged",
-        value: { proposalId: "p", text: expectedText },
+        value: {
+          kind: "insertion",
+          proposal: { proposalId: "p", text: expectedText },
+        },
       });
     });
     const saved = session.exportDocument();

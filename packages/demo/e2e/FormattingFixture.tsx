@@ -9,7 +9,7 @@ import {
   FORMAT_TEXT_COMMAND,
 } from "lexical";
 import {
-  $inspectReviewFormatting,
+  $inspectReviewProposal,
   $resolveReviewProposals,
   $toggleReviewFormatting,
   openReviewSession,
@@ -99,7 +99,7 @@ export function FormattingFixture() {
           const selection = $getSelection();
           return {
             document: opened.value.exportDocument(),
-            proposal: $inspectReviewFormatting("proposal-1"),
+            proposal: $inspectReviewProposal("proposal-1"),
             outcome,
             selection: $isRangeSelection(selection)
               ? {
@@ -140,7 +140,12 @@ declare global {
         route: "root" | "client",
       ): void;
       settle(action: "accept" | "reject" | "remove"): void;
-      snapshot(): unknown;
+      snapshot(): {
+        document: unknown;
+        proposal: unknown;
+        outcome: string;
+        selection: unknown;
+      };
     };
   }
 }

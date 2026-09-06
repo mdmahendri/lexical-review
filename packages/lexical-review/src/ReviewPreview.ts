@@ -8,11 +8,11 @@ import {
   ReviewInsertionNode,
   ReviewDeletionNode,
   ReviewFormattingNode,
+  isReviewElementNode,
 } from "./ReviewNodes";
-import { isReviewElementNode } from "./ReviewSelectionPreparation";
-import { $resolveReviewProposals } from "./ReviewOperations";
+import { $resolveReviewProposals } from "./ReviewResolution";
 import { openReviewSession } from "./ReviewSession";
-import { type ReviewDocumentV3, type ValidationResult } from "./ReviewDocument";
+import type { ReviewDocumentV3, ValidationResult } from "./ReviewDocument";
 
 /** A detached projection: neither the source document nor a live editor is resolved. */
 export function createReviewPreview(

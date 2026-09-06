@@ -1,5 +1,8 @@
-import { $splitReviewFragment } from "./ReviewFragment";
-import { $isReviewFragmentNode } from "./ReviewNodes";
+import {
+  $isReviewFragmentNode,
+  isReviewElementNode,
+  isRootParagraph,
+} from "./ReviewNodes";
 import {
   $createParagraphNode,
   $getEditor,
@@ -9,7 +12,6 @@ import {
   type LexicalNode,
   type ParagraphNode,
   type ElementNode,
-  type TextNode,
 } from "lexical";
 import {
   $createReviewBoundaryNode,
@@ -28,12 +30,10 @@ import {
   type ReviewIntentOutcome,
 } from "./ReviewIntent";
 import {
-  inspectProposalGroup,
-  inspectSelection,
-  isReviewElementNode,
-  isRootParagraph,
+  inspectProposalKind,
+  inspectStructuralPosition,
   validateParagraphStructure,
-} from "./ReviewSelectionPreparation";
+} from "./ReviewTargeting";
 import {
   $getReviewInputFormat,
   $setReviewInputFormat,
@@ -43,12 +43,6 @@ export type ReviewStructuralProposal = Readonly<{
   proposalId: string;
   kind: ReviewBoundaryKind;
 }>;
-type Position = {
-  paragraph: ParagraphNode;
-  index: number;
-  text: TextNode | null;
-  offset: number;
-};
 
 export function validateStructuralState(): ReviewIntentOutcome | null {
   if ($getEditor().isComposing())
@@ -81,8 +75,8 @@ export function validateStructuralState(): ReviewIntentOutcome | null {
         const boundary = inspectBoundary(node.getProposalId());
         if (boundary.status !== "ready") return boundary;
       } else if (isReviewElementNode(node)) {
-        const group = inspectProposalGroup(node.getProposalId());
-        if (group.status !== "ready") return group;
+        const kind = inspectProposalKind(node.getProposalId());
+        if (kind.status !== "ready") return kind;
       }
     }
   }
@@ -160,92 +154,6 @@ function hasSplit(node: LexicalNode | null): boolean {
   );
 }
 
-function position(): Preparation<Position> {
-  const inspection = inspectSelection(true);
-  if (inspection.status !== "ready") return inspection;
-  if (!inspection.value.collapsed)
-    return refusal(
-      "unsupported-target",
-      "Structural editing requires a collapsed caret; Enter-over-range is unsupported.",
-    );
-  const point = inspection.value.anchor;
-  if (point.association === "accepted" && !point.node) {
-    const left = point.paragraph.getChildAtIndex(point.childIndex - 1);
-    const right = point.paragraph.getChildAtIndex(point.childIndex);
-    if (
-      ($isReviewFragmentNode(right) && right.startsParagraph()) ||
-      ($isReviewFragmentNode(left) &&
-        isRootParagraph(point.paragraph.getNextSibling()) &&
-        $isReviewFragmentNode(
-          point.paragraph.getNextSibling<ParagraphNode>()!.getFirstChild(),
-        ))
-    )
-      return refusal(
-        "unsafe-proposal-intersection",
-        "Structural editing cannot cross fragment-owned boundaries.",
-      );
-  }
-
-  let index = point.childIndex;
-  if (point.association === "proposal") {
-    const group = inspectProposalGroup(point.wrapper.getProposalId());
-    if (group.status !== "ready") return group;
-    const children = point.wrapper.getChildren();
-    const before =
-      point.node === null
-        ? point.offset === 0
-        : point.node === children[0] && point.offset === 0;
-    const after =
-      point.node === null
-        ? point.offset === point.wrapper.getTextContentSize()
-        : point.node === children.at(-1) &&
-          point.offset === point.node.getTextContentSize();
-    if (before && point.wrapper === group.value.wrappers[0])
-      index = point.wrapper.getIndexWithinParent();
-    else if (after && point.wrapper === group.value.wrappers.at(-1))
-      index = point.wrapper.getIndexWithinParent() + 1;
-    else
-      return refusal(
-        "unsafe-proposal-intersection",
-        "A structural change may not divide a pending text proposal.",
-      );
-    return {
-      status: "ready",
-      value: { paragraph: point.paragraph, index, text: null, offset: 0 },
-    };
-  }
-  if (point.node && point.offset === point.node.getTextContentSize()) index++;
-  // Element positions between the two sides of one replacement are not endpoints.
-  const left = point.paragraph.getChildAtIndex(index - 1);
-  const right = point.paragraph.getChildAtIndex(index);
-  if (
-    (!point.node ||
-      point.offset === 0 ||
-      point.offset === point.node.getTextContentSize()) &&
-    isReviewElementNode(left) &&
-    isReviewElementNode(right) &&
-    left.getProposalId() === right.getProposalId()
-  )
-    return refusal(
-      "unsafe-proposal-intersection",
-      "A structural change may not divide a shared proposal identity.",
-    );
-  return {
-    status: "ready",
-    value: {
-      paragraph: point.paragraph,
-      index,
-      text:
-        point.node &&
-        point.offset > 0 &&
-        point.offset < point.node.getTextContentSize()
-          ? point.node
-          : null,
-      offset: point.offset,
-    },
-  };
-}
-
 function sideFormat(paragraph: ParagraphNode, side: "left" | "right"): number {
   const nodes = paragraph.getAllTextNodes();
   return (
@@ -262,14 +170,13 @@ function selectBoundary(
   $setReviewInputFormat(selection, format);
 }
 
-export function $splitReviewParagraph(
+/** Claim a structural split for non-fragment selections; the dispatch runs the fragment claim first. */
+export function $claimParagraphSplit(
   options: ReviewAuthoringOptions = {},
 ): ReviewIntentOutcome {
-  const local = $splitReviewFragment();
-  if (local) return local;
   const blocked = validateStructuralState();
   if (blocked) return blocked;
-  const prepared = position();
+  const prepared = inspectStructuralPosition();
   if (prepared.status !== "ready") return prepared;
   const { paragraph, text, offset } = prepared.value;
   let { index } = prepared.value;
@@ -283,7 +190,7 @@ export function $splitReviewParagraph(
       (node) => $isReviewBoundaryNode(node) && node.getKind() === "merge",
     );
   if (merge && $isReviewBoundaryNode(merge))
-    return $removeReviewStructure(merge.getProposalId());
+    return resolveStructure(merge.getProposalId(), false);
   if (hasMerge(paragraph))
     return refusal(
       "unsafe-proposal-intersection",
@@ -327,7 +234,7 @@ export function $mergeReviewParagraph(
 ): ReviewIntentOutcome {
   const blocked = validateStructuralState();
   if (blocked) return blocked;
-  const prepared = position();
+  const prepared = inspectStructuralPosition();
   if (prepared.status !== "ready") return prepared;
   const { paragraph, index, text } = prepared.value;
   const start = index === 0 || (index === 1 && hasSplit(paragraph));
@@ -344,8 +251,9 @@ export function $mergeReviewParagraph(
       "There is no adjacent paragraph to merge.",
     );
   if (hasSplit(right))
-    return $removeReviewStructure(
+    return resolveStructure(
       right.getFirstChild<ReviewBoundaryNode>()!.getProposalId(),
+      false,
     );
   if ([left, right].some((p) => p.getChildren().some($isReviewFragmentNode)))
     return refusal(
@@ -388,14 +296,14 @@ export function $mergeReviewParagraph(
   return changed();
 }
 
-/** Return null when ordinary text deletion should handle this caret. */
-export function $deleteReviewBoundary(
+/** Claim boundary deletion for collapsed carets; null means text owns it. */
+export function $claimBoundaryDeletion(
   backward: boolean,
   options: ReviewAuthoringOptions = {},
 ): ReviewIntentOutcome | null {
   const selection = $getSelection();
   if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
-  const prepared = position();
+  const prepared = inspectStructuralPosition();
   if (prepared.status !== "ready") return null;
   const { paragraph, index, text } = prepared.value;
   if (text) return null;
@@ -439,7 +347,10 @@ function retainSelection(
   };
 }
 
-function resolve(proposalId: string, accept: boolean): ReviewIntentOutcome {
+export function resolveStructure(
+  proposalId: string,
+  accept: boolean,
+): ReviewIntentOutcome {
   const blocked = validateStructuralState();
   if (blocked) return blocked;
   const found = inspectBoundary(proposalId);
@@ -494,7 +405,7 @@ function resolve(proposalId: string, accept: boolean): ReviewIntentOutcome {
   }
   return changed();
 }
-export function $inspectReviewStructure(
+export function inspectStructureProposal(
   proposalId: string,
 ): ReviewIntentOutcome<ReviewStructuralProposal> {
   const found = inspectBoundary(proposalId);
@@ -504,25 +415,9 @@ export function $inspectReviewStructure(
     value: { proposalId, kind: found.value.getKind() },
   };
 }
-export function $acceptReviewStructure(
-  proposalId: string,
-): ReviewIntentOutcome {
-  return resolve(proposalId, true);
-}
-export function $rejectReviewStructure(
-  proposalId: string,
-): ReviewIntentOutcome {
-  return resolve(proposalId, false);
-}
-export function $removeReviewStructure(
-  proposalId: string,
-): ReviewIntentOutcome {
-  return resolve(proposalId, false);
-}
-
 /** Client arrow routing crosses the seam explicitly, including when both sides are empty. */
 export function $moveReviewBoundaryCaret(backward: boolean): boolean {
-  const prepared = position();
+  const prepared = inspectStructuralPosition();
   if (prepared.status !== "ready" || prepared.value.text) return false;
   const { paragraph, index } = prepared.value;
   const marker = paragraph.getChildAtIndex(index + (backward ? -1 : 0));

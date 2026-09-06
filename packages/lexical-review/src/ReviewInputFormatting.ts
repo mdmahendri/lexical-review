@@ -9,7 +9,7 @@ import {
   type LexicalEditor,
   type RangeSelection,
 } from "lexical";
-import { inspectSelection } from "./ReviewSelectionPreparation";
+import { inspectSelection } from "./ReviewTargeting";
 
 type LocalFormat = {
   key: string;

@@ -7,9 +7,9 @@ import {
 } from "lexical";
 import {
   $canReviewElementNodesBeMerged,
+  isReviewElementNode,
   type ReviewElementNode,
 } from "./ReviewNodes";
-import { isReviewElementNode } from "./ReviewSelectionPreparation";
 
 type PointSnapshot = Readonly<{
   key: string;

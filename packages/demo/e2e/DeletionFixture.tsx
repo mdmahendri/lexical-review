@@ -11,10 +11,8 @@ import {
 } from "lexical";
 import {
   $deleteReviewText,
-  $inspectReviewDeletion,
-  $acceptReviewDeletion,
-  $rejectReviewDeletion,
-  $removeReviewDeletion,
+  $inspectReviewProposal,
+  $resolveReviewProposal,
   openReviewSession,
   ReviewInsertionNode,
   ReviewDeletionNode,
@@ -97,11 +95,7 @@ export function DeletionFixture() {
       resolve(action: "accept" | "reject" | "remove") {
         editor.update(
           () => {
-            lastOutcome = {
-              accept: $acceptReviewDeletion,
-              reject: $rejectReviewDeletion,
-              remove: $removeReviewDeletion,
-            }[action]("deletion-1").status;
+            lastOutcome = $resolveReviewProposal("deletion-1", action).status;
           },
           { discrete: true },
         );
@@ -111,7 +105,7 @@ export function DeletionFixture() {
           document: opened.value.exportDocument(),
           proposal: editor
             .getEditorState()
-            .read(() => $inspectReviewDeletion("deletion-1")),
+            .read(() => $inspectReviewProposal("deletion-1")),
           lastOutcome,
           selection: editor.getEditorState().read(() => {
             const selection = $getSelection();
@@ -159,7 +153,12 @@ declare global {
         granularity?: "character" | "word" | "range",
       ): void;
       resolve(action: "accept" | "reject" | "remove"): void;
-      snapshot(): unknown;
+      snapshot(): {
+        document: unknown;
+        proposal: unknown;
+        lastOutcome: string;
+        selection: unknown;
+      };
     };
   }
 }

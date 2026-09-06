@@ -8,16 +8,14 @@ import {
 } from "lexical";
 import {
   $insertReviewFragment,
-  $inspectReviewFragment,
-  $rejectReviewFragment,
+  $inspectReviewProposal,
+  $resolveReviewProposal,
   $insertReviewText,
   $deleteReviewText,
   $replaceReviewText,
   $splitReviewParagraph,
   $resolveReviewProposals,
   $setReviewFormatting,
-  $inspectReviewInsertion,
-  $inspectReviewStructure,
   ReviewFragmentNode,
   ReviewInsertionNode,
   ReviewDeletionNode,
@@ -120,7 +118,7 @@ it.each(["accept", "reject", "remove"] as const)(
     read(() => {
       expect(contents()).toEqual(["Ax", "yB"]);
       expect(parts().map((n) => n.getProposalId())).toEqual(["f", "f"]);
-      expect($inspectReviewFragment("f")).toMatchObject({
+      expect($inspectReviewProposal("f")).toMatchObject({
         value: { kind: "fragment" },
       });
     });
@@ -201,8 +199,8 @@ it("normalizes an internal boundary deletion to insertion with stable ID", () =>
   });
   s.read(() => {
     expect(contents()).toEqual(["AxyB"]);
-    expect($inspectReviewInsertion("f")).toMatchObject({
-      value: { text: "xy" },
+    expect($inspectReviewProposal("f")).toMatchObject({
+      value: { kind: "insertion", proposal: { text: "xy" } },
     });
   });
   expect(s.session.exportDocument().status).toBe("valid");
@@ -217,8 +215,8 @@ it("normalizes one empty boundary to split but preserves multiple boundaries", (
   });
   s.read(() => {
     expect(contents()).toEqual(["A", "B"]);
-    expect($inspectReviewStructure("f")).toMatchObject({
-      value: { kind: "split" },
+    expect($inspectReviewProposal("f")).toMatchObject({
+      value: { kind: "structure", proposal: { kind: "split" } },
     });
   });
 });
@@ -292,7 +290,7 @@ it("rejects split first without losing the fragment", () => {
   );
   s.read(() => {
     expect(contents()).toEqual(["Ax", "yBCD"]);
-    expect($inspectReviewFragment("f").status).toBe("unchanged");
+    expect($inspectReviewProposal("f").status).toBe("unchanged");
   });
 });
 it("accepted-side deletion is independent and survives fragment rejection", () => {
@@ -302,7 +300,9 @@ it("accepted-side deletion is independent and survives fragment rejection", () =
     $getRoot().getAllTextNodes()[0]!.selectEnd();
     expect($deleteReviewText(true, id("d")).status).toBe("changed");
   });
-  s.update(() => expect($rejectReviewFragment("f").status).toBe("changed"));
+  s.update(() =>
+    expect($resolveReviewProposal("f", "reject").status).toBe("changed"),
+  );
   expect(JSON.stringify(s.session.exportDocument())).toContain(
     '"proposalId":"d"',
   );

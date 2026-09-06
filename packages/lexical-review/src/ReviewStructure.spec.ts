@@ -11,10 +11,8 @@ import {
 import {
   $splitReviewParagraph,
   $mergeReviewParagraph,
-  $acceptReviewStructure,
-  $rejectReviewStructure,
-  $removeReviewStructure,
-  $inspectReviewStructure,
+  $inspectReviewProposal,
+  $resolveReviewProposal,
   $insertReviewText,
   $replaceReviewText,
   $deleteReviewText,
@@ -93,8 +91,8 @@ it.each(["accept", "reject", "remove"] as const)(
           .getAllTextNodes()
           .map((node) => node.getFormat()),
       ).toEqual([1, 1]);
-      expect($inspectReviewStructure("s")).toMatchObject({
-        value: { kind: "split" },
+      expect($inspectReviewProposal("s")).toMatchObject({
+        value: { kind: "structure", proposal: { kind: "split" } },
       });
     });
     const saved = session.exportDocument();
@@ -102,13 +100,7 @@ it.each(["accept", "reject", "remove"] as const)(
     if (saved.status !== "valid") return;
     expect(openReviewSession(editor, saved.value).status).toBe("valid");
     update(() =>
-      expect(
-        {
-          accept: $acceptReviewStructure,
-          reject: $rejectReviewStructure,
-          remove: $removeReviewStructure,
-        }[action]("s").status,
-      ).toBe("changed"),
+      expect($resolveReviewProposal("s", action).status).toBe("changed"),
     );
     read(() =>
       expect(contents()).toEqual(
@@ -135,14 +127,16 @@ it.each(["s1", "s2"])(
       $splitReviewParagraph(id("s2"));
     });
     read(() => expect(contents()).toEqual(["ab", "cd", "ef"]));
-    update(() => expect($removeReviewStructure(target).status).toBe("changed"));
+    update(() =>
+      expect($resolveReviewProposal(target, "remove").status).toBe("changed"),
+    );
     read(() => {
       expect(contents()).toEqual(
         target === "s1" ? ["abcd", "ef"] : ["ab", "cdef"],
       );
-      expect(
-        $inspectReviewStructure(target === "s1" ? "s2" : "s1").status,
-      ).toBe("unchanged");
+      expect($inspectReviewProposal(target === "s1" ? "s2" : "s1").status).toBe(
+        "unchanged",
+      );
     });
     expect(session.exportDocument().status).toBe("valid");
   },
@@ -162,7 +156,9 @@ it.each(["typing", "replacement"])(
         $replaceReviewText("W", id("t"));
       } else $insertReviewText("new ", id("t"));
     });
-    update(() => expect($rejectReviewStructure("s").status).toBe("changed"));
+    update(() =>
+      expect($resolveReviewProposal("s", "reject").status).toBe("changed"),
+    );
     read(() => {
       expect(paragraphs()).toHaveLength(1);
       expect($getSelection()?.getNodes()[0]?.isAttached()).toBe(true);
@@ -216,7 +212,9 @@ it.each([false, true])(
       );
       expect($insertReviewText("R", id("r")).status).toBe("changed");
     });
-    update(() => expect($rejectReviewStructure("m").status).toBe("changed"));
+    update(() =>
+      expect($resolveReviewProposal("m", "reject").status).toBe("changed"),
+    );
     read(() => {
       expect(contents()).toEqual(["leftL", "Rright"]);
       expect(
@@ -245,9 +243,9 @@ it("cancels exact boundaries through inverse gestures and keeps empty paragraph 
   update(() => expect($deleteReviewText(true).status).toBe("changed"));
   read(() => {
     expect(contents()).toEqual(["", ""]);
-    expect($inspectReviewStructure("s1").status).toBe("unchanged");
+    expect($inspectReviewProposal("s1").status).toBe("unchanged");
   });
-  update(() => $acceptReviewStructure("s1"));
+  update(() => $resolveReviewProposal("s1", "accept"));
   update(() => {
     paragraphs()[1]!.selectStart();
     expect($deleteReviewText(true, id("m")).status).toBe("changed");
@@ -382,7 +380,7 @@ it("reconciles visible boundary markers and preserves outer review wrappers", ()
       ?.getAttribute("contenteditable"),
   ).toBe("false");
   expect(root.querySelector("p > ins em")?.textContent).toBe("right");
-  update(() => $rejectReviewStructure("m"));
+  update(() => $resolveReviewProposal("m", "reject"));
   expect(root.querySelectorAll("p")).toHaveLength(2);
   expect(root.querySelector("[data-review-boundary]")).toBeNull();
   expect(session.exportDocument().status).toBe("valid");
@@ -443,7 +441,7 @@ it.each(["left", "right"] as const)(
         side === "left" ? 1 : 2,
       ),
     );
-    update(() => $rejectReviewStructure("m"));
+    update(() => $resolveReviewProposal("m", "reject"));
     read(() => {
       expect(contents()).toEqual(side === "left" ? ["X", ""] : ["", "X"]);
       expect(paragraphs().map((p) => p.getTextFormat())).toEqual([1, 2]);
@@ -519,7 +517,7 @@ it("refuses factory failure and structural resolution during composition without
   const composing = vi.spyOn(editor, "isComposing").mockReturnValue(true);
   const pending = snapshot();
   update(() => {
-    expect($acceptReviewStructure("s").status).toBe("refused");
+    expect($resolveReviewProposal("s", "accept").status).toBe("refused");
     expect($splitReviewParagraph(id("s2")).status).toBe("refused");
     expect($resolveReviewProposals(["s"], "accept").status).toBe("refused");
   });
@@ -536,7 +534,7 @@ it("preserves backward text selection when rejecting a split moves its current c
   update(() => {
     const [left, right] = $getRoot().getAllTextNodes();
     right!.select().setTextNodeRange(right!, 2, left!, 1);
-    expect($rejectReviewStructure("s").status).toBe("changed");
+    expect($resolveReviewProposal("s", "reject").status).toBe("changed");
   });
   read(() => {
     const selection = $getSelection();

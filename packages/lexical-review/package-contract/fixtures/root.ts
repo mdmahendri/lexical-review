@@ -3,7 +3,7 @@ import {
   type ReviewDocumentV3,
   ReviewFormattingNode,
   $setReviewFormatting,
-  $inspectReviewFormatting,
+  $inspectReviewProposal,
   ReviewDeletionNode,
   ReviewInsertionNode,
   type ValidationResult,
@@ -64,5 +64,5 @@ void nodeClass;
 
 editor.update(() => {
   void $setReviewFormatting({ bold: true, underline: true });
-  void $inspectReviewFormatting("pending-format");
+  void $inspectReviewProposal("pending-format");
 });

@@ -10,18 +10,12 @@ import {
   createEditor,
 } from "lexical";
 import {
-  $acceptReviewDeletion,
-  $acceptReviewInsertion,
-  $acceptReviewReplacement,
   $createReviewInsertionNode,
   $deleteReviewText,
-  $inspectReviewReplacement,
+  $inspectReviewProposal,
   $insertReviewText,
-  $rejectReviewDeletion,
-  $rejectReviewInsertion,
-  $rejectReviewReplacement,
-  $removeReviewReplacement,
   $replaceReviewText,
+  $resolveReviewProposal,
   $resolveReviewProposals,
   openReviewSession,
   ReviewDeletionNode,
@@ -111,8 +105,11 @@ it.each(["semantic", "string", "input-event"])(
               }),
         );
     });
-    expect(read(() => $inspectReviewReplacement("p"))).toMatchObject({
-      value: { proposalId: "p", oldText: "old", newText: "new" },
+    expect(read(() => $inspectReviewProposal("p"))).toMatchObject({
+      value: {
+        kind: "replacement",
+        proposal: { proposalId: "p", oldText: "old", newText: "new" },
+      },
     });
     update(() => {
       expect($insertReviewText("!").status).toBe("changed");
@@ -122,8 +119,11 @@ it.each(["semantic", "string", "input-event"])(
       expect($insertReviewText("corrected").status).toBe("changed");
     });
     expect(factory).toHaveBeenCalledTimes(1);
-    expect(read(() => $inspectReviewReplacement("p"))).toMatchObject({
-      value: { oldText: "old", newText: "corrected!" },
+    expect(read(() => $inspectReviewProposal("p"))).toMatchObject({
+      value: {
+        kind: "replacement",
+        proposal: { oldText: "old", newText: "corrected!" },
+      },
     });
     expect(
       read(() => {
@@ -138,8 +138,8 @@ it.each(["semantic", "string", "input-event"])(
       expect(openReviewSession(reopened.editor, saved.value).status).toBe(
         "valid",
       );
-      expect(reopened.read(() => $inspectReviewReplacement("p"))).toEqual(
-        read(() => $inspectReviewReplacement("p")),
+      expect(reopened.read(() => $inspectReviewProposal("p"))).toEqual(
+        read(() => $inspectReviewProposal("p")),
       );
       expect(Object.isFrozen(saved.value.root.children)).toBe(true);
     }
@@ -149,18 +149,14 @@ it.each(["semantic", "string", "input-event"])(
 );
 
 it.each([
-  [$acceptReviewReplacement, "new"],
-  [$acceptReviewInsertion, "new"],
-  [$acceptReviewDeletion, "new"],
-  [$rejectReviewReplacement, "old"],
-  [$rejectReviewInsertion, "old"],
-  [$rejectReviewDeletion, "old"],
-  [$removeReviewReplacement, "old"],
-] as const)("resolves both sides atomically via %s", (resolve, expected) => {
+  ["accept", "new"],
+  ["reject", "old"],
+  ["remove", "old"],
+] as const)("resolves both sides atomically via %s", (action, expected) => {
   const { update, read, session } = setup();
   update(() => {
     $getRoot().getAllTextNodes()[0]!.select(1, 2);
-    expect(resolve("p").status).toBe("changed");
+    expect($resolveReviewProposal("p", action).status).toBe("changed");
   });
   expect(read(() => $getRoot().getTextContent())).toBe(expected);
   expect(
@@ -170,7 +166,7 @@ it.each([
         .every((node) => node.getParent()?.getType() === "paragraph"),
     ),
   ).toBe(true);
-  expect(read(() => $inspectReviewReplacement("p").status)).toBe("refused");
+  expect(read(() => $inspectReviewProposal("p").status)).toBe("refused");
   expect(session.exportDocument().status).toBe("valid");
 });
 
@@ -216,7 +212,7 @@ it.each([
       );
   });
   expect(read(() => $getRoot().getTextContent())).toBe("Aold");
-  expect(read(() => $inspectReviewReplacement("p").status)).toBe("refused");
+  expect(read(() => $inspectReviewProposal("p").status)).toBe("refused");
   expect(session.exportDocument().status).toBe("valid");
   unregister();
 });
@@ -232,8 +228,11 @@ it("corrects split formatted sides, retaining replacement kind until all new con
     $getRoot().getAllTextNodes()[2]!.select(0, 1);
     expect($deleteReviewText(false).status).toBe("changed");
   });
-  expect(read(() => $inspectReviewReplacement("p"))).toMatchObject({
-    value: { oldText: "old", newText: "ew" },
+  expect(read(() => $inspectReviewProposal("p"))).toMatchObject({
+    value: {
+      kind: "replacement",
+      proposal: { oldText: "old", newText: "ew" },
+    },
   });
   update(() => {
     $getRoot().getAllTextNodes().at(-1)!.select(0, 2);
@@ -324,7 +323,7 @@ it("refuses editing, resolution, and batch resolution of an ambiguous live group
   update(() => {
     expect($insertReviewText("x").status).toBe("refused");
     expect($deleteReviewText(true).status).toBe("refused");
-    expect($acceptReviewReplacement("p").status).toBe("refused");
+    expect($resolveReviewProposal("p", "accept").status).toBe("refused");
     expect($resolveReviewProposals(["p"], "accept").status).toBe("refused");
   });
   expect(snapshot()).toEqual(before);
@@ -372,7 +371,7 @@ it("reconciles formatted replacement wrappers and atomic acceptance in the DOM",
   });
   expect(root.querySelector("p > ins em")?.textContent).toBe("new!");
   update(() => {
-    expect($acceptReviewReplacement("p").status).toBe("changed");
+    expect($resolveReviewProposal("p", "accept").status).toBe("changed");
   });
   expect(root.querySelectorAll("ins,del")).toHaveLength(0);
   expect(root.querySelector("em")?.textContent).toBe("new!");
@@ -399,7 +398,7 @@ it("empty controlled replacement input cancels a replacement and uses deletion s
     empty();
   });
   expect(read(() => $getRoot().getTextContent())).toBe("old");
-  expect(read(() => $inspectReviewReplacement("p").status)).toBe("refused");
+  expect(read(() => $inspectReviewProposal("p").status)).toBe("refused");
   update(() => {
     $getRoot().getAllTextNodes()[0]!.select(0, 3);
     empty();

@@ -1,7 +1,7 @@
 import { $isReviewBoundaryNode } from "./ReviewBoundaryNode";
 import { $getRoot, $isElementNode } from "lexical";
 import { createProposalId, isValidProposalId } from "./ProposalIdentity";
-import { isReviewElementNode } from "./ReviewSelectionPreparation";
+import { isReviewElementNode } from "./ReviewNodes";
 import { refusal, type Preparation } from "./ReviewIntent";
 export type ReviewProposalIdFactory = () => string;
 
