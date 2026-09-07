@@ -18,11 +18,7 @@
  * mutation; refusals preserve content, pending work, projection, and logical
  * selection.
  */
-import {
-  $createTextNode,
-  $getEditor,
-  type TextNode,
-} from "lexical";
+import { $createTextNode, $getEditor, type TextNode } from "lexical";
 import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
 import { prepareProposalId } from "./ReviewAuthoring";
 import type { ReviewFormatRun } from "./ReviewFormattingState";
@@ -39,7 +35,11 @@ import {
   type ReviewIntentError,
   type ReviewIntentRefusal,
 } from "./ReviewIntent";
-import { $claimFragmentInsertion } from "./ReviewFragment";
+import {
+  $claimFragmentInsertion,
+  $insertReviewFragment,
+} from "./ReviewFragment";
+import { normalizeUntrustedMultilineClipboardContent } from "./ReviewMultilinePaste";
 import { validateStructuralState } from "./ReviewStructure";
 import {
   insertProposalText,
@@ -59,6 +59,8 @@ export type ReviewPasteNormalization = Readonly<{
   flattened: readonly string[];
   /** Tags dropped with their content or as non-textual media, encounter order. */
   lost: readonly string[];
+  /** True when at least one HTML `<br>` became a paragraph boundary (#67). */
+  softBreakConverted: boolean;
 }>;
 
 export type ReviewPasteOutcome =
@@ -96,10 +98,7 @@ function preventDefaultWhenPossible(event: unknown): void {
 
 type TransferPayload = Readonly<{ html: string; plain: string }>;
 
-function safeGetData(
-  dataTransfer: unknown,
-  type: string,
-): string {
+function safeGetData(dataTransfer: unknown, type: string): string {
   if (dataTransfer === null || typeof dataTransfer !== "object") return "";
   const getData = (dataTransfer as { getData?: unknown }).getData;
   if (typeof getData !== "function") return "";
@@ -261,7 +260,8 @@ function extractHtmlRuns(html: string): HtmlExtraction | null {
     else if (tag === "u") childFormat |= 8;
     // `<ins>`/`<del>`, links, spans, code, font, and the single block
     // wrapper stay transparent: children keep the ambient format.
-    for (const child of Array.from(element.childNodes)) walk(child, childFormat);
+    for (const child of Array.from(element.childNodes))
+      walk(child, childFormat);
   };
   for (const child of Array.from(body.childNodes)) walk(child, 0);
   const merged = runs.filter((run) => run.text.length > 0);
@@ -302,6 +302,7 @@ export function normalizeUntrustedClipboardContent(
               source: "text/html",
               flattened: extracted.flattened,
               lost: extracted.lost,
+              softBreakConverted: false,
             },
           },
         };
@@ -319,14 +320,24 @@ export function normalizeUntrustedClipboardContent(
       status: "ready",
       value: {
         runs: [],
-        normalization: { source: "text/plain", flattened: [], lost: [] },
+        normalization: {
+          source: "text/plain",
+          flattened: [],
+          lost: [],
+          softBreakConverted: false,
+        },
       },
     };
   return {
     status: "ready",
     value: {
       runs: [{ text: plain, format: 0 }],
-      normalization: { source: "text/plain", flattened: [], lost: [] },
+      normalization: {
+        source: "text/plain",
+        flattened: [],
+        lost: [],
+        softBreakConverted: false,
+      },
     },
   };
 }
@@ -454,10 +465,7 @@ export function $applyPasteRuns(
       const next = inspectReviewTarget();
       if (next.status !== "ready") return next;
       const caret = next.value;
-      if (
-        caret.kind !== "proposal-caret" ||
-        caret.proposalId !== proposalId
-      ) {
+      if (caret.kind !== "proposal-caret" || caret.proposalId !== proposalId) {
         return refusal(
           "unsafe-proposal-intersection",
           "The paste target moved across proposals mid-application; nothing further was inserted.",
@@ -491,6 +499,12 @@ export function $applyPasteRuns(
  * Malformed events without readable clipboard data refuse
  * `unsupported-transfer`; the event is always claimed to suppress native
  * fallback mutation.
+ *
+ * Single-paragraph content follows #66 (`$applyPasteRuns`); content with one
+ * or more paragraph boundaries follows #67: it normalizes to fragment
+ * components and applies through the native fragment semantics
+ * (`$insertReviewFragment`), which owns correction, equivalence-based kind
+ * normalization (including the `["",""]` split case), and resolution.
  */
 export function $pasteReviewSelection(
   event: unknown,
@@ -509,8 +523,27 @@ export function $pasteReviewSelection(
     payload.html,
     payload.plain,
   );
-  if (prepared.status !== "ready") return prepared;
-  return $applyPasteRuns(prepared.value.runs, prepared.value.normalization, options);
+  if (prepared.status !== "ready") {
+    // #66 refuses 1+ boundaries with `unsupported-target` as a handoff to the
+    // #67 multiline route; every other refusal stands without mutation.
+    if (prepared.status !== "refused" || prepared.code !== "unsupported-target")
+      return prepared;
+    const multiline = normalizeUntrustedMultilineClipboardContent(
+      payload.html,
+      payload.plain,
+    );
+    if (multiline.status !== "ready") return multiline;
+    const applied = $insertReviewFragment(multiline.value.fragment, options);
+    if (applied.status === "changed")
+      return pasteChanged(multiline.value.normalization);
+    if (applied.status === "unchanged") return pasteUnchanged();
+    return applied as ReviewPasteOutcome;
+  }
+  return $applyPasteRuns(
+    prepared.value.runs,
+    prepared.value.normalization,
+    options,
+  );
 }
 
 /**

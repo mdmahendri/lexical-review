@@ -128,6 +128,12 @@ export {
   type ReviewPasteRun,
 } from "./ReviewPaste";
 export {
+  normalizeUntrustedMultilineClipboardContent,
+  type ReviewMultilinePasteNormalization,
+  type ReviewMultilinePasteOutcome,
+  type ReviewMultilinePastePreparation,
+} from "./ReviewMultilinePaste";
+export {
   $inspectReviewProposalSnapshot,
   $listReviewProposals,
   $previewAcceptedState,

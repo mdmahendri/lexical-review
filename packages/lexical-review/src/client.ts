@@ -21,3 +21,7 @@ export type {
   ReviewPasteOutcome,
   ReviewPasteRun,
 } from "./ReviewPaste";
+export type {
+  ReviewMultilinePasteNormalization,
+  ReviewMultilinePasteOutcome,
+} from "./ReviewMultilinePaste";

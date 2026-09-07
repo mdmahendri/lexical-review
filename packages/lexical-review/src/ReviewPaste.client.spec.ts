@@ -73,23 +73,6 @@ async function update(
   await Promise.resolve();
 }
 
-function liveSelection() {
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection)) return null;
-  return {
-    anchor: {
-      key: selection.anchor.key,
-      offset: selection.anchor.offset,
-      type: selection.anchor.type,
-    },
-    focus: {
-      key: selection.focus.key,
-      offset: selection.focus.offset,
-      type: selection.focus.type,
-    },
-  };
-}
-
 function open(
   editor: LexicalEditor,
   input: unknown,
@@ -278,10 +261,10 @@ describe("review single-paragraph paste", () => {
     expect(outcomes.at(-1)).toMatchObject({ status: "changed" });
     expect(allAcceptedOf(editor)).toEqual(["Ahi thereB"]);
     const formats = editor.read(() =>
-        $getRoot()
-          .getAllTextNodes()
-          .map((node) => node.getFormat()),
-      );
+      $getRoot()
+        .getAllTextNodes()
+        .map((node) => node.getFormat()),
+    );
     expect(formats).toContain(1);
     expect(proposalsOf(editor)).toHaveLength(1);
   });
@@ -312,11 +295,11 @@ describe("review single-paragraph paste", () => {
     expect(allAcceptedOf(editor)).toEqual(["ABlinkbold"]);
     expect(contentOf(editor)).not.toContain("evil()");
     const formats = editor.read(() =>
-        $getRoot()
-          .getAllTextNodes()
-          .filter((node) => node.getTextContent() === "bold")
-          .map((node) => node.getFormat()),
-      );
+      $getRoot()
+        .getAllTextNodes()
+        .filter((node) => node.getTextContent() === "bold")
+        .map((node) => node.getFormat()),
+    );
     expect(formats).toEqual([1]);
   });
 
@@ -359,7 +342,11 @@ describe("review single-paragraph paste", () => {
     open(
       editor,
       reviewDocument([
-        paragraph([text("A"), reviewNode("review-insertion", "paste-x", [text("x")]), text("B")]),
+        paragraph([
+          text("A"),
+          reviewNode("review-insertion", "paste-x", [text("x")]),
+          text("B"),
+        ]),
       ]),
       outcomes,
     );
@@ -371,24 +358,17 @@ describe("review single-paragraph paste", () => {
     expect(proposalsOf(editor)).toEqual(["paste-x"]);
   });
 
-  it("refuses multiline paste with content and selection preserved", async () => {
+  it("routes multiline paste to one atomic fragment instead of refusing (#67)", async () => {
     const editor = createPasteEditor();
     const outcomes: ReviewIntentOutcome[] = [];
     open(editor, acceptedDoc("AB"), outcomes);
     await selectCaret(editor, 0, 1);
-    const before = contentOf(editor);
-    const selection = editor.read(liveSelection);
     const { event, preventDefault } = pasteEvent("", "x\ny");
     expect(editor.dispatchCommand(PASTE_COMMAND, event)).toBe(true);
     expect(preventDefault).toHaveBeenCalled();
-    const outcome = outcomes.at(-1);
-    expect(outcome).toMatchObject({
-      status: "refused",
-      code: "unsupported-target",
-    });
-    expect(contentOf(editor)).toBe(before);
-    expect(proposalsOf(editor)).toHaveLength(0);
-    expect(editor.read(liveSelection)).toEqual(selection);
+    expect(outcomes.at(-1)).toMatchObject({ status: "changed" });
+    expect(allAcceptedOf(editor)).toEqual(["Ax", "yB"]);
+    expect(proposalsOf(editor)).toHaveLength(1);
   });
 
   it("reports empty paste as unchanged without mutation", async () => {
@@ -411,10 +391,9 @@ describe("review single-paragraph paste", () => {
     await selectCaret(editor, 0, 1);
     const before = contentOf(editor);
     expect(
-      editor.dispatchCommand(
-        PASTE_COMMAND,
-        { preventDefault: () => {} } as unknown as ClipboardEvent,
-      ),
+      editor.dispatchCommand(PASTE_COMMAND, {
+        preventDefault: () => {},
+      } as unknown as ClipboardEvent),
     ).toBe(true);
     expect(outcomes.at(-1)).toMatchObject({
       status: "refused",
@@ -479,13 +458,9 @@ describe("review single-paragraph paste", () => {
     await selectCaret(direct, 0, 1);
 
     const routedEvent = pasteEvent("", "x");
-    expect(routed.dispatchCommand(PASTE_COMMAND, routedEvent.event)).toBe(
-      true,
-    );
+    expect(routed.dispatchCommand(PASTE_COMMAND, routedEvent.event)).toBe(true);
     await update(direct, () => {
-      directOutcomes.push(
-        $pasteReviewSelection(pasteEvent("", "x").event, {}),
-      );
+      directOutcomes.push($pasteReviewSelection(pasteEvent("", "x").event, {}));
     });
     expect(routedOutcomes.at(-1)).toMatchObject({ status: "changed" });
     expect(directOutcomes.at(-1)).toMatchObject({ status: "changed" });
@@ -545,10 +520,7 @@ describe("review copy-style drop", () => {
       inputType: "insertFromDrop",
     } as unknown as InputEvent;
     expect(
-      editor.dispatchCommand(
-        CONTROLLED_TEXT_INSERTION_COMMAND,
-        dropInsertion,
-      ),
+      editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, dropInsertion),
     ).toBe(true);
     expect(outcomes).toHaveLength(0);
     expect(contentOf(editor)).toBe(before);
