@@ -11,7 +11,10 @@ import {
   $getSelection,
   $isRangeSelection,
   BEFORE_INPUT_COMMAND,
+  COMMAND_PRIORITY_CRITICAL,
   COMMAND_PRIORITY_HIGH,
+  COMPOSITION_END_COMMAND,
+  COMPOSITION_START_COMMAND,
   CONTROLLED_TEXT_INSERTION_COMMAND,
   CUT_COMMAND,
   DELETE_CHARACTER_COMMAND,
@@ -29,6 +32,7 @@ import {
   PASTE_COMMAND,
   REMOVE_TEXT_COMMAND,
   SET_TEXT_FORMAT_COMMAND,
+  type EditorState,
   type LexicalEditor,
 } from "lexical";
 import { mergeRegister } from "@lexical/utils";
@@ -42,6 +46,7 @@ import {
   $splitReviewParagraph,
 } from "./ReviewIntentDispatch";
 import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
+import { validateStructuralState } from "./ReviewStructure";
 import type {
   ReviewIntentOutcome,
   ReviewIntentRefusalCode,
@@ -95,11 +100,135 @@ export function registerReviewSession(
     );
   }
   const handledEvents = new WeakSet<Event>();
+  // #64 composition adapter state. Intermediate native DOM mutations during
+  // composition carry no proposal identity; the pre-composition EditorState is
+  // snapshotted on COMPOSITION_START and a single semantic intention is
+  // applied from snapshot plus committed data once composition ends.
+  let compositionSnapshot: EditorState | null = null;
+  let pendingCompositionData: string | null = null;
+  let compositionEnterArmed = false;
+  let normalizingComposition = false;
+  const snapshotCompositionStart = (): boolean => {
+    compositionSnapshot = editor.getEditorState();
+    pendingCompositionData = null;
+    compositionEnterArmed = false;
+    return false;
+  };
+  const recordCompositionEnd = (data: string): boolean => {
+    // First completion wins; a trailing duplicate (e.g. Safari
+    // insertFromComposition followed by compositionend) must not create a
+    // second proposal. Always return false so Lexical clears its composition
+    // key and provisional subclass state.
+    if (pendingCompositionData === null) {
+      pendingCompositionData = data;
+      compositionEnterArmed = /[\r\n]/u.test(data);
+    }
+    return false;
+  };
+  const recordCompositionInsertion = (event: InputEvent): boolean => {
+    if (handledEvents.has(event)) return true;
+    handledEvents.add(event);
+    // Safari commits via beforeinput insertFromComposition; claiming here
+    // defers the single apply to the update listener below.
+    if (pendingCompositionData === null) {
+      const data = event.data ?? "";
+      pendingCompositionData = data;
+      compositionEnterArmed = /[\r\n]/u.test(data);
+    }
+    return true;
+  };
+  const normalizeCompletedComposition = (): void => {
+    if (normalizingComposition) return;
+    if (pendingCompositionData === null || compositionSnapshot === null) return;
+    if (editor.isComposing()) return;
+    const snapshot = compositionSnapshot;
+    const data = pendingCompositionData;
+    compositionSnapshot = null;
+    pendingCompositionData = null;
+    compositionEnterArmed = false;
+    normalizingComposition = true;
+    try {
+      if (/[\r\n]/u.test(data)) {
+        editor.setEditorState(snapshot);
+        reportOutcome(
+          options,
+          unsupportedOutcome(
+            "unsupported-input",
+            "Composition commits support inline text only; paragraph breaks are refused without mutation.",
+          ),
+          null,
+        );
+        return;
+      }
+      if (data === "") {
+        const collapsed = snapshot.read(() => {
+          const selection = $getSelection();
+          return !$isRangeSelection(selection) || selection.isCollapsed();
+        });
+        editor.setEditorState(snapshot);
+        if (collapsed) {
+          reportOutcome(
+            options,
+            { status: "unchanged", value: undefined },
+            null,
+          );
+          return;
+        }
+        editor.update(
+          () => {
+            reportOutcome(
+              options,
+              $deleteReviewText(false, options),
+              "deletion",
+            );
+          },
+          { discrete: true },
+        );
+        return;
+      }
+      editor.setEditorState(snapshot);
+      editor.update(
+        () => {
+          const structural = validateStructuralState();
+          reportOutcome(
+            options,
+            structural ?? $insertReviewText(data, options),
+            "insertion",
+          );
+        },
+        { discrete: true },
+      );
+    } catch (cause) {
+      try {
+        editor.setEditorState(snapshot);
+      } catch {
+        // Preserve the live state when even the snapshot restore fails.
+      }
+      reportOutcome(
+        options,
+        {
+          error: {
+            cause,
+            code: "composition-normalization-failed",
+            message:
+              cause instanceof Error
+                ? cause.message
+                : "Composition normalization failed.",
+          },
+          status: "failed",
+        },
+        null,
+      );
+    } finally {
+      normalizingComposition = false;
+    }
+  };
   const handleDeletion = (
     backward: boolean,
     event?: Event | null,
     granularity: "character" | "word" = "character",
   ): boolean => {
+    if (editor.isComposing()) return false;
     if (event && handledEvents.has(event)) return true;
     if (event) handledEvents.add(event);
     event?.preventDefault();
@@ -108,6 +237,7 @@ export function registerReviewSession(
     return true;
   };
   const handleSplit = (event?: Event | null): boolean => {
+    if (editor.isComposing()) return false;
     event?.preventDefault();
     if (event && handledEvents.has(event)) return true;
     if (event) handledEvents.add(event);
@@ -115,6 +245,11 @@ export function registerReviewSession(
     return true;
   };
   const handleBeforeInput = (event: InputEvent): boolean => {
+    // Intermediate composition input (insertCompositionText and friends) is
+    // adapter state owned by Lexical/the browser; the single review intention
+    // is derived at completion. insertFromComposition reaches us through
+    // CONTROLLED_TEXT_INSERTION_COMMAND after core handling.
+    if (editor.isComposing()) return false;
     if (event.inputType === "insertParagraph") return handleSplit(event);
     if (event.inputType === "insertLineBreak") {
       event.preventDefault();
@@ -271,6 +406,20 @@ export function registerReviewSession(
   return mergeRegister(
     registerReviewInputFormatting(editor),
     editor.registerCommand(
+      COMPOSITION_START_COMMAND,
+      snapshotCompositionStart,
+      COMMAND_PRIORITY_CRITICAL,
+    ),
+    editor.registerCommand(
+      COMPOSITION_END_COMMAND,
+      (event) =>
+        recordCompositionEnd(
+          event && typeof event.data === "string" ? event.data : "",
+        ),
+      COMMAND_PRIORITY_HIGH,
+    ),
+    editor.registerUpdateListener(normalizeCompletedComposition),
+    editor.registerCommand(
       INSERT_REVIEW_FRAGMENT_COMMAND,
       (fragment) => {
         reportOutcome(
@@ -310,6 +459,23 @@ export function registerReviewSession(
     editor.registerCommand(
       CONTROLLED_TEXT_INSERTION_COMMAND,
       (eventOrText) => {
+        if (
+          typeof eventOrText !== "string" &&
+          eventOrText.inputType === "insertFromComposition"
+        ) {
+          return recordCompositionInsertion(eventOrText);
+        }
+        if (editor.isComposing()) {
+          // Lexical composition anchoring (COMPOSITION_START_CHAR): raw
+          // adapter state, never a proposal and never an outcome. The single
+          // review intention is normalized at completion.
+          if (typeof eventOrText === "string") {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) selection.insertText(eventOrText);
+            return true;
+          }
+          return false;
+        }
         if (
           typeof eventOrText !== "string" &&
           (eventOrText.dataTransfer != null ||
@@ -380,6 +546,7 @@ export function registerReviewSession(
     editor.registerCommand(
       FORMAT_TEXT_COMMAND,
       (property) => {
+        if (editor.isComposing()) return false;
         reportOutcome(
           options,
           $toggleReviewFormatting(
@@ -395,6 +562,7 @@ export function registerReviewSession(
     editor.registerCommand(
       SET_TEXT_FORMAT_COMMAND,
       (change) => {
+        if (editor.isComposing()) return false;
         reportOutcome(options, $setReviewFormatting(change, options), null);
         return true;
       },
@@ -413,6 +581,14 @@ export function registerReviewSession(
     editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event) => {
+        if (compositionEnterArmed) {
+          // Trailing-newline dispatch from Lexical's composition-end path is
+          // part of the same physical commit. Claim silently: the single
+          // composition outcome (refusal) is reported by the normalizer.
+          event?.preventDefault();
+          return true;
+        }
+        if (editor.isComposing()) return false;
         event?.preventDefault();
         return event?.shiftKey ? refuseStructure() : handleSplit(event);
       },
