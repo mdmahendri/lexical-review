@@ -16,3 +16,8 @@ export type {
 } from "./registerReviewSession";
 
 export { INSERT_REVIEW_FRAGMENT_COMMAND } from "./registerReviewSession";
+export type {
+  ReviewPasteNormalization,
+  ReviewPasteOutcome,
+  ReviewPasteRun,
+} from "./ReviewPaste";

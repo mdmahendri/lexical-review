@@ -4,6 +4,10 @@ import {
   $cutReviewSelection,
   type ReviewCopyProjectionMode,
 } from "./ReviewClipboard";
+import {
+  $dropReviewSelection,
+  $pasteReviewSelection,
+} from "./ReviewPaste";
 import { registerReviewInputFormatting } from "./ReviewInputFormatting";
 import {
   $setReviewFormatting,
@@ -268,6 +272,15 @@ export function registerReviewSession(
     ) {
       return suppressTransferRoute(event);
     }
+    if (
+      event.inputType === "insertFromPaste" ||
+      event.inputType === "insertFromPasteAsQuotation"
+    ) {
+      // Clipboard data is reliably readable only in the paste event; the
+      // PASTE_COMMAND route owns the single paste outcome. Claiming here
+      // keeps core from bridging a second PASTE_COMMAND for the gesture.
+      return suppressTransferRoute(event);
+    }
     if (event.inputType === "insertLineBreak") {
       event.preventDefault();
       return refuseStructure();
@@ -374,10 +387,11 @@ export function registerReviewSession(
     return true;
   };
   const suppressTransferRoute = (event?: Event | null): boolean => {
-    // #65: the cut/drop gesture owns its single outcome at CUT/DROP_COMMAND,
-    // the only routes carrying clipboard data. The deletion half of the same
-    // physical gesture is claimed silently here so no second outcome is
-    // reported and native fallback mutation is suppressed.
+    // #65/#66: the cut/copy-drop/paste gesture owns its single outcome at
+    // CUT/DROP/PASTE_COMMAND, the only routes carrying clipboard data. The
+    // deletion half of the same physical gesture, the beforeinput paste
+    // bridge, and the drop-insertion half are claimed silently here so no
+    // second outcome is reported and native fallback mutation is suppressed.
     event?.preventDefault();
     if (event) handledEvents.add(event);
     return true;
@@ -407,6 +421,26 @@ export function registerReviewSession(
         mode: clipboardMode(),
       }) as unknown as ReviewIntentOutcome,
       null,
+    );
+    return true;
+  };
+  const handlePaste = (event?: Event | null): boolean => {
+    if (event && handledEvents.has(event)) return true;
+    if (event) handledEvents.add(event);
+    reportOutcome(
+      options,
+      $pasteReviewSelection(event, options) as unknown as ReviewIntentOutcome,
+      "insertion",
+    );
+    return true;
+  };
+  const handleDrop = (event?: Event | null): boolean => {
+    if (event && handledEvents.has(event)) return true;
+    if (event) handledEvents.add(event);
+    reportOutcome(
+      options,
+      $dropReviewSelection(event, options) as unknown as ReviewIntentOutcome,
+      "insertion",
     );
     return true;
   };
@@ -532,8 +566,14 @@ export function registerReviewSession(
         }
         if (
           typeof eventOrText !== "string" &&
+          eventOrText.inputType === "insertFromDrop"
+        ) {
+          // The DROP_COMMAND route owns the single drop outcome.
+          return suppressTransferRoute(eventOrText);
+        }
+        if (
+          typeof eventOrText !== "string" &&
           (eventOrText.dataTransfer != null ||
-            eventOrText.inputType === "insertFromDrop" ||
             eventOrText.inputType === "insertFromYank")
         ) {
           return refuseTransfer(eventOrText);
@@ -648,12 +688,8 @@ export function registerReviewSession(
       },
       COMMAND_PRIORITY_HIGH,
     ),
-    editor.registerCommand(
-      PASTE_COMMAND,
-      refuseTransfer,
-      COMMAND_PRIORITY_HIGH,
-    ),
-    editor.registerCommand(DROP_COMMAND, refuseTransfer, COMMAND_PRIORITY_HIGH),
+    editor.registerCommand(PASTE_COMMAND, handlePaste, COMMAND_PRIORITY_HIGH),
+    editor.registerCommand(DROP_COMMAND, handleDrop, COMMAND_PRIORITY_HIGH),
     editor.registerCommand(COPY_COMMAND, handleCopy, COMMAND_PRIORITY_HIGH),
     editor.registerCommand(CUT_COMMAND, handleCut, COMMAND_PRIORITY_HIGH),
   );

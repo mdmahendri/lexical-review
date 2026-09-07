@@ -118,6 +118,16 @@ export {
   type ReviewCopyProjectionMode,
 } from "./ReviewClipboard";
 export {
+  $applyPasteRuns,
+  $dropReviewSelection,
+  $pasteReviewSelection,
+  normalizeUntrustedClipboardContent,
+  type ReviewPasteNormalization,
+  type ReviewPasteOutcome,
+  type ReviewPastePreparation,
+  type ReviewPasteRun,
+} from "./ReviewPaste";
+export {
   $inspectReviewProposalSnapshot,
   $listReviewProposals,
   $previewAcceptedState,

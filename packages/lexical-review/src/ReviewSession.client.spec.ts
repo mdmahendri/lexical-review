@@ -935,7 +935,7 @@ describe("node-backed review session targeting", () => {
     unregister();
   });
 
-  it("refuses controlled drop insertion without mutating the live selection", async () => {
+  it("claims controlled drop insertion silently without mutating the live selection", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
@@ -958,9 +958,9 @@ describe("node-backed review session targeting", () => {
     ).toBe(true);
     await Promise.resolve();
 
-    expect(outcomes).toMatchObject([
-      { code: "unsupported-transfer", status: "refused" },
-    ]);
+    // #66: DROP_COMMAND owns the single drop outcome; the insertion half is
+    // claimed silently so the gesture reports once with no native fallback.
+    expect(outcomes).toEqual([]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     expect(editor.getEditorState().read(liveSelection)).toEqual(
       beforeSelection,

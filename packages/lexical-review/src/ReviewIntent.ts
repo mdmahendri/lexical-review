@@ -4,6 +4,7 @@ export type ReviewIntentRefusalCode =
   | "empty-projection"
   | "invalid-proposal-id"
   | "invalid-structural-target"
+  | "unsafe-normalization"
   | "unsafe-proposal-intersection"
   | "unsupported-formatting"
   | "unsupported-input"
