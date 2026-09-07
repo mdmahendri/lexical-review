@@ -4,10 +4,7 @@ import {
   $cutReviewSelection,
   type ReviewCopyProjectionMode,
 } from "./ReviewClipboard";
-import {
-  $dropReviewSelection,
-  $pasteReviewSelection,
-} from "./ReviewPaste";
+import { $dropReviewSelection, $pasteReviewSelection } from "./ReviewPaste";
 import { registerReviewInputFormatting } from "./ReviewInputFormatting";
 import {
   $setReviewFormatting,
@@ -57,6 +54,10 @@ import {
 } from "./ReviewIntentDispatch";
 import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
 import { validateStructuralState } from "./ReviewStructure";
+import {
+  $resolveReviewProposals,
+  type ProposalResolutionAction,
+} from "./ReviewResolution";
 import type {
   ReviewIntentOutcome,
   ReviewIntentRefusalCode,
@@ -71,6 +72,25 @@ export type { ReviewProposalIdFactory } from "./ReviewAuthoring";
 export const INSERT_REVIEW_FRAGMENT_COMMAND = createCommand<ReviewFragment>(
   "INSERT_REVIEW_FRAGMENT_COMMAND",
 );
+
+/**
+ * Route payload for settling pending proposals through the client session
+ * (#68). One call carries exactly one action; the handler forwards
+ * `(ids, action)` to `$resolveReviewProposals` unchanged and reports its
+ * outcome via `onOutcome`. It adds routing and claiming only: no reordering,
+ * no refusal remapping, no focus or scroll side effects. Dispatch inside a
+ * Lexical update like the other root operations, or bare like the editing
+ * commands; either way the handler runs the same semantic call.
+ */
+export type ReviewResolutionRoutePayload = Readonly<{
+  ids: readonly string[];
+  action: ProposalResolutionAction;
+}>;
+
+export const RESOLVE_REVIEW_PROPOSALS_COMMAND =
+  createCommand<ReviewResolutionRoutePayload>(
+    "RESOLVE_REVIEW_PROPOSALS_COMMAND",
+  );
 
 export type ReviewSessionRegistrationOptions = ReviewAuthoringOptions &
   Readonly<{
@@ -260,6 +280,13 @@ export function registerReviewSession(
     return true;
   };
   const handleBeforeInput = (event: InputEvent): boolean => {
+    // One physical action is claimed once even when Lexical bridges the same
+    // event object across commands (e.g. BEFORE_INPUT into a CONTROLLED or
+    // core fallback dispatch). Distinct event objects from one gesture are
+    // ordered by the platform instead: keydown preventDefault suppresses the
+    // paired beforeinput, and returning true here suppresses Lexical's own
+    // CONTROLLED/core follow-ups.
+    if (handledEvents.has(event)) return true;
     // Intermediate composition input (insertCompositionText and friends) is
     // adapter state owned by Lexical/the browser; the single review intention
     // is derived at completion. insertFromComposition reaches us through
@@ -283,6 +310,7 @@ export function registerReviewSession(
     }
     if (event.inputType === "insertLineBreak") {
       event.preventDefault();
+      handledEvents.add(event);
       return refuseStructure();
     }
     if (
@@ -339,6 +367,7 @@ export function registerReviewSession(
     }
     if (event.inputType.startsWith("format")) {
       event.preventDefault();
+      handledEvents.add(event);
       reportOutcome(
         options,
         unsupportedOutcome(
@@ -352,6 +381,8 @@ export function registerReviewSession(
     return false;
   };
   const refuseDeletionGranularity = (event?: KeyboardEvent | null): boolean => {
+    if (event && handledEvents.has(event)) return true;
+    if (event) handledEvents.add(event);
     event?.preventDefault();
     reportOutcome(
       options,
@@ -446,6 +477,7 @@ export function registerReviewSession(
   };
   const handleRemoval = (event: InputEvent | null): boolean => {
     if (event !== null) {
+      if (handledEvents.has(event)) return true;
       if (
         event.inputType === "deleteByCut" ||
         event.inputType === "deleteByDrag"
@@ -453,6 +485,7 @@ export function registerReviewSession(
         return suppressTransferRoute(event);
       }
       event.preventDefault();
+      handledEvents.add(event);
       reportOutcome(
         options,
         unsupportedOutcome(
@@ -519,6 +552,25 @@ export function registerReviewSession(
       },
       COMMAND_PRIORITY_HIGH,
     ),
+    editor.registerCommand(
+      RESOLVE_REVIEW_PROPOSALS_COMMAND,
+      (payload) => {
+        const outcome =
+          payload === null ||
+          typeof payload !== "object" ||
+          (payload.action !== "accept" &&
+            payload.action !== "reject" &&
+            payload.action !== "remove")
+            ? unsupportedOutcome(
+                "unsupported-input",
+                "Resolution commands carry exactly one action: accept, reject, or remove.",
+              )
+            : $resolveReviewProposals(payload.ids, payload.action);
+        reportOutcome(options, outcome, null);
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    ),
     ...([KEY_ARROW_LEFT_COMMAND, KEY_ARROW_RIGHT_COMMAND] as const).map(
       (command, index) =>
         editor.registerCommand(
@@ -547,6 +599,8 @@ export function registerReviewSession(
     editor.registerCommand(
       CONTROLLED_TEXT_INSERTION_COMMAND,
       (eventOrText) => {
+        if (typeof eventOrText !== "string" && handledEvents.has(eventOrText))
+          return true;
         if (
           typeof eventOrText !== "string" &&
           eventOrText.inputType === "insertFromComposition"
@@ -576,6 +630,7 @@ export function registerReviewSession(
           (eventOrText.dataTransfer != null ||
             eventOrText.inputType === "insertFromYank")
         ) {
+          handledEvents.add(eventOrText);
           return refuseTransfer(eventOrText);
         }
         const text =
@@ -583,6 +638,7 @@ export function registerReviewSession(
         if (text == null) {
           return false;
         }
+        if (typeof eventOrText !== "string") handledEvents.add(eventOrText);
         const outcome =
           typeof eventOrText !== "string" &&
           eventOrText.inputType === "insertReplacementText"

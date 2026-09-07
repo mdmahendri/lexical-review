@@ -173,6 +173,11 @@ inside `editor.update()`. It validates every group before mutation and resolves
 each identity once. Saving preserves pending shared identities and never changes
 the authoring session's input document.
 
+Through a registered session, the same settlement is available as
+`RESOLVE_REVIEW_PROPOSALS_COMMAND` from `lexical-review/client` with payload
+`{ ids, action }`: it forwards to `$resolveReviewProposals` unchanged and
+reports the outcome via `onOutcome`, adding routing and claiming only.
+
 To reproduce in the browser fixture, open `/?insertions`, select `AB`, and type
 `new`. The editor displays `<del>AB</del><ins>new</ins>`. Select all of `new` and
 press Backspace: the editor restores `AB` without either review wrapper.
@@ -376,10 +381,11 @@ arrows through these same semantics. Ordinary copy/cut export content-only
 `text/plain` and `text/html` projections without proposal identity
 (`copyProjection: "all-accepted"` by default, `"accepted-state"` opt-in);
 cut preflights its follow-up deletion before touching the clipboard.
-Clipboard MIME parsing, rich/plain fallback, and soft-break-to-paragraph
-normalization remain #66/#67; native paste/drop routes still refuse until
-those adapters are implemented. This avoids silently treating
-untrusted clipboard markup as proposal identity.
+Clipboard MIME parsing prefers usable rich content with fallback to plain
+text, and HTML soft breaks normalize to paragraph boundaries with conversion
+reported (#66/#67). Ordinary paste and copy-style drop route through that
+normalization into single-paragraph or atomic-fragment semantics. Untrusted
+clipboard markup never confers proposal identity.
 
 The separate `lexical-review-wer` package implements the current fragment's
 mutation-free `unsupported` export boundary. It does not decompose the fragment.

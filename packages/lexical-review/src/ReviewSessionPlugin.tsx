@@ -5,6 +5,7 @@ import type { ReviewSessionRegistrationOptions } from "./registerReviewSession";
 import type { ReviewSession } from "./ReviewSession";
 
 export function ReviewSessionPlugin({
+  copyProjection,
   onDeletionOutcome,
   onInsertionOutcome,
   onOutcome,
@@ -16,6 +17,7 @@ export function ReviewSessionPlugin({
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
     const unregister = registerReviewSession(editor, session, {
+      copyProjection,
       onDeletionOutcome,
       onInsertionOutcome,
       onOutcome,
@@ -24,6 +26,7 @@ export function ReviewSessionPlugin({
     return unregister;
   }, [
     editor,
+    copyProjection,
     onDeletionOutcome,
     onInsertionOutcome,
     onOutcome,
