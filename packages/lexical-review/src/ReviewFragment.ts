@@ -22,6 +22,7 @@ import {
   $isReviewBoundaryNode,
   ReviewBoundaryNode,
 } from "./ReviewBoundaryNode";
+import type { ReviewExtensionEnvelope } from "./ReviewExtensionEnvelope";
 import {
   prepareProposalId,
   type ReviewAuthoringOptions,
@@ -163,6 +164,7 @@ function install(
   index: number,
   fragment: ReviewFragment,
   id: string,
+  extensions: readonly ReviewExtensionEnvelope[] = [],
 ): ReviewFragmentNode[] {
   const suffix = paragraph.getChildren().slice(index);
   const wrappers: ReviewFragmentNode[] = [];
@@ -173,7 +175,12 @@ function install(
       current.insertAfter(next);
       current = next;
     }
-    const wrapper = $createReviewFragmentNode(id, i > 0, part.emptyFormat ?? 0);
+    const wrapper = $createReviewFragmentNode(
+      id,
+      i > 0,
+      part.emptyFormat ?? 0,
+      extensions,
+    );
     wrapper.append(
       ...part.runs
         .filter((run) => run.text.length)
@@ -206,7 +213,7 @@ function normalize(wrappers: ReviewFragmentNode[]): void {
           type: point.type,
         }))
       : [];
-    const insertion = $createReviewInsertionNode(id);
+    const insertion = $createReviewInsertionNode(id, wrapper.getExtensions());
     wrapper.insertBefore(insertion);
     insertion.append(...wrapper.getChildren());
     wrapper.remove();
@@ -226,6 +233,7 @@ function normalize(wrappers: ReviewFragmentNode[]): void {
       "split",
       wrappers[0]!.getEmptyFormat(),
       right.getEmptyFormat(),
+      wrappers[0]!.getExtensions(),
     );
     right.insertBefore(marker);
     const parent = right.getParentOrThrow();
@@ -268,8 +276,9 @@ function editLocal(
     local.group.wrappers[0]!.getEmptyFormat(),
   );
   const id = local.group.wrappers[0]!.getProposalId();
+  const extensions = local.group.wrappers[0]!.getExtensions();
   const { paragraph, index } = detach(local.group);
-  const wrappers = install(paragraph, index, next, id);
+  const wrappers = install(paragraph, index, next, id, extensions);
   selectOffset(
     wrappers,
     local.start + added.reduce((n, u) => n + u.text.length, 0),

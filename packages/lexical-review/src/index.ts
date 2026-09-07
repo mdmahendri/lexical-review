@@ -25,6 +25,10 @@ export {
   type ValidationIssue,
   type ValidationResult,
 } from "./ReviewDocument";
+export type {
+  ReviewExtensionEnvelope,
+  ReviewExtensionValue,
+} from "./ReviewExtensionEnvelope";
 export {
   importReviewDocument,
   openReviewSession,

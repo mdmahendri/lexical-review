@@ -15,6 +15,12 @@ import {
 } from "lexical";
 import { addClassNamesToElement } from "@lexical/utils";
 import { assertValidProposalId, createProposalId } from "./ProposalIdentity";
+import {
+  cloneExtensionEnvelopes,
+  readStoredExtensions,
+  sameExtensionSets,
+  type ReviewExtensionEnvelope,
+} from "./ReviewExtensionEnvelope";
 
 import {
   isValidFormatRuns,
@@ -23,7 +29,7 @@ import {
 
 type SerializedReviewElementNode = Spread<
   {
-    extensions: readonly [];
+    extensions: readonly ReviewExtensionEnvelope[];
     proposalId: string;
   },
   SerializedElementNode
@@ -39,16 +45,23 @@ export type SerializedReviewDeletionNode = SerializedReviewElementNode & {
 
 export abstract class ReviewElementNode extends ElementNode {
   __proposalId: string;
+  __extensions: readonly ReviewExtensionEnvelope[];
 
-  constructor(proposalId: string, key?: NodeKey) {
+  constructor(
+    proposalId: string,
+    extensions: readonly ReviewExtensionEnvelope[] = [],
+    key?: NodeKey,
+  ) {
     super(key);
     assertValidProposalId(proposalId);
     this.__proposalId = proposalId;
+    this.__extensions = Object.freeze(cloneExtensionEnvelopes(extensions));
   }
 
   override afterCloneFrom(prevNode: this): void {
     super.afterCloneFrom(prevNode);
     this.__proposalId = prevNode.__proposalId;
+    this.__extensions = prevNode.__extensions;
   }
 
   override updateFromJSON(
@@ -58,11 +71,19 @@ export abstract class ReviewElementNode extends ElementNode {
     assertValidProposalId(serializedNode.proposalId);
     const self = this.getWritable();
     self.__proposalId = serializedNode.proposalId;
+    self.__extensions = Object.freeze(
+      readStoredExtensions(serializedNode.extensions),
+    );
     return self;
   }
 
   getProposalId(): string {
     return this.getLatest().__proposalId;
+  }
+
+  /** Opaque envelopes carried for the whole proposal identity (#63). */
+  getExtensions(): readonly ReviewExtensionEnvelope[] {
+    return this.getLatest().__extensions;
   }
 
   override canInsertTextBefore(): false {
@@ -115,7 +136,11 @@ export class ReviewInsertionNode extends ReviewElementNode {
   }
 
   static override clone(node: ReviewInsertionNode): ReviewInsertionNode {
-    return new ReviewInsertionNode(node.__proposalId, node.__key);
+    return new ReviewInsertionNode(
+      node.__proposalId,
+      node.__extensions,
+      node.__key,
+    );
   }
 
   static override importJSON(
@@ -133,7 +158,7 @@ export class ReviewInsertionNode extends ReviewElementNode {
   override exportJSON(): SerializedReviewInsertionNode {
     return {
       ...super.exportJSON(),
-      extensions: [],
+      extensions: cloneExtensionEnvelopes(this.getExtensions()),
       type: "review-insertion",
       proposalId: this.getProposalId(),
     };
@@ -146,7 +171,11 @@ export class ReviewDeletionNode extends ReviewElementNode {
   }
 
   static override clone(node: ReviewDeletionNode): ReviewDeletionNode {
-    return new ReviewDeletionNode(node.__proposalId, node.__key);
+    return new ReviewDeletionNode(
+      node.__proposalId,
+      node.__extensions,
+      node.__key,
+    );
   }
 
   static override importJSON(
@@ -164,7 +193,7 @@ export class ReviewDeletionNode extends ReviewElementNode {
   override exportJSON(): SerializedReviewDeletionNode {
     return {
       ...super.exportJSON(),
-      extensions: [],
+      extensions: cloneExtensionEnvelopes(this.getExtensions()),
       type: "review-deletion",
       proposalId: this.getProposalId(),
     };
@@ -173,14 +202,16 @@ export class ReviewDeletionNode extends ReviewElementNode {
 
 export function $createReviewInsertionNode(
   proposalId: string = createProposalId(),
+  extensions: readonly ReviewExtensionEnvelope[] = [],
 ): ReviewInsertionNode {
-  return $applyNodeReplacement(new ReviewInsertionNode(proposalId));
+  return $applyNodeReplacement(new ReviewInsertionNode(proposalId, extensions));
 }
 
 export function $createReviewDeletionNode(
   proposalId: string,
+  extensions: readonly ReviewExtensionEnvelope[] = [],
 ): ReviewDeletionNode {
-  return $applyNodeReplacement(new ReviewDeletionNode(proposalId));
+  return $applyNodeReplacement(new ReviewDeletionNode(proposalId, extensions));
 }
 
 export function $isReviewInsertionNode(
@@ -203,7 +234,10 @@ export function $canReviewElementNodesBeMerged(
     !$isReviewFormattingNode(node1) &&
     !$isReviewFragmentNode(node1) &&
     node1.getType() === node2.getType() &&
-    node1.getProposalId() === node2.getProposalId()
+    node1.getProposalId() === node2.getProposalId() &&
+    // Divergent same-ID wrappers stay separate so export validation surfaces
+    // the ownership violation instead of the merge silently resolving it.
+    sameExtensionSets(node1.getExtensions(), node2.getExtensions())
   );
 }
 
@@ -218,9 +252,10 @@ export class ReviewFormattingNode extends ReviewElementNode {
   constructor(
     proposalId: string,
     accepted: readonly ReviewFormatRun[],
+    extensions: readonly ReviewExtensionEnvelope[] = [],
     key?: NodeKey,
   ) {
-    super(proposalId, key);
+    super(proposalId, extensions, key);
     if (!isValidFormatRuns(accepted))
       throw new Error("Invalid accepted formatting runs.");
     this.__accepted = Object.freeze(
@@ -235,6 +270,7 @@ export class ReviewFormattingNode extends ReviewElementNode {
     return new ReviewFormattingNode(
       node.__proposalId,
       node.__accepted,
+      node.__extensions,
       node.__key,
     );
   }
@@ -277,7 +313,7 @@ export class ReviewFormattingNode extends ReviewElementNode {
       ...super.exportJSON(),
       type: "review-formatting",
       proposalId: this.getProposalId(),
-      extensions: [],
+      extensions: cloneExtensionEnvelopes(this.getExtensions()),
       accepted: this.getAcceptedFormats().map((run) => ({ ...run })),
     };
   }
@@ -286,8 +322,11 @@ export class ReviewFormattingNode extends ReviewElementNode {
 export function $createReviewFormattingNode(
   proposalId: string,
   accepted: readonly ReviewFormatRun[],
+  extensions: readonly ReviewExtensionEnvelope[] = [],
 ): ReviewFormattingNode {
-  return $applyNodeReplacement(new ReviewFormattingNode(proposalId, accepted));
+  return $applyNodeReplacement(
+    new ReviewFormattingNode(proposalId, accepted, extensions),
+  );
 }
 export function $isReviewFormattingNode(
   node: LexicalNode | null | undefined,
@@ -308,9 +347,10 @@ export class ReviewFragmentNode extends ReviewElementNode {
     proposalId: string,
     startsParagraph = false,
     emptyFormat = 0,
+    extensions: readonly ReviewExtensionEnvelope[] = [],
     key?: NodeKey,
   ) {
-    super(proposalId, key);
+    super(proposalId, extensions, key);
     if (
       typeof startsParagraph !== "boolean" ||
       !Number.isInteger(emptyFormat) ||
@@ -329,6 +369,7 @@ export class ReviewFragmentNode extends ReviewElementNode {
       node.__proposalId,
       node.__startsParagraph,
       node.__emptyFormat,
+      node.__extensions,
       node.__key,
     );
   }
@@ -385,7 +426,7 @@ export class ReviewFragmentNode extends ReviewElementNode {
       ...super.exportJSON(),
       type: "review-fragment",
       proposalId: this.getProposalId(),
-      extensions: [],
+      extensions: cloneExtensionEnvelopes(this.getExtensions()),
       startsParagraph: this.startsParagraph(),
       emptyFormat: this.getEmptyFormat(),
     };
@@ -395,9 +436,15 @@ export function $createReviewFragmentNode(
   proposalId: string,
   startsParagraph = false,
   emptyFormat = 0,
+  extensions: readonly ReviewExtensionEnvelope[] = [],
 ): ReviewFragmentNode {
   return $applyNodeReplacement(
-    new ReviewFragmentNode(proposalId, startsParagraph, emptyFormat),
+    new ReviewFragmentNode(
+      proposalId,
+      startsParagraph,
+      emptyFormat,
+      extensions,
+    ),
   );
 }
 export function $isReviewFragmentNode(

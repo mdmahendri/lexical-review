@@ -1,6 +1,12 @@
 import { validFragmentPositions } from "./ReviewFragmentInvariant";
 import type { EditorState, SerializedEditorState } from "lexical";
 import { isValidProposalId } from "./ProposalIdentity";
+import {
+  canonicalExtensionSet,
+  validateExtensionEnvelopes,
+  type ExtensionValidation,
+  type ReviewExtensionEnvelope,
+} from "./ReviewExtensionEnvelope";
 
 import { isSupportedFormat } from "./ReviewFormattingState";
 import type { ReviewFormatRun } from "./ReviewFormattingState";
@@ -85,17 +91,39 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function validateEmptyExtensions(
-  value: unknown,
+function mapExtensionValidation(
+  result: ExtensionValidation,
+): ValidationResult<readonly ReviewExtensionEnvelope[]> {
+  if (result.status === "valid") {
+    return { status: "valid", value: result.envelopes };
+  }
+  if (result.status === "invalid") {
+    return invalid(result.path, result.message);
+  }
+  return unsupported(result.path, result.message);
+}
+
+/**
+ * Whole-proposal-ID ownership (#63): every node sharing a proposal identity
+ * carries one identical envelope set. The first occurrence records the
+ * canonical set; any divergence is invalid at the divergent node.
+ */
+function checkEnvelopeOwnership(
+  ownership: Map<string, string>,
+  proposalId: string,
+  envelopes: readonly ReviewExtensionEnvelope[],
   path: string,
 ): ValidationResult<void> {
-  if (!Array.isArray(value)) {
-    return invalid(path, "Expected an extension placeholder array.");
+  const canonical = canonicalExtensionSet(envelopes);
+  const prior = ownership.get(proposalId);
+  if (prior === undefined) {
+    ownership.set(proposalId, canonical);
+    return valid();
   }
-  if (value.length !== 0) {
-    return unsupported(
+  if (prior !== canonical) {
+    return invalid(
       path,
-      "Native review extensions are not supported by this foundation.",
+      `Nodes sharing proposal identity ${JSON.stringify(proposalId)} must carry identical extension envelopes.`,
     );
   }
   return valid();
@@ -165,6 +193,7 @@ function validateReviewNode(
   proposals: Map<string, ProposalOccurrence>,
   paragraph: string,
   index: number,
+  ownership: Map<string, string>,
 ): ValidationResult<void> {
   const kind = proposalKind(value);
   if (kind === null) {
@@ -210,7 +239,18 @@ function validateReviewNode(
           : "[unsafe-proposal-intersection] A text-proposal identity must never equal a boundary identity.",
       );
     proposals.set(value.proposalId, { kind, paragraph, index });
-    return validateEmptyExtensions(value.extensions, `${path}.extensions`);
+    const extensions = mapExtensionValidation(
+      validateExtensionEnvelopes(value.extensions, `${path}.extensions`),
+    );
+    if (extensions.status !== "valid") {
+      return extensions;
+    }
+    return checkEnvelopeOwnership(
+      ownership,
+      value.proposalId as string,
+      extensions.value,
+      path,
+    );
   }
   if (
     !hasExactlyKeys(value, [
@@ -281,12 +321,20 @@ function validateReviewNode(
   }
   proposals.set(value.proposalId, { kind, paragraph, index });
 
-  const extensions = validateEmptyExtensions(
-    value.extensions,
-    `${path}.extensions`,
+  const extensions = mapExtensionValidation(
+    validateExtensionEnvelopes(value.extensions, `${path}.extensions`),
   );
   if (extensions.status !== "valid") {
     return extensions;
+  }
+  const owned = checkEnvelopeOwnership(
+    ownership,
+    value.proposalId as string,
+    extensions.value,
+    path,
+  );
+  if (owned.status !== "valid") {
+    return owned;
   }
   if (
     !Array.isArray(value.children) ||
@@ -383,6 +431,7 @@ function validateParagraphNode(
   value: unknown,
   path: string,
   proposals: Map<string, ProposalOccurrence>,
+  ownership: Map<string, string>,
 ): ValidationResult<void> {
   if (!isRecord(value)) {
     return invalid(path, "Expected a serialized paragraph node.");
@@ -449,7 +498,14 @@ function validateParagraphNode(
     const childPath = `${path}.children[${index}]`;
     const result =
       isRecord(child) && proposalKind(child) !== null
-        ? validateReviewNode(child, childPath, proposals, path, index)
+        ? validateReviewNode(
+            child,
+            childPath,
+            proposals,
+            path,
+            index,
+            ownership,
+          )
         : validateTextNode(child, childPath);
     if (result.status !== "valid") {
       return result;
@@ -523,9 +579,11 @@ export function validateReviewDocument(
       "Only native review-document version 3 is supported.",
     );
   }
-  const extensions = validateEmptyExtensions(
-    metadata.extensions,
-    `$.root.$.${REVIEW_STATE_KEY}.extensions`,
+  const extensions = mapExtensionValidation(
+    validateExtensionEnvelopes(
+      metadata.extensions,
+      `$.root.$.${REVIEW_STATE_KEY}.extensions`,
+    ),
   );
   if (extensions.status !== "valid") {
     return extensions;
@@ -550,11 +608,13 @@ export function validateReviewDocument(
   }
 
   const proposals = new Map<string, ProposalOccurrence>();
+  const ownership = new Map<string, string>();
   for (let index = 0; index < root.children.length; index += 1) {
     const result = validateParagraphNode(
       root.children[index],
       `$.root.children[${index}]`,
       proposals,
+      ownership,
     );
     if (result.status !== "valid") {
       return result;

@@ -8,6 +8,11 @@ import {
 } from "lexical";
 import { assertValidProposalId } from "./ProposalIdentity";
 import { isSupportedFormat } from "./ReviewFormattingState";
+import {
+  cloneExtensionEnvelopes,
+  readStoredExtensions,
+  type ReviewExtensionEnvelope,
+} from "./ReviewExtensionEnvelope";
 
 export type ReviewBoundaryKind = "split" | "merge";
 export type SerializedReviewBoundaryNode = SerializedLexicalNode & {
@@ -16,7 +21,7 @@ export type SerializedReviewBoundaryNode = SerializedLexicalNode & {
   kind: ReviewBoundaryKind;
   leftFormat: number;
   rightFormat: number;
-  extensions: readonly [];
+  extensions: readonly ReviewExtensionEnvelope[];
 };
 
 /** A split is the first child of its right paragraph; a merge retains an inline seam. */
@@ -25,12 +30,14 @@ export class ReviewBoundaryNode extends DecoratorNode<null> {
   __kind: ReviewBoundaryKind;
   __leftFormat: number;
   __rightFormat: number;
+  __extensions: readonly ReviewExtensionEnvelope[];
 
   constructor(
     proposalId: string,
     kind: ReviewBoundaryKind,
     leftFormat = 0,
     rightFormat = 0,
+    extensions: readonly ReviewExtensionEnvelope[] = [],
     key?: NodeKey,
   ) {
     super(key);
@@ -45,6 +52,7 @@ export class ReviewBoundaryNode extends DecoratorNode<null> {
     this.__kind = kind;
     this.__leftFormat = leftFormat;
     this.__rightFormat = rightFormat;
+    this.__extensions = Object.freeze(cloneExtensionEnvelopes(extensions));
   }
   static override getType(): string {
     return "review-boundary";
@@ -55,6 +63,7 @@ export class ReviewBoundaryNode extends DecoratorNode<null> {
       node.__kind,
       node.__leftFormat,
       node.__rightFormat,
+      node.__extensions,
       node.__key,
     );
   }
@@ -64,9 +73,14 @@ export class ReviewBoundaryNode extends DecoratorNode<null> {
     this.__kind = node.__kind;
     this.__leftFormat = node.__leftFormat;
     this.__rightFormat = node.__rightFormat;
+    this.__extensions = node.__extensions;
   }
   getProposalId(): string {
     return this.getLatest().__proposalId;
+  }
+  /** Opaque envelopes carried for the whole proposal identity (#63). */
+  getExtensions(): readonly ReviewExtensionEnvelope[] {
+    return this.getLatest().__extensions;
   }
   getKind(): ReviewBoundaryKind {
     return this.getLatest().__kind;
@@ -101,6 +115,7 @@ export class ReviewBoundaryNode extends DecoratorNode<null> {
     self.__kind = node.kind;
     self.__leftFormat = node.leftFormat;
     self.__rightFormat = node.rightFormat;
+    self.__extensions = Object.freeze(readStoredExtensions(node.extensions));
     return self;
   }
   override exportJSON(): SerializedReviewBoundaryNode {
@@ -111,7 +126,7 @@ export class ReviewBoundaryNode extends DecoratorNode<null> {
       kind: this.getKind(),
       leftFormat: this.getSideFormat("left"),
       rightFormat: this.getSideFormat("right"),
-      extensions: [],
+      extensions: cloneExtensionEnvelopes(this.getExtensions()),
     };
   }
   override createDOM(): HTMLElement {
@@ -148,9 +163,16 @@ export function $createReviewBoundaryNode(
   kind: ReviewBoundaryKind,
   leftFormat = 0,
   rightFormat = 0,
+  extensions: readonly ReviewExtensionEnvelope[] = [],
 ): ReviewBoundaryNode {
   return $applyNodeReplacement(
-    new ReviewBoundaryNode(proposalId, kind, leftFormat, rightFormat),
+    new ReviewBoundaryNode(
+      proposalId,
+      kind,
+      leftFormat,
+      rightFormat,
+      extensions,
+    ),
   );
 }
 export function $isReviewBoundaryNode(

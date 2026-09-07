@@ -311,17 +311,19 @@ describe("node-backed ReviewDocumentV3", () => {
     rootElement.remove();
   });
 
-  it("classifies nonempty extension placeholders as unsupported", () => {
+  it("classifies malformed extension envelope entries as invalid", () => {
     const input = reviewDocument([paragraph([text("Alpha")])]);
     const extensions: unknown[] = input.root.$["lexical-review"].extensions;
     extensions.push({});
 
     expect(validateReviewDocument(input)).toMatchObject({
-      reason: {
-        code: "unsupported-document",
-        path: "$.root.$.lexical-review.extensions",
-      },
-      status: "unsupported",
+      issues: [
+        {
+          code: "invalid-document",
+          path: "$.root.$.lexical-review.extensions[0]",
+        },
+      ],
+      status: "invalid",
     });
   });
 
@@ -593,10 +595,14 @@ describe("node-backed ReviewDocumentV3", () => {
       input.root.$["lexical-review"].version = 4;
     }
     if (_name === "missing review metadata") {
-      input.root.$ = {};
+      (input.root as unknown as { $: unknown }).$ = {};
     }
     if (_name === "non-array extensions") {
-      input.root.$["lexical-review"].extensions = {};
+      (
+        input.root.$["lexical-review"] as unknown as {
+          extensions: unknown;
+        }
+      ).extensions = {};
     }
     const result = validateReviewDocument(input);
     if (code === "invalid-document") {
