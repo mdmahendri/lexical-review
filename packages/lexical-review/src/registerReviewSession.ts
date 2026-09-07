@@ -1,4 +1,9 @@
 import { $insertReviewFragment, type ReviewFragment } from "./ReviewFragment";
+import {
+  $copyReviewSelection,
+  $cutReviewSelection,
+  type ReviewCopyProjectionMode,
+} from "./ReviewClipboard";
 import { registerReviewInputFormatting } from "./ReviewInputFormatting";
 import {
   $setReviewFormatting,
@@ -16,6 +21,7 @@ import {
   COMPOSITION_END_COMMAND,
   COMPOSITION_START_COMMAND,
   CONTROLLED_TEXT_INSERTION_COMMAND,
+  COPY_COMMAND,
   CUT_COMMAND,
   DELETE_CHARACTER_COMMAND,
   DELETE_LINE_COMMAND,
@@ -64,6 +70,11 @@ export const INSERT_REVIEW_FRAGMENT_COMMAND = createCommand<ReviewFragment>(
 
 export type ReviewSessionRegistrationOptions = ReviewAuthoringOptions &
   Readonly<{
+    /**
+     * Clipboard projection for ordinary copy/cut (#65). Defaults to
+     * `"all-accepted"`; hosts may select `"accepted-state"` instead.
+     */
+    copyProjection?: ReviewCopyProjectionMode;
     onDeletionOutcome?: (outcome: ReviewIntentOutcome) => void;
     onInsertionOutcome?: (outcome: ReviewIntentOutcome) => void;
     onOutcome?: (outcome: ReviewIntentOutcome) => void;
@@ -251,6 +262,12 @@ export function registerReviewSession(
     // CONTROLLED_TEXT_INSERTION_COMMAND after core handling.
     if (editor.isComposing()) return false;
     if (event.inputType === "insertParagraph") return handleSplit(event);
+    if (
+      event.inputType === "deleteByCut" ||
+      event.inputType === "deleteByDrag"
+    ) {
+      return suppressTransferRoute(event);
+    }
     if (event.inputType === "insertLineBreak") {
       event.preventDefault();
       return refuseStructure();
@@ -356,13 +373,50 @@ export function registerReviewSession(
     );
     return true;
   };
+  const suppressTransferRoute = (event?: Event | null): boolean => {
+    // #65: the cut/drop gesture owns its single outcome at CUT/DROP_COMMAND,
+    // the only routes carrying clipboard data. The deletion half of the same
+    // physical gesture is claimed silently here so no second outcome is
+    // reported and native fallback mutation is suppressed.
+    event?.preventDefault();
+    if (event) handledEvents.add(event);
+    return true;
+  };
+  const clipboardMode = (): ReviewCopyProjectionMode =>
+    options.copyProjection ?? "all-accepted";
+  const handleCopy = (event?: Event | null): boolean => {
+    if (event && handledEvents.has(event)) return true;
+    if (event) handledEvents.add(event);
+    reportOutcome(
+      options,
+      $copyReviewSelection(event, {
+        ...options,
+        mode: clipboardMode(),
+      }) as unknown as ReviewIntentOutcome,
+      null,
+    );
+    return true;
+  };
+  const handleCut = (event?: Event | null): boolean => {
+    if (event && handledEvents.has(event)) return true;
+    if (event) handledEvents.add(event);
+    reportOutcome(
+      options,
+      $cutReviewSelection(event, {
+        ...options,
+        mode: clipboardMode(),
+      }) as unknown as ReviewIntentOutcome,
+      null,
+    );
+    return true;
+  };
   const handleRemoval = (event: InputEvent | null): boolean => {
     if (event !== null) {
       if (
         event.inputType === "deleteByCut" ||
         event.inputType === "deleteByDrag"
       ) {
-        return refuseTransfer(event);
+        return suppressTransferRoute(event);
       }
       event.preventDefault();
       reportOutcome(
@@ -600,6 +654,7 @@ export function registerReviewSession(
       COMMAND_PRIORITY_HIGH,
     ),
     editor.registerCommand(DROP_COMMAND, refuseTransfer, COMMAND_PRIORITY_HIGH),
-    editor.registerCommand(CUT_COMMAND, refuseTransfer, COMMAND_PRIORITY_HIGH),
+    editor.registerCommand(COPY_COMMAND, handleCopy, COMMAND_PRIORITY_HIGH),
+    editor.registerCommand(CUT_COMMAND, handleCut, COMMAND_PRIORITY_HIGH),
   );
 }

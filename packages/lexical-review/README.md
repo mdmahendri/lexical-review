@@ -372,9 +372,13 @@ all-accepted projection throws; the input and live editor remain unchanged.
 
 The client exposes `INSERT_REVIEW_FRAGMENT_COMMAND` for already-normalized
 content and routes ordinary typing, formatting, Enter, deletion, and endpoint
-arrows through these same semantics. Clipboard MIME parsing, rich/plain fallback,
-and soft-break-to-paragraph normalization remain #67; native paste/cut/drop routes
-still refuse until that adapter is implemented. This avoids silently treating
+arrows through these same semantics. Ordinary copy/cut export content-only
+`text/plain` and `text/html` projections without proposal identity
+(`copyProjection: "all-accepted"` by default, `"accepted-state"` opt-in);
+cut preflights its follow-up deletion before touching the clipboard.
+Clipboard MIME parsing, rich/plain fallback, and soft-break-to-paragraph
+normalization remain #66/#67; native paste/drop routes still refuse until
+those adapters are implemented. This avoids silently treating
 untrusted clipboard markup as proposal identity.
 
 The separate `lexical-review-wer` package implements the current fragment's

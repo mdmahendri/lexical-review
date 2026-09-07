@@ -1,6 +1,7 @@
 export type ReviewIntentRefusalCode =
   | "ambiguous-boundary"
   | "deletion-target-unavailable"
+  | "empty-projection"
   | "invalid-proposal-id"
   | "invalid-structural-target"
   | "unsafe-proposal-intersection"

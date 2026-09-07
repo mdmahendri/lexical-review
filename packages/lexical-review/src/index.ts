@@ -105,6 +105,19 @@ export {
 
 export { createReviewPreview } from "./ReviewPreview";
 export {
+  $copyReviewSelection,
+  $cutReviewSelection,
+  $deriveClipboardProjection,
+  CUT_MUTATION_FAILED_AFTER_COPY,
+  CLIPBOARD_WRITE_FAILED,
+  type ReviewClipboardEmptyProjection,
+  type ReviewClipboardOptions,
+  type ReviewClipboardOutcome,
+  type ReviewClipboardProjection,
+  type ReviewClipboardSuccess,
+  type ReviewCopyProjectionMode,
+} from "./ReviewClipboard";
+export {
   $inspectReviewProposalSnapshot,
   $listReviewProposals,
   $previewAcceptedState,

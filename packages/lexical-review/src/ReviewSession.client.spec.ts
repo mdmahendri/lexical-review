@@ -1021,7 +1021,7 @@ describe("node-backed review session targeting", () => {
     unregister();
   });
 
-  it("refuses cut-driven text removal without mutating the range", async () => {
+  it("claims cut-driven text removal silently so CUT_COMMAND owns the outcome", async () => {
     const editor = createReviewEditor();
     const outcomes: ReviewIntentOutcome[] = [];
     const { unregister } = open(
@@ -1041,9 +1041,7 @@ describe("node-backed review session targeting", () => {
     expect(editor.dispatchCommand(REMOVE_TEXT_COMMAND, event)).toBe(true);
     await Promise.resolve();
 
-    expect(outcomes).toMatchObject([
-      { code: "unsupported-transfer", status: "refused" },
-    ]);
+    expect(outcomes).toEqual([]);
     expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
     expect(editor.getEditorState().read(liveSelection)).toEqual(
       beforeSelection,
