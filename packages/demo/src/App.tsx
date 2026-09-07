@@ -1,54 +1,49 @@
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import { TextNode } from "lexical";
 import {
-  $createLegacyReviewTextNode as $createReviewTextNode,
-  LegacyReviewTextNode as ReviewTextNode,
+  ReviewDeletionNode,
+  ReviewFormattingNode,
+  ReviewInsertionNode,
 } from "lexical-review";
 import "./index.css";
-import ReviewEditor from "./ReviewEditor";
+import RouteWiringDemo from "./RouteWiringDemo";
 
 function App() {
   const initialConfig = {
-    namespace: "demo",
+    namespace: "route-wiring-demo",
     onError(error: Error) {
       throw error;
     },
-    nodes: [
-      ReviewTextNode,
-      {
-        replace: TextNode,
-        with: (node: TextNode) => {
-          return $createReviewTextNode(node.getTextContent(), "original");
-        },
-        withKlass: ReviewTextNode,
-      },
-    ],
+    nodes: [ReviewInsertionNode, ReviewDeletionNode, ReviewFormattingNode],
     theme: {
       ins: "bg-green-300 no-underline",
       del: "bg-red-300 no-underline",
+      text: {
+        bold: "font-bold",
+        italic: "italic",
+        underline: "underline",
+        strikethrough: "line-through",
+      },
     },
   };
 
   return (
-    <div className="bg-gray-100 h-screen flex items-center justify-center">
-      <div className="bg-white shadow-lg rounded-lg p-6 w-full max-w-4xl">
-        <header className="mb-4">
+    <div className="flex min-h-screen min-w-0 justify-center overflow-x-hidden bg-gray-100">
+      <div className="w-full min-w-0 max-w-4xl rounded-lg bg-white p-6 shadow-lg">
+        <header className="mb-4 min-w-0">
           <h1 className="text-2xl font-bold text-gray-800">lexical-review</h1>
           <p className="text-gray-600">
-            A custom lexical plugin provides suggestion, review, or track
-            changes mode—whatever you want to call it—similar to those found in
-            popular word processing applications like Microsoft Word and Google
-            Docs.
+            Route-wiring capability step: keyboard, toolbar-command, and
+            programmatic routes reach the same review intent.
           </p>
         </header>
-        <div className="border rounded-lg overflow-hidden">
-          <div className="p-2 bg-white h-96">
+        <div className="min-w-0 overflow-hidden rounded-lg border">
+          <div className="min-w-0 bg-white p-2">
             <LexicalComposer initialConfig={initialConfig}>
-              <ReviewEditor />
+              <RouteWiringDemo />
             </LexicalComposer>
           </div>
         </div>
-        <footer className="mt-4 flex justify-between text-gray-600">
+        <footer className="mt-4 flex min-w-0 justify-between text-gray-600">
           <a
             href="https://github.com/mahendrimd/lexical-review"
             className="text-blue-500 hover:underline"
