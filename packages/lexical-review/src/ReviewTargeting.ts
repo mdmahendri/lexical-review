@@ -1115,6 +1115,39 @@ export function isolateAcceptedTextRange(
   return selected.every($isTextNode) ? selected : null;
 }
 
+/**
+ * Split-free read of an accepted range: joined span text plus whether every
+ * overlapping node carries the live selection format. Null when the span
+ * cannot be resolved in the live tree. Read-only: no splits, no caret moves.
+ */
+export function readAcceptedRangeText(
+  target: AcceptedRangeTarget,
+): { text: string; uniformSelectionFormat: boolean } | null {
+  const map = buildAcceptedMap(target.paragraph);
+  const startEntry = getStartEntry(map.entries, target.start);
+  const endEntry = getEndEntry(map.entries, target.end);
+  if (startEntry === null || endEntry === null) {
+    return null;
+  }
+  let text = "";
+  let uniformSelectionFormat = true;
+  for (const entry of map.entries) {
+    if (entry.end <= target.start || entry.start >= target.end) {
+      continue;
+    }
+    const sliceStart = Math.max(target.start - entry.start, 0);
+    const sliceEnd = Math.min(
+      target.end - entry.start,
+      entry.end - entry.start,
+    );
+    text += entry.node.getTextContent().slice(sliceStart, sliceEnd);
+    if (entry.node.getFormat() !== target.selection.format) {
+      uniformSelectionFormat = false;
+    }
+  }
+  return { text, uniformSelectionFormat };
+}
+
 export function placeProposalCaret(
   paragraph: ParagraphNode,
   wrappers: readonly ReviewElementNode[],

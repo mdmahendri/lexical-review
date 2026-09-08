@@ -18,17 +18,8 @@
  * mutation; refusals preserve content, pending work, projection, and logical
  * selection.
  */
-import { $createTextNode, $getEditor, type TextNode } from "lexical";
 import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
-import { prepareProposalId } from "./ReviewAuthoring";
 import type { ReviewFormatRun } from "./ReviewFormattingState";
-import {
-  $createReviewDeletionNode,
-  $createReviewInsertionNode,
-  $isReviewInsertionNode,
-  ReviewDeletionNode,
-  ReviewInsertionNode,
-} from "./ReviewNodes";
 import {
   refusal,
   type Preparation,
@@ -42,13 +33,11 @@ import {
 import { normalizeUntrustedMultilineClipboardContent } from "./ReviewMultilinePaste";
 import { validateStructuralState } from "./ReviewStructure";
 import {
-  insertProposalText,
-  inspectReviewTarget,
-  isolateAcceptedTextRange,
-  replaceProposalRange,
-  type AcceptedCaretTarget,
-  type ReviewTarget,
-} from "./ReviewTargeting";
+  $commitTargetEdit,
+  buildPastePlan,
+  selectedWrapperSide,
+} from "./ReviewTargetEdit";
+import { inspectReviewTarget } from "./ReviewTargeting";
 
 export type ReviewPasteRun = ReviewFormatRun;
 
@@ -342,46 +331,6 @@ export function normalizeUntrustedClipboardContent(
   };
 }
 
-function missingProposalNode(
-  kind: "deletion" | "insertion",
-): ReviewPasteOutcome | null {
-  const nodeClass =
-    kind === "insertion" ? ReviewInsertionNode : ReviewDeletionNode;
-  return $getEditor().hasNode(nodeClass)
-    ? null
-    : refusal(
-        "invalid-structural-target",
-        `The editor must register the review-${kind} node before pasting ${kind} proposals.`,
-      );
-}
-
-function insertInsertionRunsAtAcceptedPoint(
-  target: AcceptedCaretTarget,
-  proposalId: string,
-  runs: readonly ReviewPasteRun[],
-): void {
-  const wrapper = $createReviewInsertionNode(proposalId);
-  const nodes: TextNode[] = runs.map((run) =>
-    $createTextNode(run.text).setFormat(run.format),
-  );
-  wrapper.append(...nodes);
-  if (target.node === null) {
-    target.paragraph.splice(target.childIndex, 0, [wrapper]);
-  } else if (target.offset === 0) {
-    target.node.insertBefore(wrapper);
-  } else if (target.offset === target.node.getTextContentSize()) {
-    target.node.insertAfter(wrapper);
-  } else {
-    const parts = target.node.splitText(target.offset);
-    const right = parts[1];
-    if (right === undefined) {
-      throw new Error("The accepted paste point could not be split.");
-    }
-    right.insertBefore(wrapper);
-  }
-  nodes[nodes.length - 1]!.selectEnd();
-}
-
 /**
  * Apply normalized single-paragraph runs to the live selection. One call
  * creates or corrects exactly one pending proposal: collapsed accepted
@@ -393,6 +342,10 @@ function insertInsertionRunsAtAcceptedPoint(
  * multi-run fragment or insertion-range correction, deletion-side,
  * formatting, split/merge, mixed-identity, and structural targets refuse
  * without mutation.
+ *
+ * All target mechanics live behind the $commitTargetEdit seam: after
+ * classification this function coordinates nothing (no maps, no re-inspect
+ * loop — multi-run batches remap internally).
  */
 export function $applyPasteRuns(
   runs: readonly ReviewPasteRun[],
@@ -413,84 +366,18 @@ export function $applyPasteRuns(
   }
   const inspection = inspectReviewTarget();
   if (inspection.status !== "ready") return inspection;
-  const target: ReviewTarget = inspection.value;
-  if (target.kind === "accepted-caret") {
-    const missing = missingProposalNode("insertion");
-    if (missing !== null) return missing;
-    const proposalId = prepareProposalId(options);
-    if (proposalId.status !== "ready") return proposalId;
-    insertInsertionRunsAtAcceptedPoint(target, proposalId.value, runs);
-    return pasteChanged(normalization);
-  }
-  if (target.kind === "accepted-range") {
-    if (target.start === target.end) return pasteUnchanged();
-    const missing =
-      missingProposalNode("insertion") ?? missingProposalNode("deletion");
-    if (missing !== null) return missing;
-    const identity = prepareProposalId(options);
-    if (identity.status !== "ready") return identity;
-    const selected = isolateAcceptedTextRange(target);
-    if (!selected?.length)
-      throw new Error("Validated paste target could not be isolated.");
-    if (
-      runs.length === 1 &&
-      selected.map((node) => node.getTextContent()).join("") ===
-        runs[0]!.text &&
-      selected.every((node) => node.getFormat() === target.selection.format) &&
-      runs[0]!.format === target.selection.format
-    ) {
-      return pasteUnchanged();
-    }
-    const oldSide = $createReviewDeletionNode(identity.value);
-    const newSide = $createReviewInsertionNode(identity.value);
-    const contents = runs.map((run) =>
-      $createTextNode(run.text).setFormat(run.format),
-    );
-    selected[0]!.insertBefore(oldSide);
-    oldSide.append(...selected);
-    oldSide.insertAfter(newSide);
-    newSide.append(...contents);
-    contents[contents.length - 1]!.selectEnd();
-    return pasteChanged(normalization);
-  }
-  if (target.kind === "proposal-caret") {
-    if (!$isReviewInsertionNode(target.wrapper)) {
-      return refusal(
-        "unsupported-proposal-edit",
-        "Pasted content may correct pending insertion content, not deletion content. Resolve first.",
-      );
-    }
-    const proposalId = target.proposalId;
-    for (const run of runs) {
-      const next = inspectReviewTarget();
-      if (next.status !== "ready") return next;
-      const caret = next.value;
-      if (caret.kind !== "proposal-caret" || caret.proposalId !== proposalId) {
-        return refusal(
-          "unsafe-proposal-intersection",
-          "The paste target moved across proposals mid-application; nothing further was inserted.",
-        );
-      }
-      const inserted = insertProposalText(caret, run.format, run.text);
-      if (inserted.status !== "ready") return inserted;
-    }
-    return pasteChanged(normalization);
-  }
-  if (!$isReviewInsertionNode(target.wrappers[0])) {
-    return refusal(
-      "unsupported-proposal-edit",
-      "Pasted content may correct pending insertion content, not deletion content. Resolve first.",
-    );
-  }
-  if (runs.length > 1) {
-    return refusal(
-      "unsupported-proposal-edit",
-      "Formatted paste over an insertion range is unsupported; resolve the proposal first, then paste at a caret.",
-    );
-  }
-  const corrected = replaceProposalRange(target, runs[0]!.text);
-  if (corrected.status === "changed") return pasteChanged(normalization);
-  return corrected as ReviewPasteOutcome;
+  const plan = buildPastePlan(
+    inspection.value.kind,
+    selectedWrapperSide(inspection.value),
+    runs,
+    options,
+  );
+  if (plan.status !== "ready") return plan;
+  const result = $commitTargetEdit(inspection.value, plan.value);
+  if (result.status !== "ready") return result;
+  return result.value.kind === "mutated"
+    ? pasteChanged(normalization)
+    : pasteUnchanged();
 }
 
 /**
