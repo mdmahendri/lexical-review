@@ -42,6 +42,7 @@ import {
   collectProposalNodes,
   type CollectedProposalNodes,
 } from "./ReviewProposalCollection";
+import { isolateSpanNodes, spanEntries } from "./ReviewTargetMaps";
 import {
   canonicalFormatRuns,
   sameFormatRuns,
@@ -64,8 +65,6 @@ export type ReviewFormattingProposal = Readonly<{
   current: readonly ReviewFormatRun[];
 }>;
 
-type Entry = Readonly<{ node: TextNode; start: number; end: number }>;
-
 function runs(nodes: readonly TextNode[]): ReviewFormatRun[] {
   return canonicalFormatRuns(
     nodes.map((node) => ({
@@ -73,30 +72,6 @@ function runs(nodes: readonly TextNode[]): ReviewFormatRun[] {
       format: node.getFormat(),
     })),
   );
-}
-
-function entries(nodes: readonly TextNode[]): Entry[] {
-  let start = 0;
-  return nodes.map((node) => {
-    const entry = { node, start, end: start + node.getTextContentSize() };
-    start = entry.end;
-    return entry;
-  });
-}
-
-function isolate(
-  source: readonly Entry[],
-  start: number,
-  end: number,
-): TextNode[] {
-  return source
-    .filter((entry) => entry.start < end && entry.end > start)
-    .map((entry) => {
-      const localStart = Math.max(start - entry.start, 0);
-      const localEnd = Math.min(end - entry.start, entry.end - entry.start);
-      const parts = entry.node.splitText(localStart, localEnd);
-      return parts[localStart === 0 ? 0 : 1]!;
-    });
 }
 
 function selectRange(
@@ -296,7 +271,7 @@ function unwrapFormatting(
 ): void {
   const parentKey = wrapper.getParentOrThrow().getKey();
   const wrapperIndex = wrapper.getIndexWithinParent();
-  const source = entries(getTextChildren(wrapper)!);
+  const source = spanEntries(getTextChildren(wrapper)!);
   const selection = $getSelection();
   const snapshot = (point: PointType) => {
     const entry = source.find((entry) => entry.node.getKey() === point.key);
@@ -324,8 +299,8 @@ function unwrapFormatting(
   if (restoreAccepted) {
     let offset = 0;
     for (const run of wrapper.getAcceptedFormats()) {
-      for (const node of isolate(
-        entries(getTextChildren(wrapper)!),
+      for (const node of isolateSpanNodes(
+        spanEntries(getTextChildren(wrapper)!),
         offset,
         offset + run.text.length,
       ))

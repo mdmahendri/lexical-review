@@ -6,7 +6,7 @@
  * make exactly one $commitTargetEdit() call. No maps, spans, entries,
  * offsets, caret placement, or internal remapping cross the kind-owner
  * seam; the commit implementation below walks the read-only offset maps
- * it imports from ReviewTargeting.
+ * it imports from ReviewTargetMaps.
  *
  * Ownership:
  * - Kind owners decide granularity, runs, identity policy (fresh / continue /
@@ -59,17 +59,20 @@ import {
   buildAcceptedMap,
   getAcceptedOffset,
   getProposalOffset,
+  overlappingSlices,
+  proposalMapOf,
+  resolveEndEntry,
+  resolveStartEntry,
+} from "./ReviewTargetMaps";
+import {
   inspectProposalGroup,
   inspectProposalKind,
   isTextBoundary,
   nextCharacterOffset,
   previousCharacterOffset,
-  proposalMapOf,
   type AcceptedCaretTarget,
-  type AcceptedMapEntry,
   type AcceptedRangeTarget,
   type ProposalCaretTarget,
-  type ProposalMapEntry,
   type ProposalRangeTarget,
   type ReviewTarget,
 } from "./ReviewTargeting";
@@ -217,52 +220,10 @@ function noOp(): Preparation<TargetEditEffect> {
  * Target-owned edit mechanics: accepted-deletion math, proposal-deletion
  * preparation, span isolation, proposal-range mutation, and caret restore.
  * Single-consumer helpers owned here so all commit mutation lives behind the
- * $commitTargetEdit seam. Read-only offset maps and the proposal-kind oracle
- * stay owned by ReviewTargeting and are imported, never duplicated.
- * Entry resolution moved here with its sole consumer; the entry
- * representation stays owned by ReviewTargeting.
- * Known remaining crossings: the map/entry representation, and span-split
- * mechanics behind the formatting span seam.
+ * $commitTargetEdit seam. Offset maps, entry resolution, and span slicing
+ * live in the ReviewTargetMaps leaf and are imported, never duplicated; the
+ * proposal-kind oracle stays owned by ReviewTargeting.
  */
-/**
- * Half-open entry resolution, always used as a pair: start entries satisfy
- * start <= offset < end, end entries satisfy start < offset <= end.
- * Keep the asymmetry in sync.
- */
-function getStartEntry(
-  entries: readonly ProposalMapEntry[],
-  offset: number,
-): ProposalMapEntry | null;
-function getStartEntry(
-  entries: readonly AcceptedMapEntry[],
-  offset: number,
-): AcceptedMapEntry | null;
-function getStartEntry(
-  entries: readonly AcceptedMapEntry[] | readonly ProposalMapEntry[],
-  offset: number,
-): AcceptedMapEntry | ProposalMapEntry | null {
-  return (
-    entries.find((entry) => entry.start <= offset && offset < entry.end) ?? null
-  );
-}
-
-function getEndEntry(
-  entries: readonly ProposalMapEntry[],
-  offset: number,
-): ProposalMapEntry | null;
-function getEndEntry(
-  entries: readonly AcceptedMapEntry[],
-  offset: number,
-): AcceptedMapEntry | null;
-function getEndEntry(
-  entries: readonly AcceptedMapEntry[] | readonly ProposalMapEntry[],
-  offset: number,
-): AcceptedMapEntry | ProposalMapEntry | null {
-  return (
-    entries.find((entry) => entry.start < offset && offset <= entry.end) ?? null
-  );
-}
-
 function acceptedRange(
   target: AcceptedCaretTarget,
   backward: boolean,
@@ -270,8 +231,8 @@ function acceptedRange(
   end: number,
 ): AcceptedRangeTarget | null {
   const map = buildAcceptedMap(target.paragraph);
-  const startEntry = getStartEntry(map.entries, start);
-  const endEntry = getEndEntry(map.entries, end);
+  const startEntry = resolveStartEntry(map.entries, start);
+  const endEntry = resolveEndEntry(map.entries, end);
   if (startEntry === null || endEntry === null) {
     return null;
   }
@@ -315,11 +276,9 @@ export function acceptedDeletionTarget(
   const map = buildAcceptedMap(target.paragraph);
   const offset = getAcceptedOffset(
     {
-      association: "accepted",
       childIndex: target.childIndex,
       node: target.node,
       offset: target.offset,
-      paragraph: target.paragraph,
     },
     map,
   );
@@ -416,8 +375,8 @@ export function findAcceptedDeletionContinuation(
   node: ReviewDeletionNode | null;
 }> {
   const map = buildAcceptedMap(target.paragraph);
-  const first = getStartEntry(map.entries, target.start);
-  const last = getEndEntry(map.entries, target.end);
+  const first = resolveStartEntry(map.entries, target.start);
+  const last = resolveEndEntry(map.entries, target.end);
   if (first === null || last === null)
     return refusal(
       "invalid-structural-target",
@@ -467,15 +426,12 @@ export function prepareProposalCaretDeletion(
       "unsupported-proposal-edit",
       "Text deletion cannot alter a pending formatting target.",
     );
-  const mapped = proposalMapOf(target);
+  const mapped = proposalMapOf(target, inspectProposalKind);
   if (mapped.status !== "ready") return mapped;
   const offset = getProposalOffset(
     {
-      association: "proposal",
-      childIndex: target.childIndex,
       node: target.node,
       offset: target.offset,
-      paragraph: target.paragraph,
       wrapper: target.wrapper,
     },
     mapped.value,
@@ -563,8 +519,8 @@ export function isolateAcceptedTextRange(
     return null;
   }
   const map = buildAcceptedMap(target.paragraph);
-  const startEntry = getStartEntry(map.entries, target.start);
-  const endEntry = getEndEntry(map.entries, target.end);
+  const startEntry = resolveStartEntry(map.entries, target.start);
+  const endEntry = resolveEndEntry(map.entries, target.end);
   if (startEntry === null || endEntry === null) {
     return null;
   }
@@ -606,24 +562,21 @@ export function readAcceptedRangeText(
   target: AcceptedRangeTarget,
 ): { text: string; uniformSelectionFormat: boolean } | null {
   const map = buildAcceptedMap(target.paragraph);
-  const startEntry = getStartEntry(map.entries, target.start);
-  const endEntry = getEndEntry(map.entries, target.end);
-  if (startEntry === null || endEntry === null) {
+  if (
+    resolveStartEntry(map.entries, target.start) === null ||
+    resolveEndEntry(map.entries, target.end) === null
+  ) {
     return null;
   }
   let text = "";
   let uniformSelectionFormat = true;
-  for (const entry of map.entries) {
-    if (entry.end <= target.start || entry.start >= target.end) {
-      continue;
-    }
-    const sliceStart = Math.max(target.start - entry.start, 0);
-    const sliceEnd = Math.min(
-      target.end - entry.start,
-      entry.end - entry.start,
-    );
-    text += entry.node.getTextContent().slice(sliceStart, sliceEnd);
-    if (entry.node.getFormat() !== target.selection.format) {
+  for (const slice of overlappingSlices(
+    map.entries,
+    target.start,
+    target.end,
+  )) {
+    text += slice.node.getTextContent().slice(slice.localStart, slice.localEnd);
+    if (slice.node.getFormat() !== target.selection.format) {
       uniformSelectionFormat = false;
     }
   }
@@ -674,7 +627,7 @@ export function spliceProposalRange(
   end: number,
   replacement: Readonly<{ node: TextNode; text: string }> | null = null,
 ): Preparation<void> {
-  const mapped = proposalMapOf(target);
+  const mapped = proposalMapOf(target, inspectProposalKind);
   if (mapped.status !== "ready") return mapped;
   const entries = mapped.value.entries;
   for (let index = entries.length - 1; index >= 0; index -= 1) {
@@ -719,9 +672,9 @@ export function replaceProposalRange(
   if (target.start === target.end) {
     return unchanged();
   }
-  const mapped = proposalMapOf(target);
+  const mapped = proposalMapOf(target, inspectProposalKind);
   if (mapped.status !== "ready") return mapped;
-  const startEntry = getStartEntry(mapped.value.entries, target.start);
+  const startEntry = resolveStartEntry(mapped.value.entries, target.start);
   if (startEntry === null)
     return refusal(
       "invalid-structural-target",
