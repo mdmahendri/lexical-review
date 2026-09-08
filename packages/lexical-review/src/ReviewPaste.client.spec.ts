@@ -221,6 +221,86 @@ describe("review paste normalization", () => {
     if (prepared.status !== "ready") throw new Error("Expected ready.");
     expect(prepared.value.runs).toEqual([{ text: literal, format: 0 }]);
   });
+
+  it("routes nested single-text blocks to the fragment intake", () => {
+    const prepared = normalizeUntrustedClipboardContent(
+      "<div><p>x</p></div>",
+      "",
+    );
+    expect(prepared.status).toBe("refused");
+    if (prepared.status !== "refused") throw new Error("Expected refusal.");
+    expect(prepared.code).toBe("unsupported-target");
+  });
+
+  it("keeps loose text beside one block as one single run", () => {
+    const prepared = normalizeUntrustedClipboardContent("x<p>y</p>", "");
+    expect(prepared.status).toBe("ready");
+    if (prepared.status !== "ready") throw new Error("Expected ready.");
+    expect(prepared.value.runs).toEqual([{ text: "xy", format: 0 }]);
+    expect(prepared.value.normalization.source).toBe("text/html");
+  });
+
+  it("combines nested inline formats and reports flattened tags in order", () => {
+    const prepared = normalizeUntrustedClipboardContent(
+      "<p><strong><em>x</em></strong></p>",
+      "ignored",
+    );
+    expect(prepared.status).toBe("ready");
+    if (prepared.status !== "ready") throw new Error("Expected ready.");
+    expect(prepared.value.runs).toEqual([{ text: "x", format: 3 }]);
+    expect(prepared.value.normalization.flattened).toEqual([
+      "p",
+      "strong",
+      "em",
+    ]);
+    expect(prepared.value.normalization.lost).toEqual([]);
+    expect(prepared.value.normalization.softBreakConverted).toBe(false);
+  });
+
+  it("drops non-textual content while reporting loss", () => {
+    const prepared = normalizeUntrustedClipboardContent(
+      '<p><a href="https://example.invalid">link</a><script>evil()</script><strong>bold</strong></p>',
+      "ignored",
+    );
+    expect(prepared.status).toBe("ready");
+    if (prepared.status !== "ready") throw new Error("Expected ready.");
+    expect(prepared.value.runs).toEqual([
+      { text: "link", format: 0 },
+      { text: "bold", format: 1 },
+    ]);
+    expect(prepared.value.normalization.flattened).toEqual([
+      "p",
+      "a",
+      "strong",
+    ]);
+    expect(prepared.value.normalization.lost).toEqual(["script"]);
+  });
+
+  it("refuses line breaks inside html text without mutation", () => {
+    for (const html of ["<p>x\ny</p>", "<p>x\r\ny</p>"] as const) {
+      const prepared = normalizeUntrustedClipboardContent(html, "ignored");
+      expect(prepared.status).toBe("refused");
+      if (prepared.status !== "refused") throw new Error("Expected refusal.");
+      expect(prepared.code).toBe("unsupported-target");
+    }
+  });
+
+  it("refuses rich content with no usable text and falls back to usable plain", () => {
+    for (const html of ["<p></p>", '<p><img src="x"></p>'] as const) {
+      const refused = normalizeUntrustedClipboardContent(html, "");
+      expect(refused.status).toBe("refused");
+      if (refused.status !== "refused") throw new Error("Expected refusal.");
+      expect(refused.code).toBe("unsafe-normalization");
+    }
+    const fallback = normalizeUntrustedClipboardContent(
+      '<p><img src="x"></p>',
+      "plain",
+    );
+    expect(fallback.status).toBe("ready");
+    if (fallback.status !== "ready") throw new Error("Expected ready.");
+    expect(fallback.value.runs).toEqual([{ text: "plain", format: 0 }]);
+    expect(fallback.value.normalization.source).toBe("text/plain");
+  });
 });
 
 describe("review single-paragraph paste", () => {
@@ -368,6 +448,30 @@ describe("review single-paragraph paste", () => {
     expect(preventDefault).toHaveBeenCalled();
     expect(outcomes.at(-1)).toMatchObject({ status: "changed" });
     expect(allAcceptedOf(editor)).toEqual(["Ax", "yB"]);
+    expect(proposalsOf(editor)).toHaveLength(1);
+  });
+
+  it("routes nested single-text blocks through the fragment intake", async () => {
+    const editor = createPasteEditor();
+    const outcomes: ReviewIntentOutcome[] = [];
+    open(editor, acceptedDoc("AB"), outcomes);
+    await selectCaret(editor, 0, 1);
+    const { event } = pasteEvent("<div><p>x</p></div>", "");
+    expect(editor.dispatchCommand(PASTE_COMMAND, event)).toBe(true);
+    expect(outcomes.at(-1)).toMatchObject({ status: "changed" });
+    expect(allAcceptedOf(editor)).toEqual(["AxB"]);
+    expect(proposalsOf(editor)).toHaveLength(1);
+  });
+
+  it("keeps loose text beside one block as one insertion", async () => {
+    const editor = createPasteEditor();
+    const outcomes: ReviewIntentOutcome[] = [];
+    open(editor, acceptedDoc("AB"), outcomes);
+    await selectCaret(editor, 0, 1);
+    const { event } = pasteEvent("x<p>y</p>", "");
+    expect(editor.dispatchCommand(PASTE_COMMAND, event)).toBe(true);
+    expect(outcomes.at(-1)).toMatchObject({ status: "changed" });
+    expect(allAcceptedOf(editor)).toEqual(["AxyB"]);
     expect(proposalsOf(editor)).toHaveLength(1);
   });
 

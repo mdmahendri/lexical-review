@@ -350,6 +350,56 @@ describe("review multiline normalization", () => {
     if (empty.status !== "ready") throw new Error("Expected ready.");
     expect(empty.value.normalization.source).toBe("text/plain");
   });
+
+  it("collapses nested single-text blocks to one piece", () => {
+    const nested = normalizeUntrustedMultilineClipboardContent(
+      "<div><p>x</p></div>",
+      "",
+    );
+    expect(componentTexts(nested)).toEqual(["x"]);
+    if (nested.status !== "ready") throw new Error("Expected ready.");
+    expect(nested.value.normalization.source).toBe("text/html");
+    expect(nested.value.normalization.flattened).toEqual(["div", "p"]);
+    expect(nested.value.normalization.softBreakConverted).toBe(false);
+  });
+
+  it("refuses a lone break with no usable text or pieces", () => {
+    const refused = normalizeUntrustedMultilineClipboardContent("<br>", "");
+    expect(refused.status).toBe("refused");
+    if (refused.status !== "refused") throw new Error("Expected refusal.");
+    expect(refused.code).toBe("unsafe-normalization");
+  });
+
+  it("strips carriage returns inside html text", () => {
+    expect(
+      componentTexts(
+        normalizeUntrustedMultilineClipboardContent("<p>x\r\ny</p>", "ignored"),
+      ),
+    ).toEqual(["xy"]);
+  });
+
+  it("reports source and structure for paragraph pairs", () => {
+    const paired = normalizeUntrustedMultilineClipboardContent(
+      "<p>x</p><p>y</p>",
+      "ignored",
+    );
+    expect(componentTexts(paired)).toEqual(["x", "y"]);
+    if (paired.status !== "ready") throw new Error("Expected ready.");
+    expect(paired.value.normalization.source).toBe("text/html");
+    expect(paired.value.normalization.flattened).toEqual(["p"]);
+    expect(paired.value.normalization.lost).toEqual([]);
+    expect(paired.value.normalization.softBreakConverted).toBe(false);
+  });
+
+  it("falls back to plain pieces when rich data holds only discarded content", () => {
+    const fallback = normalizeUntrustedMultilineClipboardContent(
+      '<p><img src="x"></p>',
+      "a\nb",
+    );
+    expect(componentTexts(fallback)).toEqual(["a", "b"]);
+    if (fallback.status !== "ready") throw new Error("Expected ready.");
+    expect(fallback.value.normalization.source).toBe("text/plain");
+  });
 });
 
 describe("review multiline paste placement", () => {

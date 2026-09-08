@@ -30,6 +30,16 @@ import {
   $claimFragmentInsertion,
   $insertReviewFragment,
 } from "./ReviewFragment";
+import {
+  applyInlineFormat,
+  BLOCK_SELECTOR,
+  containsLineBreak,
+  LOST_CONTENT,
+  parseClipboardBody,
+  plainClipboardNormalization,
+  pushUnique,
+  type ReviewClipboardNormalization,
+} from "./ReviewClipboardIntake";
 import { normalizeUntrustedMultilineClipboardContent } from "./ReviewMultilinePaste";
 import { validateStructuralState } from "./ReviewStructure";
 import {
@@ -41,16 +51,12 @@ import { inspectReviewTarget } from "./ReviewTargeting";
 
 export type ReviewPasteRun = ReviewFormatRun;
 
-export type ReviewPasteNormalization = Readonly<{
-  /** The clipboard representation the runs were derived from. */
-  source: "text/html" | "text/plain";
-  /** Structural/inline tags kept as transparent content, in encounter order. */
-  flattened: readonly string[];
-  /** Tags dropped with their content or as non-textual media, encounter order. */
-  lost: readonly string[];
-  /** True when at least one HTML `<br>` became a paragraph boundary (#67). */
-  softBreakConverted: boolean;
-}>;
+/**
+ * Normalization report for single-paragraph intake. Shared shape with the
+ * fragment route (`ReviewClipboardNormalization`); `softBreakConverted` is
+ * always false here because any `br`-derived boundary refuses to #67.
+ */
+export type ReviewPasteNormalization = ReviewClipboardNormalization;
 
 export type ReviewPasteOutcome =
   | Readonly<{ status: "changed"; value: ReviewPasteNormalization }>
@@ -137,59 +143,6 @@ function readTransferPayload(event: unknown): TransferPayload | null {
   return null;
 }
 
-const BLOCK_SELECTOR = [
-  "p",
-  "div",
-  "li",
-  "ul",
-  "ol",
-  "dl",
-  "dt",
-  "dd",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "blockquote",
-  "pre",
-  "table",
-  "thead",
-  "tbody",
-  "tfoot",
-  "tr",
-  "td",
-  "th",
-  "header",
-  "footer",
-  "section",
-  "article",
-  "aside",
-  "nav",
-  "figure",
-  "figcaption",
-  "hr",
-].join(",");
-
-const LOST_CONTENT = new Set([
-  "script",
-  "style",
-  "noscript",
-  "template",
-  "img",
-  "video",
-  "audio",
-  "canvas",
-  "embed",
-  "object",
-  "iframe",
-]);
-
-function pushUnique(target: string[], tag: string): void {
-  if (!target.includes(tag)) target.push(tag);
-}
-
 type HtmlExtraction = Readonly<{
   runs: ReviewPasteRun[];
   boundaries: number;
@@ -208,13 +161,8 @@ type HtmlExtraction = Readonly<{
  * when there is no usable HTML (unparsable or no body content).
  */
 function extractHtmlRuns(html: string): HtmlExtraction | null {
-  if (typeof DOMParser === "undefined") return null;
-  let body: HTMLElement;
-  try {
-    body = new DOMParser().parseFromString(html, "text/html").body;
-  } catch {
-    return null;
-  }
+  const body = parseClipboardBody(html);
+  if (body === null) return null;
   const boundaries =
     body.querySelectorAll("br").length +
     Math.max(0, body.querySelectorAll(BLOCK_SELECTOR).length - 1);
@@ -242,11 +190,7 @@ function extractHtmlRuns(html: string): HtmlExtraction | null {
     }
     if (tag === "br") return;
     pushUnique(flattened, tag);
-    let childFormat = format;
-    if (tag === "strong" || tag === "b") childFormat |= 1;
-    else if (tag === "em" || tag === "i") childFormat |= 2;
-    else if (tag === "s" || tag === "strike") childFormat |= 4;
-    else if (tag === "u") childFormat |= 8;
+    const childFormat = applyInlineFormat(tag, format);
     // `<ins>`/`<del>`, links, spans, code, font, and the single block
     // wrapper stay transparent: children keep the ambient format.
     for (const child of Array.from(element.childNodes))
@@ -302,31 +246,21 @@ export function normalizeUntrustedClipboardContent(
         );
     }
   }
-  if (/[\r\n]/.test(plain))
+  if (containsLineBreak(plain))
     return refusal("unsupported-target", MULTILINE_HANDOFF);
   if (plain.length === 0)
     return {
       status: "ready",
       value: {
         runs: [],
-        normalization: {
-          source: "text/plain",
-          flattened: [],
-          lost: [],
-          softBreakConverted: false,
-        },
+        normalization: plainClipboardNormalization("text/plain"),
       },
     };
   return {
     status: "ready",
     value: {
       runs: [{ text: plain, format: 0 }],
-      normalization: {
-        source: "text/plain",
-        flattened: [],
-        lost: [],
-        softBreakConverted: false,
-      },
+      normalization: plainClipboardNormalization("text/plain"),
     },
   };
 }
@@ -412,7 +346,10 @@ export function $pasteReviewSelection(
   );
   if (prepared.status !== "ready") {
     // #66 refuses 1+ boundaries with `unsupported-target` as a handoff to the
-    // #67 multiline route; every other refusal stands without mutation.
+    // #67 multiline route; every other refusal stands without mutation. The
+    // handoff re-parses the payload through the shared intake policy rather
+    // than reusing one parsed result: each view keeps its own null/empty
+    // gating (see `ReviewClipboardIntake`).
     if (prepared.status !== "refused" || prepared.code !== "unsupported-target")
       return prepared;
     const multiline = normalizeUntrustedMultilineClipboardContent(

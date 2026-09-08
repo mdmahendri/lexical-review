@@ -24,22 +24,24 @@
 import type { ReviewFormatRun } from "./ReviewFormattingState";
 import type { ReviewFragment } from "./ReviewFragment";
 import {
+  applyInlineFormat,
+  BLOCK_TAGS,
+  containsLineBreak,
+  LOST_CONTENT,
+  parseClipboardBody,
+  plainClipboardNormalization,
+  pushUnique,
+  splitPlainText,
+  type ReviewClipboardNormalization,
+} from "./ReviewClipboardIntake";
+import {
   refusal,
   type Preparation,
   type ReviewIntentError,
   type ReviewIntentRefusal,
 } from "./ReviewIntent";
 
-export type ReviewMultilinePasteNormalization = Readonly<{
-  /** The clipboard representation the components were derived from. */
-  source: "text/html" | "text/plain";
-  /** Structural/inline tags kept as transparent content, encounter order. */
-  flattened: readonly string[];
-  /** Tags dropped with content or as non-textual media, encounter order. */
-  lost: readonly string[];
-  /** True when at least one `<br>` became a paragraph boundary. */
-  softBreakConverted: boolean;
-}>;
+export type ReviewMultilinePasteNormalization = ReviewClipboardNormalization;
 
 export type ReviewMultilinePasteOutcome =
   | Readonly<{ status: "changed"; value: ReviewMultilinePasteNormalization }>
@@ -51,59 +53,6 @@ export type ReviewMultilinePastePreparation = Preparation<{
   fragment: ReviewFragment;
   normalization: ReviewMultilinePasteNormalization;
 }>;
-
-const BLOCK_TAGS = new Set([
-  "p",
-  "div",
-  "li",
-  "ul",
-  "ol",
-  "dl",
-  "dt",
-  "dd",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "blockquote",
-  "pre",
-  "table",
-  "thead",
-  "tbody",
-  "tfoot",
-  "tr",
-  "td",
-  "th",
-  "header",
-  "footer",
-  "section",
-  "article",
-  "aside",
-  "nav",
-  "figure",
-  "figcaption",
-  "hr",
-]);
-
-const LOST_CONTENT = new Set([
-  "script",
-  "style",
-  "noscript",
-  "template",
-  "img",
-  "video",
-  "audio",
-  "canvas",
-  "embed",
-  "object",
-  "iframe",
-]);
-
-function pushUnique(target: string[], tag: string): void {
-  if (!target.includes(tag)) target.push(tag);
-}
 
 type MutableParagraph = { runs: ReviewFormatRun[] };
 
@@ -142,13 +91,8 @@ type HtmlExtraction = {
  * no parsable body content at all.
  */
 function extractHtmlFragmentParagraphs(html: string): HtmlExtraction | null {
-  if (typeof DOMParser === "undefined") return null;
-  let body: HTMLElement;
-  try {
-    body = new DOMParser().parseFromString(html, "text/html").body;
-  } catch {
-    return null;
-  }
+  const body = parseClipboardBody(html);
+  if (body === null) return null;
   if (body.childNodes.length === 0) return null;
 
   const state: HtmlExtraction = {
@@ -167,13 +111,8 @@ function extractHtmlFragmentParagraphs(html: string): HtmlExtraction | null {
     }
   };
 
-  const formatForTag = (tag: string, ambient: number): number => {
-    if (tag === "strong" || tag === "b") return ambient | 1;
-    if (tag === "em" || tag === "i") return ambient | 2;
-    if (tag === "s" || tag === "strike") return ambient | 4;
-    if (tag === "u") return ambient | 8;
-    return ambient;
-  };
+  const formatForTag = (tag: string, ambient: number): number =>
+    applyInlineFormat(tag, ambient);
 
   /**
    * Walk inline content (text + transparent inline elements). Returns true
@@ -324,11 +263,6 @@ function hasUsableText(paragraphs: readonly MutableParagraph[]): boolean {
   );
 }
 
-/** Split plain text on CRLF/LF/CR without trimming (D3). */
-function splitPlainText(plain: string): string[] {
-  return plain.split(/\r\n|\r|\n/);
-}
-
 /**
  * Normalize untrusted clipboard content into fragment components.
  *
@@ -373,7 +307,7 @@ export function normalizeUntrustedMultilineClipboardContent(
         );
     }
   }
-  if (/[\r\n]/.test(plain)) {
+  if (containsLineBreak(plain)) {
     const pieces = splitPlainText(plain);
     const fragment: ReviewFragment = pieces.map((text) => ({
       runs: text.length > 0 ? [{ text, format: 0 }] : [],
@@ -382,12 +316,7 @@ export function normalizeUntrustedMultilineClipboardContent(
       status: "ready",
       value: {
         fragment,
-        normalization: {
-          source: "text/plain",
-          flattened: [],
-          lost: [],
-          softBreakConverted: false,
-        },
+        normalization: plainClipboardNormalization("text/plain"),
       },
     };
   }
@@ -396,24 +325,14 @@ export function normalizeUntrustedMultilineClipboardContent(
       status: "ready",
       value: {
         fragment: [{ runs: [] }],
-        normalization: {
-          source: "text/plain",
-          flattened: [],
-          lost: [],
-          softBreakConverted: false,
-        },
+        normalization: plainClipboardNormalization("text/plain"),
       },
     };
   return {
     status: "ready",
     value: {
       fragment: [{ runs: [{ text: plain, format: 0 }] }],
-      normalization: {
-        source: "text/plain",
-        flattened: [],
-        lost: [],
-        softBreakConverted: false,
-      },
+      normalization: plainClipboardNormalization("text/plain"),
     },
   };
 }
