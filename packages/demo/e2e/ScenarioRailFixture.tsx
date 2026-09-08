@@ -15,6 +15,7 @@ import {
   ReviewFragmentNode,
   ReviewInsertionNode,
 } from "lexical-review";
+import "../src/index.css";
 import ScenarioRailDemo from "../src/ScenarioRailDemo";
 
 export function ScenarioRailFixture() {

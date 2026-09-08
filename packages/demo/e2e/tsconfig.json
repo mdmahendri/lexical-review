@@ -9,7 +9,7 @@
         "../../../packages/lexical-review/src/client.ts"
       ]
     },
-    "types": ["react", "react-dom"]
+    "types": ["react", "react-dom", "vite/client"]
   },
   "include": ["**/*.ts", "**/*.tsx"]
 }

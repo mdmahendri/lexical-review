@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import {
@@ -35,44 +34,36 @@ type ScenarioId = "r1" | "r2" | "r3" | "n1" | "n2" | "n3" | "n4";
 interface ScenarioDef {
   id: ScenarioId;
   label: string;
-  hint: string;
 }
 
 const SCENARIOS: readonly ScenarioDef[] = [
   {
     id: "r1",
-    label: "R1 — Insertion continuation",
-    hint: "Accepted AB, caret A|B. Type x, then y: one insertion proposal.",
+    label: "Suggest text",
   },
   {
     id: "r2",
-    label: "R2 — Edit then direct removal",
-    hint: "Accepted AB + pending I1 = xy, caret x|y. Type z (same ID), then Remove.",
+    label: "Revise a suggestion",
   },
   {
     id: "r3",
-    label: "R3 — No-mutation refusal",
-    hint: "Accepted AB + adjacent insertion X, caret AB|. Delete-forward refuses.",
+    label: "Protect pending work",
   },
   {
     id: "n1",
-    label: "N1 — Atomic replacement",
-    hint: "Accepted cat, range selects c. Replace with b: one shared ID.",
+    label: "Replace text",
   },
   {
     id: "n2",
-    label: "N2 — Paragraph split",
-    hint: "Accepted AB, caret A|B. Enter: one split boundary.",
+    label: "Split a paragraph",
   },
   {
     id: "n3",
-    label: "N3 — Fragment insertion",
-    hint: "Accepted AB, caret A|B. Simulated multiline paste x\\ny: one fragment.",
+    label: "Paste paragraphs",
   },
   {
     id: "n4",
-    label: "N4 — Composition commit",
-    hint: "Accepted AB, caret A|B. Simulated composition commit あ: one insertion.",
+    label: "Compose text",
   },
 ];
 
@@ -139,42 +130,6 @@ function setupScenarioDocument(
   }
 }
 
-/** Wide screens place the rail beside the editor; narrow screens stack it. */
-function useWideRail(): boolean {
-  const [wide, setWide] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 1024px)").matches,
-  );
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 1024px)");
-    const onChange = () => setWide(query.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
-  return wide;
-}
-
-const mutedText: CSSProperties = { fontSize: 14, color: "#4b5563" };
-const sectionBox: CSSProperties = {
-  minWidth: 0,
-  border: "1px solid #d1d5db",
-  borderRadius: 4,
-  padding: 12,
-};
-const actionButton: CSSProperties = {
-  border: "1px solid #9ca3af",
-  borderRadius: 4,
-  padding: "4px 8px",
-  fontSize: 14,
-  background: "#ffffff",
-};
-const preBox: CSSProperties = {
-  maxWidth: "100%",
-  overflowX: "auto",
-  fontSize: 14,
-};
-
 export default function ScenarioRailDemo({
   onEditorReady,
 }: {
@@ -201,7 +156,6 @@ export default function ScenarioRailDemo({
     setSelectedId,
     summaries,
   } = useProposalEvidence(editor);
-  const wide = useWideRail();
 
   const factoryCounter = useRef(0);
   const factory = useCallback(() => `scenario-${++factoryCounter.current}`, []);
@@ -430,67 +384,24 @@ export default function ScenarioRailDemo({
 
   const activeScenario = SCENARIOS.find((entry) => entry.id === scenario);
 
+  const index = SCENARIOS.findIndex((entry) => entry.id === scenario);
+  const nextScenario = SCENARIOS[index + 1];
+  const explanations: Record<ScenarioId, string> = {
+    r1: "Start with AB. Insert x between the letters, then continue with y. Both keystrokes belong to one pending proposal; the accepted document stays AB until you accept it.",
+    r2: "This example starts with xy already suggested between A and B. Correct it by adding z. The proposal keeps its identity. Remove withdraws the author’s suggestion.",
+    r3: "A pending X sits after accepted text AB. Try deleting forward from the accepted side. The package refuses this unsupported target and preserves the document and selection.",
+    n1: "Change cat to bat. The deleted c and inserted b form one replacement proposal, so they are accepted or rejected together.",
+    n2: "Split AB between its letters. A paragraph boundary is a reviewable change too: accepting keeps the split; rejecting rejoins the text.",
+    n3: "Paste x and y as two paragraphs between A and B. The entire fragment is one proposal, reviewed as a whole. This button simulates a plain-text paste.",
+    n4: "Text composition can commit a complete character as one insertion proposal. This button simulates the commit; you can also try your own input method in the editor.",
+  };
+
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: wide ? "row" : "column",
-        gap: 16,
-        minWidth: 0,
-      }}
-    >
-      <nav
-        aria-label="Scenarios"
-        style={
-          wide
-            ? {
-                width: 240,
-                flexShrink: 0,
-                minWidth: 0,
-                position: "sticky",
-                top: 8,
-                alignSelf: "flex-start",
-                maxHeight: "calc(100vh - 16px)",
-                overflowY: "auto",
-              }
-            : {
-                minWidth: 0,
-                position: "sticky",
-                top: 0,
-                zIndex: 10,
-                background: "#ffffff",
-                paddingBottom: 4,
-              }
-        }
-      >
-        <p data-testid="capability-label" style={mutedText}>
-          Capability demo — non-normative, not a host UI pattern
-        </p>
-        <div
-          data-testid="scenario-rail"
-          style={
-            wide
-              ? {
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                  minWidth: 0,
-                  marginTop: 8,
-                }
-              : {
-                  display: "flex",
-                  flexDirection: "row",
-                  flexWrap: "nowrap",
-                  gap: 8,
-                  minWidth: 0,
-                  maxWidth: "100%",
-                  marginTop: 8,
-                  paddingBottom: 4,
-                  overflowX: "auto",
-                }
-          }
-        >
-          {SCENARIOS.map((entry) => (
+    <div className="demo-layout">
+      <nav aria-label="Scenarios" className="lesson-nav">
+        <p className="eyebrow">Explore the capabilities</p>
+        <div data-testid="scenario-rail" className="lesson-list">
+          {SCENARIOS.map((entry, position) => (
             <button
               key={entry.id}
               type="button"
@@ -498,73 +409,48 @@ export default function ScenarioRailDemo({
               data-scenario={entry.id}
               aria-pressed={entry.id === scenario}
               onClick={() => loadScenario(entry.id)}
-              style={
-                wide
-                  ? { ...actionButton, textAlign: "left" }
-                  : {
-                      ...actionButton,
-                      flex: "0 0 auto",
-                      whiteSpace: "nowrap",
-                    }
-              }
             >
+              <span className="lesson-number">{position + 1}</span>
               {entry.label}
             </button>
           ))}
         </div>
-        <p style={{ ...mutedText, marginTop: 8 }}>
-          Switching scenarios resets edits.
+        <p className="nav-note">
+          Each example starts fresh. Switching examples resets edits.
         </p>
-        <div style={{ marginTop: 4 }}>
-          <button
-            type="button"
-            data-testid="reset-scenario"
-            onClick={resetScenario}
-            style={actionButton}
-          >
-            Reset scenario
-          </button>
-        </div>
-        <p style={{ ...mutedText, marginTop: 8 }}>{activeScenario?.hint}</p>
       </nav>
-
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-          minWidth: 0,
-          flex: 1,
-        }}
-      >
-        <section aria-label="Scenario actions" style={sectionBox}>
-          <h2 style={{ fontWeight: 600 }}>Scenario actions</h2>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              minWidth: 0,
-              marginTop: 8,
-            }}
-          >
+      <main id="try-it-live" className="lesson" key={scenario}>
+        <header className="lesson-heading">
+          <p className="eyebrow">
+            Example {index + 1} of {SCENARIOS.length} · Try it in a minute
+          </p>
+          <h2>{activeScenario?.label}</h2>
+          <p>{explanations[scenario]}</p>
+        </header>
+        <section aria-label="Scenario actions" className="try-section">
+          <h3>
+            <span className="step">1</span> Make a change
+          </h3>
+          <p className="helper">
+            Use the example buttons, or place your cursor in the editor and
+            type.
+          </p>
+          <div className="actions example-actions">
             {scenario === "r1" ? (
               <>
                 <button
                   type="button"
                   data-testid="act-insert-x"
-                  style={actionButton}
                   onClick={() => insertAtPinnedCaret("x")}
                 >
-                  Insert x after A
+                  Insert “x” between A and B
                 </button>
                 <button
                   type="button"
                   data-testid="act-insert-y"
-                  style={actionButton}
                   onClick={() => continueInsertion("y")}
                 >
-                  Insert y (continues)
+                  Continue with “y”
                 </button>
               </>
             ) : null}
@@ -572,27 +458,24 @@ export default function ScenarioRailDemo({
               <button
                 type="button"
                 data-testid="act-correct-z"
-                style={actionButton}
                 onClick={() => correctInsertionAt(1, "z")}
               >
-                Type z inside I1
+                Add “z” to the suggestion
               </button>
             ) : null}
             {scenario === "r3" ? (
               <button
                 type="button"
                 data-testid="act-delete-forward"
-                style={actionButton}
                 onClick={attemptAcceptedSideDeletion}
               >
-                Accepted-side Delete (refuses)
+                Try deleting across the boundary
               </button>
             ) : null}
             {scenario === "n1" ? (
               <button
                 type="button"
                 data-testid="act-replace"
-                style={actionButton}
                 onClick={replaceAtPinnedRange}
               >
                 Replace c with b
@@ -602,7 +485,6 @@ export default function ScenarioRailDemo({
               <button
                 type="button"
                 data-testid="act-split"
-                style={actionButton}
                 onClick={splitAtPinnedCaret}
               >
                 Split paragraph (Enter)
@@ -612,49 +494,83 @@ export default function ScenarioRailDemo({
               <button
                 type="button"
                 data-testid="act-paste"
-                style={actionButton}
                 onClick={simulateMultilinePaste}
               >
-                Simulate multiline paste (simulated)
+                Paste two paragraphs (simulated)
               </button>
             ) : null}
             {scenario === "n4" ? (
               <button
                 type="button"
                 data-testid="act-compose"
-                style={actionButton}
                 onClick={simulateCompositionCommit}
               >
-                Simulate composition commit (simulated)
+                Commit “あ” (simulated)
               </button>
             ) : null}
+          </div>
+          <section
+            aria-labelledby="scenario-editor-heading"
+            className="editor-sheet"
+          >
+            <div className="editor-caption">
+              <h4 id="scenario-editor-heading">Your document</h4>
+              <span>Review mode is on</span>
+            </div>
+            <ContentEditable
+              data-testid="scenario-editor"
+              aria-label="Editable review document"
+              className="review-editor"
+            />
+            <div className="editor-legend">
+              <span>
+                <ins>Inserted</ins> text is pending
+              </span>
+              <span>
+                <del>Deleted</del> text stays visible until resolved
+              </span>
+            </div>
+          </section>
+          <div className="actions quiet-actions">
             <button
               type="button"
               data-testid="focus-editor"
-              style={actionButton}
               onClick={focusEditor}
             >
-              Focus editor
+              Try typing yourself
+            </button>
+            <button
+              type="button"
+              data-testid="reset-scenario"
+              onClick={resetScenario}
+            >
+              Reset example
             </button>
           </div>
+          <p className="feedback" role="status">
+            {outcome === null
+              ? "Start with the first button above. Your change will appear in the document."
+              : outcome.status === "refused"
+                ? "This edit was refused. Your existing work is preserved."
+                : proposals.length
+                  ? `${proposals.length} pending proposal${proposals.length === 1 ? "" : "s"}. The change is visible, but has not been accepted.`
+                  : "No pending proposals remain. Try the example again or explore the next capability."}
+          </p>
         </section>
-
-        <section aria-label="Proposal list" style={{ minWidth: 0 }}>
-          <h2 style={{ fontWeight: 600 }}>Pending proposals</h2>
-          <div
-            data-testid="proposal-list"
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              minWidth: 0,
-              marginTop: 4,
-            }}
-          >
+        <section aria-label="Proposal list" className="review-section">
+          <h3>
+            <span className="step">2</span> Review the change
+          </h3>
+          <p className="helper">
+            Select a pending proposal below, then decide what to keep.
+          </p>
+          <div data-testid="proposal-list" className="actions proposal-list">
             {proposals.length === 0 ? (
-              <p style={mutedText}>No pending proposals.</p>
+              <p className="empty-state">
+                Your proposals will appear here when you make a change.
+              </p>
             ) : (
-              summaries.map((summary) => (
+              summaries.map((summary, position) => (
                 <button
                   key={summary.id}
                   type="button"
@@ -662,149 +578,115 @@ export default function ScenarioRailDemo({
                   data-proposal-id={summary.id}
                   aria-pressed={summary.id === selectedId}
                   onClick={() => setSelectedId(summary.id)}
-                  style={actionButton}
                 >
-                  {summary.id} — {summary.kind}
+                  {summary.kind} · Change {position + 1}
                 </button>
               ))
             )}
           </div>
-        </section>
-
-        <section aria-label="Selected proposal" style={{ minWidth: 0 }}>
-          <h2 style={{ fontWeight: 600 }}>Selected proposal</h2>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              minWidth: 0,
-              marginTop: 4,
-            }}
-          >
-            <button
-              type="button"
-              data-testid="accept-selected"
-              disabled={!selectedActive}
-              onClick={() => resolveSelected("accept")}
-              style={actionButton}
-            >
-              Accept selected
-            </button>
-            <button
-              type="button"
-              data-testid="reject-selected"
-              disabled={!selectedActive}
-              onClick={() => resolveSelected("reject")}
-              style={actionButton}
-            >
-              Reject selected
-            </button>
-            <button
-              type="button"
-              data-testid="remove-selected"
-              disabled={!selectedActive}
-              onClick={() => resolveSelected("remove")}
-              style={actionButton}
-            >
-              Remove selected
-            </button>
+          <div aria-label="Selected proposal">
+            <div className="actions">
+              <button
+                type="button"
+                data-testid="accept-selected"
+                disabled={!selectedActive}
+                onClick={() => resolveSelected("accept")}
+              >
+                Accept selected
+              </button>
+              <button
+                type="button"
+                data-testid="reject-selected"
+                disabled={!selectedActive}
+                onClick={() => resolveSelected("reject")}
+              >
+                Reject selected
+              </button>
+              <button
+                type="button"
+                data-testid="remove-selected"
+                disabled={!selectedActive}
+                onClick={() => resolveSelected("remove")}
+              >
+                Remove selected
+              </button>
+            </div>
+            <p className="helper">
+              Accept keeps the change. Reject sets it aside. Remove lets its
+              author withdraw it.
+            </p>
           </div>
-          <div data-testid="selected-details" style={{ minWidth: 0 }}>
+        </section>
+        <section aria-label="Document evidence" className="preview-section">
+          <h3>
+            <span className="step">3</span> Compare the outcomes
+          </h3>
+          <p className="helper">
+            Preview the accepted document and what it would become if every
+            pending proposal were accepted. Previewing does not resolve changes.
+          </p>
+          <div className="actions">
+            <button
+              type="button"
+              data-testid="generate-evidence"
+              disabled={isComposing}
+              onClick={generateEvidence}
+            >
+              {evidence === null
+                ? "Compare document versions"
+                : "Refresh comparison"}
+            </button>
+            <span data-testid="evidence-status">
+              {EVIDENCE_STATUS_TEXT[evidenceStatus]}
+            </span>
+          </div>
+          {evidenceReason !== null && (
+            <p data-testid="evidence-reason">{evidenceReason}</p>
+          )}
+          {evidenceStatus === "stale" && (
+            <p className="helper">
+              The document has changed. Refresh to compare the latest version.
+            </p>
+          )}
+          {evidence !== null && (
+            <div data-testid="evidence-pane" className="comparison">
+              <div>
+                <h4>Accepted document</h4>
+                <p className="helper">Without pending changes</p>
+                <pre data-testid="accepted-preview">
+                  {evidence.accepted.join("\n")}
+                </pre>
+              </div>
+              <div>
+                <h4>If all changes are accepted</h4>
+                <p className="helper">A preview, not a decision</p>
+                <pre data-testid="all-accepted-preview">
+                  {evidence.allAccepted.join("\n")}
+                </pre>
+              </div>
+            </div>
+          )}
+        </section>
+        <details className="technical-details">
+          <summary>
+            Developer details · proposal data, outcomes & export
+          </summary>
+          <p>
+            Inspect the package’s current pending proposals and export a native
+            review document. Resolved proposals leave no resolution history.
+          </p>
+          <div data-testid="selected-details">
             {!selectedActive || inspection === null ? (
-              <p style={mutedText}>No proposal selected.</p>
+              <p>No proposal selected.</p>
             ) : inspection.status === "ready" ? (
-              <pre style={preBox}>
-                {JSON.stringify(inspection.value, null, 2)}
-              </pre>
+              <pre>{JSON.stringify(inspection.value, null, 2)}</pre>
             ) : (
-              <p style={mutedText}>
+              <p>
                 Inspection refused / {inspection.code}: {inspection.message}
               </p>
             )}
           </div>
-        </section>
-
-        <section
-          aria-labelledby="scenario-editor-heading"
-          id="try-it-live"
-          style={{ minWidth: 0 }}
-        >
-          <h2 id="scenario-editor-heading" style={{ fontWeight: 600 }}>
-            Editable review projection
-          </h2>
-          <div
-            style={{
-              minHeight: 96,
-              minWidth: 0,
-              border: "1px solid #d1d5db",
-              borderRadius: 4,
-              padding: 8,
-              marginTop: 4,
-            }}
-          >
-            <ContentEditable
-              data-testid="scenario-editor"
-              style={{ outline: "none", minWidth: 0 }}
-            />
-          </div>
-        </section>
-
-        <section aria-label="Document evidence" style={{ minWidth: 0 }}>
-          <h2 style={{ fontWeight: 600 }}>Document evidence</h2>
-          <p data-testid="evidence-status" style={{ fontSize: 14 }}>
-            {EVIDENCE_STATUS_TEXT[evidenceStatus]}
-          </p>
-          {evidenceReason !== null ? (
-            <p data-testid="evidence-reason" style={mutedText}>
-              {evidenceReason}
-            </p>
-          ) : null}
-          <button
-            type="button"
-            data-testid="generate-evidence"
-            disabled={isComposing}
-            onClick={generateEvidence}
-            style={{ ...actionButton, marginTop: 4 }}
-          >
-            {evidence === null ? "Generate evidence" : "Regenerate evidence"}
-          </button>
-          {evidence === null ? null : (
-            <div data-testid="evidence-pane" style={{ minWidth: 0 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600 }}>
-                Accepted-state preview
-              </h3>
-              <pre data-testid="accepted-preview" style={preBox}>
-                {evidence.accepted.join("\n")}
-              </pre>
-              <h3 style={{ fontSize: 14, fontWeight: 600 }}>
-                All-accepted preview
-              </h3>
-              <pre data-testid="all-accepted-preview" style={preBox}>
-                {evidence.allAccepted.join("\n")}
-              </pre>
-              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Native export</h3>
-              <pre data-testid="native-export" style={preBox}>
-                {evidence.nativeJson}
-              </pre>
-            </div>
-          )}
-        </section>
-
-        <section aria-label="Outcome" style={{ minWidth: 0 }}>
-          <h2 style={{ fontWeight: 600 }}>Outcome</h2>
-          <div
-            data-testid="outcome-pane"
-            style={{
-              minWidth: 0,
-              border: "1px solid #d1d5db",
-              borderRadius: 4,
-              background: "#f9fafb",
-              padding: 8,
-              fontSize: 14,
-              marginTop: 4,
-            }}
-          >
+          <div data-testid="outcome-pane">
             <p>
               Latest outcome:{" "}
               {outcome === null
@@ -812,22 +694,50 @@ export default function ScenarioRailDemo({
                 : describeOutcome(outcome)}
             </p>
             <p>Reported outcomes this baseline: {outcomeCount}</p>
-            {normalization === null ? null : (
+            {normalization !== null && (
               <p data-testid="normalization-report">
                 normalization: {normalization}
               </p>
             )}
           </div>
-        </section>
-
-        {session === null ? null : (
-          <ReviewSessionPlugin
-            session={session}
-            proposalIdFactory={factory}
-            onOutcome={handleOutcome}
-          />
-        )}
-      </div>
+          {evidence !== null && (
+            <>
+              <h4>Native export</h4>
+              <pre data-testid="native-export">{evidence.nativeJson}</pre>
+            </>
+          )}
+          <p data-testid="capability-label">
+            Capability demo — non-normative, not a host UI pattern
+          </p>
+        </details>
+        <div className="lesson-next">
+          <span>
+            {index === SCENARIOS.length - 1
+              ? "You’ve reached the last example. Revisit any capability or try your own edits."
+              : "Ready to explore another capability?"}
+          </span>
+          {nextScenario !== undefined && (
+            <button
+              type="button"
+              onClick={() => {
+                loadScenario(nextScenario.id);
+                document
+                  .getElementById("try-it-live")
+                  ?.scrollIntoView({ block: "start" });
+              }}
+            >
+              Next: {nextScenario.label} →
+            </button>
+          )}
+        </div>
+      </main>
+      {session !== null && (
+        <ReviewSessionPlugin
+          session={session}
+          proposalIdFactory={factory}
+          onOutcome={handleOutcome}
+        />
+      )}
     </div>
   );
 }

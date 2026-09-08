@@ -4,6 +4,9 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/?scenarios");
   await page.waitForFunction(() => window.__scenarios !== undefined);
   await expect(page.getByTestId("scenario-editor")).toBeVisible();
+  await page
+    .getByText("Developer details · proposal data, outcomes & export")
+    .click();
 });
 
 function stripKeys(value: unknown): unknown {
@@ -251,6 +254,9 @@ test("switching scenarios resets edits without reporting an outcome", async ({
   await expect(page.getByTestId("evidence-pane")).toBeVisible();
 
   await rail(page, "n1");
+  await page
+    .getByText("Developer details · proposal data, outcomes & export")
+    .click();
 
   // Selection, inspection, outcome, and generated evidence are discarded.
   await expect(page.getByTestId("proposal-item")).toHaveCount(0);
@@ -339,4 +345,29 @@ test("the rail stays available after scrolling through evidence", async ({
   await expect(
     page.locator('[data-testid="scenario-item"][data-scenario="n1"]'),
   ).toBeInViewport();
+});
+
+test("guided path reviews a change and advances to a fresh example", async ({
+  page,
+}) => {
+  await page
+    .getByText("Developer details · proposal data, outcomes & export")
+    .click();
+  await expect(page.getByTestId("outcome-pane")).toBeHidden();
+  await page.getByTestId("act-insert-x").click();
+  await page.getByTestId("act-insert-y").click();
+  await page.getByTestId("proposal-item").click();
+  await page.getByTestId("reject-selected").click();
+  await expect(page.getByTestId("scenario-editor")).toHaveText("AB");
+  await expect(page.getByRole("status")).toContainText(
+    "No pending proposals remain",
+  );
+  await page
+    .getByRole("button", { name: "Next: Revise a suggestion →" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Revise a suggestion", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("scenario-editor")).toHaveText("AxyB");
+  await expect(page.getByTestId("outcome-pane")).toBeHidden();
 });
