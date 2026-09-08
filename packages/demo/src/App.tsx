@@ -81,7 +81,7 @@ function App() {
         <ScenarioRailDemo />
       </LexicalComposer>
       <footer className="site-footer">
-        A capability demo for lexical-review · Built by Mahendri Dwicahyo
+        demo for lexical-review · built by Mahendri Dwicahyo
       </footer>
     </div>
   );

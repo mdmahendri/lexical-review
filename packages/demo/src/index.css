@@ -225,6 +225,36 @@ h4 {
 .editor-caption span {
   color: #617368;
 }
+.editor-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.editor-tools button {
+  border-color: transparent;
+  border-radius: 4px;
+  padding: 4px 7px;
+  background: transparent;
+  font-size: 12px;
+}
+.editor-tools button:hover:not(:disabled) {
+  background: #edf3ee;
+  border-color: #bac5bf;
+}
+.editor-tools .format-button[aria-pressed="true"] {
+  background: #e6eee7;
+  border-color: #486553;
+}
+.review-mode-label {
+  margin-right: 4px;
+}
+.editor-tools .reset-button {
+  border-left-color: #dbe1dc;
+  border-radius: 0;
+  margin-left: 4px;
+  padding-left: 10px;
+  color: #617368;
+}
 .review-editor {
   min-height: 130px;
   padding: 24px;
@@ -255,18 +285,6 @@ del,
 .review-deletion {
   background: #f6e2df;
   text-decoration: line-through;
-}
-.quiet-actions {
-  margin-top: 10px;
-}
-.quiet-actions button {
-  border: none;
-  padding: 5px 0;
-  background: none;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  margin-right: 14px;
-  color: #627267;
 }
 .feedback {
   margin-top: 16px;

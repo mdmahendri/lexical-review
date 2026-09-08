@@ -4,12 +4,17 @@ import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import {
   $createParagraphNode,
   $createTextNode,
+  $getSelection,
   $getRoot,
+  $isRangeSelection,
   COMPOSITION_END_COMMAND,
   COMPOSITION_START_COMMAND,
+  DELETE_CHARACTER_COMMAND,
+  FORMAT_TEXT_COMMAND,
   INSERT_PARAGRAPH_COMMAND,
   PASTE_COMMAND,
   type LexicalEditor,
+  type ParagraphNode,
 } from "lexical";
 import {
   $deleteReviewText,
@@ -29,7 +34,7 @@ import {
   useProposalEvidence,
 } from "./useProposalEvidence";
 
-type ScenarioId = "r1" | "r2" | "r3" | "n1" | "n2" | "n3" | "n4";
+type ScenarioId = "r1" | "r2" | "r3" | "n1" | "n2" | "m1" | "n3" | "n4";
 
 interface ScenarioDef {
   id: ScenarioId;
@@ -56,6 +61,10 @@ const SCENARIOS: readonly ScenarioDef[] = [
   {
     id: "n2",
     label: "Split a paragraph",
+  },
+  {
+    id: "m1",
+    label: "Merge paragraphs",
   },
   {
     id: "n3",
@@ -87,6 +96,20 @@ function setPlainText(text: string, anchor: number, focus: number): void {
   $getRoot().getAllTextNodes()[0]?.select(anchor, focus);
 }
 
+function setParagraphs(
+  texts: readonly string[],
+  paragraphIndex: number,
+  offset: number,
+): void {
+  const paragraphs = texts.map((text) =>
+    $createParagraphNode().append($createTextNode(text)),
+  );
+  $getRoot()
+    .clear()
+    .append(...paragraphs);
+  paragraphs[paragraphIndex]?.select(offset, offset);
+}
+
 function selectInsertionText(offset: number): boolean {
   for (const node of $getRoot().getAllTextNodes()) {
     const parent = node.getParent();
@@ -113,6 +136,9 @@ function setupScenarioDocument(
     case "n3":
     case "n4":
       setPlainText("AB", 1, 1);
+      break;
+    case "m1":
+      setParagraphs(["A", "B"], 1, 0);
       break;
     case "r2":
       setPlainText("AB", 1, 1);
@@ -141,6 +167,7 @@ export default function ScenarioRailDemo({
   const [outcome, setOutcome] = useState<ReviewIntentOutcome | null>(null);
   const [outcomeCount, setOutcomeCount] = useState(0);
   const [normalization, setNormalization] = useState<string | null>(null);
+  const [textFormat, setTextFormat] = useState({ bold: false, italic: false });
   const {
     evidence,
     evidenceReason,
@@ -205,6 +232,25 @@ export default function ScenarioRailDemo({
   useEffect(() => {
     onEditorReady?.(editor);
   }, [editor, onEditorReady]);
+
+  useEffect(() => {
+    return editor.registerUpdateListener(({ editorState }) => {
+      editorState.read(() => {
+        const selection = $getSelection();
+        const next = $isRangeSelection(selection)
+          ? {
+              bold: selection.hasFormat("bold"),
+              italic: selection.hasFormat("italic"),
+            }
+          : { bold: false, italic: false };
+        setTextFormat((current) =>
+          current.bold === next.bold && current.italic === next.italic
+            ? current
+            : next,
+        );
+      });
+    });
+  }, [editor]);
 
   const clearScenarioState = useCallback(() => {
     factoryCounter.current = 0;
@@ -341,6 +387,16 @@ export default function ScenarioRailDemo({
     editor.dispatchCommand(INSERT_PARAGRAPH_COMMAND, undefined);
   }, [editor]);
 
+  const mergeAtPinnedBoundary = useCallback(() => {
+    editor.update(
+      () => {
+        $getRoot().getChildren<ParagraphNode>()[1]?.select(0, 0);
+      },
+      { discrete: true },
+    );
+    editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true);
+  }, [editor]);
+
   const simulateMultilinePaste = useCallback(() => {
     editor.update(
       () => {
@@ -378,9 +434,12 @@ export default function ScenarioRailDemo({
     );
   }, [editor]);
 
-  const focusEditor = useCallback(() => {
-    editor.getRootElement()?.focus();
-  }, [editor]);
+  const toggleTextFormat = useCallback(
+    (format: "bold" | "italic") => {
+      editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
+    },
+    [editor],
+  );
 
   const activeScenario = SCENARIOS.find((entry) => entry.id === scenario);
 
@@ -392,6 +451,7 @@ export default function ScenarioRailDemo({
     r3: "A pending X sits after accepted text AB. Try deleting forward from the accepted side. The package refuses this unsupported target and preserves the document and selection.",
     n1: "Change cat to bat. The deleted c and inserted b form one replacement proposal, so they are accepted or rejected together.",
     n2: "Split AB between its letters. A paragraph boundary is a reviewable change too: accepting keeps the split; rejecting rejoins the text.",
+    m1: "Merge A and B at the paragraph boundary. The merge is a pending structural proposal: accepting keeps one paragraph; rejecting restores the boundary.",
     n3: "Paste x and y as two paragraphs between A and B. The entire fragment is one proposal, reviewed as a whole. This button simulates a plain-text paste.",
     n4: "Text composition can commit a complete character as one insertion proposal. This button simulates the commit; you can also try your own input method in the editor.",
   };
@@ -421,9 +481,6 @@ export default function ScenarioRailDemo({
       </nav>
       <main id="try-it-live" className="lesson" key={scenario}>
         <header className="lesson-heading">
-          <p className="eyebrow">
-            Example {index + 1} of {SCENARIOS.length} · Try it in a minute
-          </p>
           <h2>{activeScenario?.label}</h2>
           <p>{explanations[scenario]}</p>
         </header>
@@ -432,8 +489,7 @@ export default function ScenarioRailDemo({
             <span className="step">1</span> Make a change
           </h3>
           <p className="helper">
-            Use the example buttons, or place your cursor in the editor and
-            type.
+            Use an example button, or click in the document and type.
           </p>
           <div className="actions example-actions">
             {scenario === "r1" ? (
@@ -490,6 +546,15 @@ export default function ScenarioRailDemo({
                 Split paragraph (Enter)
               </button>
             ) : null}
+            {scenario === "m1" ? (
+              <button
+                type="button"
+                data-testid="act-merge"
+                onClick={mergeAtPinnedBoundary}
+              >
+                Merge the paragraphs
+              </button>
+            ) : null}
             {scenario === "n3" ? (
               <button
                 type="button"
@@ -515,7 +580,41 @@ export default function ScenarioRailDemo({
           >
             <div className="editor-caption">
               <h4 id="scenario-editor-heading">Your document</h4>
-              <span>Review mode is on</span>
+              <div className="editor-tools" aria-label="Editor tools">
+                <span className="review-mode-label">Review mode is on</span>
+                <button
+                  type="button"
+                  className="format-button"
+                  data-testid="format-bold"
+                  aria-label="Bold"
+                  aria-pressed={textFormat.bold}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => toggleTextFormat("bold")}
+                >
+                  <strong aria-hidden="true">B</strong>
+                </button>
+                <button
+                  type="button"
+                  className="format-button"
+                  data-testid="format-italic"
+                  aria-label="Italic"
+                  aria-pressed={textFormat.italic}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => toggleTextFormat("italic")}
+                >
+                  <em aria-hidden="true">I</em>
+                </button>
+                <button
+                  type="button"
+                  className="reset-button"
+                  data-testid="reset-scenario"
+                  aria-label="Reset example"
+                  title="Reset example"
+                  onClick={resetScenario}
+                >
+                  <span aria-hidden="true">↻</span> Reset
+                </button>
+              </div>
             </div>
             <ContentEditable
               data-testid="scenario-editor"
@@ -531,22 +630,6 @@ export default function ScenarioRailDemo({
               </span>
             </div>
           </section>
-          <div className="actions quiet-actions">
-            <button
-              type="button"
-              data-testid="focus-editor"
-              onClick={focusEditor}
-            >
-              Try typing yourself
-            </button>
-            <button
-              type="button"
-              data-testid="reset-scenario"
-              onClick={resetScenario}
-            >
-              Reset example
-            </button>
-          </div>
           <p className="feedback" role="status">
             {outcome === null
               ? "Start with the first button above. Your change will appear in the document."
@@ -667,49 +750,48 @@ export default function ScenarioRailDemo({
             </div>
           )}
         </section>
-        <details className="technical-details">
-          <summary>
-            Developer details · proposal data, outcomes & export
-          </summary>
-          <p>
-            Inspect the package’s current pending proposals and export a native
-            review document. Resolved proposals leave no resolution history.
-          </p>
-          <div data-testid="selected-details">
-            {!selectedActive || inspection === null ? (
-              <p>No proposal selected.</p>
-            ) : inspection.status === "ready" ? (
-              <pre>{JSON.stringify(inspection.value, null, 2)}</pre>
-            ) : (
-              <p>
-                Inspection refused / {inspection.code}: {inspection.message}
-              </p>
-            )}
-          </div>
-          <div data-testid="outcome-pane">
+        {evidence !== null && (
+          <details className="technical-details">
+            <summary>
+              Developer details · proposal data, outcomes & export
+            </summary>
             <p>
-              Latest outcome:{" "}
-              {outcome === null
-                ? "none yet — run the scenario actions above"
-                : describeOutcome(outcome)}
+              Inspect the package’s current pending proposals and export a
+              native review document. Resolved proposals leave no resolution
+              history.
             </p>
-            <p>Reported outcomes this baseline: {outcomeCount}</p>
-            {normalization !== null && (
-              <p data-testid="normalization-report">
-                normalization: {normalization}
+            <div data-testid="selected-details">
+              {!selectedActive || inspection === null ? (
+                <p>No proposal selected.</p>
+              ) : inspection.status === "ready" ? (
+                <pre>{JSON.stringify(inspection.value, null, 2)}</pre>
+              ) : (
+                <p>
+                  Inspection refused / {inspection.code}: {inspection.message}
+                </p>
+              )}
+            </div>
+            <div data-testid="outcome-pane">
+              <p>
+                Latest outcome:{" "}
+                {outcome === null
+                  ? "none yet — run the scenario actions above"
+                  : describeOutcome(outcome)}
               </p>
-            )}
-          </div>
-          {evidence !== null && (
-            <>
-              <h4>Native export</h4>
-              <pre data-testid="native-export">{evidence.nativeJson}</pre>
-            </>
-          )}
-          <p data-testid="capability-label">
-            Capability demo — non-normative, not a host UI pattern
-          </p>
-        </details>
+              <p>Reported outcomes this baseline: {outcomeCount}</p>
+              {normalization !== null && (
+                <p data-testid="normalization-report">
+                  normalization: {normalization}
+                </p>
+              )}
+            </div>
+            <h4>Native export</h4>
+            <pre data-testid="native-export">{evidence.nativeJson}</pre>
+            <p data-testid="capability-label">
+              Capability demo — non-normative, not a host UI pattern
+            </p>
+          </details>
+        )}
         <div className="lesson-next">
           <span>
             {index === SCENARIOS.length - 1
