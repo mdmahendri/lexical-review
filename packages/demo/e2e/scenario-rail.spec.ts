@@ -158,7 +158,7 @@ test("R2 correction keeps identity then direct removal empties the list", async 
   await expect(page.getByTestId("accepted-preview")).toHaveText("AB");
   await expect(page.getByTestId("all-accepted-preview")).toHaveText("AxzyB");
 
-  await page.getByTestId("remove-selected").click();
+  await page.getByTestId("remove-proposal").click();
   await expect(page.getByTestId("proposal-item")).toHaveCount(0);
   await expect(page.getByTestId("outcome-pane")).toContainText("changed");
   expect((await snapshot(page)).text).toBe("AB");
@@ -261,7 +261,7 @@ test("merge paragraph creates a structural proposal that can be rejected", async
   await openDeveloperDetails(page);
   await page.getByTestId("proposal-item").click();
   await expect(page.getByTestId("selected-details")).toContainText("merge");
-  await page.getByTestId("reject-selected").click();
+  await page.getByTestId("reject-proposal").click();
 
   await expect(page.getByTestId("proposal-item")).toHaveCount(0);
   expect((await snapshot(page)).paragraphs).toEqual(["A", "B"]);
@@ -371,7 +371,7 @@ test("accept settles the selected proposal through the shared evidence pane", as
   await rail(page, "n3");
   await page.getByTestId("act-paste").click();
   await page.getByTestId("proposal-item").click();
-  await page.getByTestId("accept-selected").click();
+  await page.getByTestId("accept-proposal").click();
 
   await expect(page.getByRole("status")).toContainText(
     "No pending proposals remain",
@@ -441,7 +441,7 @@ test("guided path reviews a change and advances to a fresh example", async ({
   await page.getByTestId("act-insert-x").click();
   await page.getByTestId("act-insert-y").click();
   await page.getByTestId("proposal-item").click();
-  await page.getByTestId("reject-selected").click();
+  await page.getByTestId("reject-proposal").click();
   await expect(page.getByTestId("scenario-editor")).toHaveText("AB");
   await expect(page.getByRole("status")).toContainText(
     "No pending proposals remain",

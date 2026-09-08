@@ -156,6 +156,65 @@ function setupScenarioDocument(
   }
 }
 
+function CheckIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M2.5 7.5 5.5 10.5 11.5 3.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CrossIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M3.5 3.5l7 7M10.5 3.5l-7 7"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M2.5 3.5h9M5.5 3.5V2.6c0-.3.3-.6.6-.6h1.8c.3 0 .6.3.6.6v.9M4.2 3.5l.6 7c.1.8.7 1.4 1.4 1.4h1.6c.7 0 1.3-.6 1.4-1.4l.6-7M6 6.5v3.5M8 6.5v3.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function ScenarioRailDemo({
   onEditorReady,
 }: {
@@ -178,7 +237,7 @@ export default function ScenarioRailDemo({
     isComposing,
     proposals,
     resetEvidence,
-    resolveSelected,
+    resolveProposal,
     selectedActive,
     selectedId,
     setSelectedId,
@@ -664,58 +723,84 @@ export default function ScenarioRailDemo({
           <p className="helper">
             Select a pending proposal below, then decide what to keep.
           </p>
-          <div data-testid="proposal-list" className="actions proposal-list">
+          <div data-testid="proposal-list" className="proposal-list">
             {proposals.length === 0 ? (
               <p className="empty-state">
                 Your proposals will appear here when you make a change.
               </p>
             ) : (
               summaries.map((summary, position) => (
-                <button
+                <div
                   key={summary.id}
-                  type="button"
-                  data-testid="proposal-item"
-                  data-proposal-id={summary.id}
-                  aria-pressed={summary.id === selectedId}
-                  onClick={() => setSelectedId(summary.id)}
+                  className={
+                    summary.id === selectedId
+                      ? "proposal-row is-selected"
+                      : "proposal-row"
+                  }
                 >
-                  {summary.kind} · Change {position + 1}
-                </button>
+                  <button
+                    type="button"
+                    data-testid="proposal-item"
+                    data-proposal-id={summary.id}
+                    aria-pressed={summary.id === selectedId}
+                    className="proposal-row-main"
+                    onClick={() => setSelectedId(summary.id)}
+                  >
+                    <span className="proposal-row-index">{position + 1}</span>
+                    <span className="proposal-kind" data-kind={summary.kind}>
+                      {summary.kind}
+                    </span>
+                    <span className="proposal-row-title">
+                      Change {position + 1}
+                    </span>
+                  </button>
+                  <div
+                    className="proposal-row-decisions"
+                    role="group"
+                    aria-label={`Decide Change ${position + 1}`}
+                  >
+                    <button
+                      type="button"
+                      title="Accept — keeps the change"
+                      aria-label={`Accept Change ${position + 1}`}
+                      data-testid="accept-proposal"
+                      data-proposal-id={summary.id}
+                      className="decision-button decision-accept"
+                      onClick={() => resolveProposal(summary.id, "accept")}
+                    >
+                      <CheckIcon />
+                    </button>
+                    <button
+                      type="button"
+                      title="Reject — sets it aside"
+                      aria-label={`Reject Change ${position + 1}`}
+                      data-testid="reject-proposal"
+                      data-proposal-id={summary.id}
+                      className="decision-button decision-reject"
+                      onClick={() => resolveProposal(summary.id, "reject")}
+                    >
+                      <CrossIcon />
+                    </button>
+                    <button
+                      type="button"
+                      title="Remove — lets its author withdraw it"
+                      aria-label={`Remove Change ${position + 1}`}
+                      data-testid="remove-proposal"
+                      data-proposal-id={summary.id}
+                      className="decision-button decision-remove"
+                      onClick={() => resolveProposal(summary.id, "remove")}
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                </div>
               ))
             )}
           </div>
-          <div aria-label="Selected proposal">
-            <div className="actions">
-              <button
-                type="button"
-                data-testid="accept-selected"
-                disabled={!selectedActive}
-                onClick={() => resolveSelected("accept")}
-              >
-                Accept selected
-              </button>
-              <button
-                type="button"
-                data-testid="reject-selected"
-                disabled={!selectedActive}
-                onClick={() => resolveSelected("reject")}
-              >
-                Reject selected
-              </button>
-              <button
-                type="button"
-                data-testid="remove-selected"
-                disabled={!selectedActive}
-                onClick={() => resolveSelected("remove")}
-              >
-                Remove selected
-              </button>
-            </div>
-            <p className="helper">
-              Accept keeps the change. Reject sets it aside. Remove lets its
-              author withdraw it.
-            </p>
-          </div>
+          <p className="helper">
+            Accept keeps the change. Reject sets it aside. Remove lets its
+            author withdraw it.
+          </p>
         </section>
         <section aria-label="Document evidence" className="preview-section">
           <h3>

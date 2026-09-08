@@ -309,7 +309,102 @@ del,
   text-decoration: line-through;
 }
 .proposal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 14px;
+}
+.proposal-row {
+  display: flex;
+  align-items: center;
+  border: 1px solid #d5dcd6;
+  border-radius: 6px;
+  background: white;
+  overflow: hidden;
+}
+.proposal-row.is-selected {
+  border-color: #486553;
+  background: #f2f6f2;
+}
+.proposal-row-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border-color: transparent;
+  background: transparent;
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 13px;
+}
+.proposal-row-main:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+.proposal-row-index {
+  font-size: 12px;
+  color: #748077;
+  min-width: 1.5em;
+  text-align: right;
+}
+.proposal-kind {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #576e60;
+  background: #eef1ed;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.proposal-kind[data-kind="insertion"] {
+  color: #2f6b3a;
+  background: #d9eedc;
+}
+.proposal-kind[data-kind="deletion"] {
+  color: #96423c;
+  background: #f6e2df;
+}
+.proposal-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proposal-row-decisions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 8px;
+}
+.decision-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #5c6a60;
+  padding: 0;
+}
+.decision-accept:hover:not(:disabled) {
+  color: #2f6b3a;
+  background: #d9eedc;
+  border-color: #9dc3a4;
+}
+.decision-reject:hover:not(:disabled) {
+  color: #96423c;
+  background: #f6e2df;
+  border-color: #d9a9a3;
+}
+.decision-remove:hover:not(:disabled) {
+  color: #202b2b;
+  background: #eef1ed;
+  border-color: #bac5bf;
 }
 .empty-state {
   padding: 8px 0;

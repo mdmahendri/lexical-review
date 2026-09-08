@@ -52,6 +52,7 @@ export interface ProposalEvidenceState {
   proposals: readonly string[];
   resetEvidence: () => void;
   resolveSelected: (action: "accept" | "reject" | "remove") => void;
+  resolveProposal: (id: string, action: "accept" | "reject" | "remove") => void;
   selectedActive: boolean;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
@@ -162,6 +163,21 @@ export function useProposalEvidence(
     [editor, selectedId],
   );
 
+  const resolveProposal = useCallback(
+    (id: string, action: "accept" | "reject" | "remove") => {
+      editor.update(
+        () => {
+          editor.dispatchCommand(RESOLVE_REVIEW_PROPOSALS_COMMAND, {
+            action,
+            ids: [id],
+          });
+        },
+        { discrete: true },
+      );
+    },
+    [editor],
+  );
+
   const generateEvidence = useCallback(() => {
     if (editor.isComposing()) return;
     const snapshot = editor.getEditorState();
@@ -223,6 +239,7 @@ export function useProposalEvidence(
     proposals,
     resetEvidence,
     resolveSelected,
+    resolveProposal,
     selectedActive,
     selectedId,
     setSelectedId,
