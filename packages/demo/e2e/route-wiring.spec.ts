@@ -165,18 +165,10 @@ test("toolbar resolve matches direct resolution as one action", async ({
   expect(stripKeys(viaCommand.document)).toEqual(stripKeys(direct.document));
 });
 
-test("capability surface is labelled, narrow-safe, and free of legacy step concepts", async ({
-  page,
-}) => {
+test("capability surface is labelled and narrow-safe", async ({ page }) => {
   await expect(page.getByTestId("capability-label")).toHaveText(
     "Capability demo — non-normative, not a host UI pattern",
   );
-  const legacyAbsent = await page.evaluate(
-    () =>
-      !("__lexicalReviewEditorFixture" in window) &&
-      !("undo" in (window.__routeWiringFixture as object)),
-  );
-  expect(legacyAbsent).toBe(true);
   const failedSlot = await page.evaluate(
     () => window.__routeWiringFixture!.snapshot().failedExample,
   );

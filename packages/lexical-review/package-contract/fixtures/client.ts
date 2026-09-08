@@ -5,10 +5,10 @@ import {
 } from "lexical-review/client";
 import type { ReviewSession } from "lexical-review";
 
-// @ts-expect-error Core node APIs belong to the root entrypoint in v3.
-import { ReviewTextNode } from "lexical-review/client";
-// @ts-expect-error React/editor APIs belong to the client entrypoint in v3.
-import { ReviewTextPlugin as RootReviewTextPlugin } from "lexical-review";
+// @ts-expect-error Core node APIs belong to the root entrypoint, not the client entrypoint.
+import { ReviewInsertionNode } from "lexical-review/client";
+// @ts-expect-error Client/editor APIs belong to the client entrypoint, not the root.
+import { ReviewSessionPlugin as RootReviewSessionPlugin } from "lexical-review";
 
 const v3Plugin: (props: { session: ReviewSession }) => JSX.Element | null =
   ReviewSessionPlugin;
@@ -18,5 +18,5 @@ const v3Register: (
 ) => () => void = registerReviewSession;
 void v3Plugin;
 void v3Register;
-void ReviewTextNode;
-void RootReviewTextPlugin;
+void ReviewInsertionNode;
+void RootReviewSessionPlugin;

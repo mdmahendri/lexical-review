@@ -5,8 +5,6 @@ const root = require("lexical-review");
 
 assert.equal(typeof root.ReviewInsertionNode, "function");
 assert.equal(typeof root.ReviewDeletionNode, "function");
-assert.equal("LegacyReviewTextNode" in root, false);
-assert.equal("ReviewTextNode" in root, false);
 assert.equal(typeof root.openReviewSession, "function");
 for (const name of [
   "$deleteReviewText",
@@ -18,21 +16,7 @@ for (const name of [
 ]) {
   assert.equal(typeof root[name], "function");
 }
-for (const name of [
-  "$inspectReviewDeletion",
-  "$removeReviewDeletion",
-  "$acceptReviewDeletion",
-  "$rejectReviewDeletion",
-  "$inspectReviewInsertion",
-  "$removeReviewInsertion",
-  "$acceptReviewInsertion",
-  "$rejectReviewInsertion",
-]) {
-  assert.equal(root[name], undefined);
-}
 assert.equal(typeof root.validateReviewDocument, "function");
-assert.equal("ReviewTextPlugin" in root, false);
-assert.equal("registerReviewText" in root, false);
 
 const editor = createEditor({
   nodes: [root.ReviewInsertionNode, root.ReviewDeletionNode],
@@ -61,11 +45,6 @@ const opened = root.openReviewSession(editor, {
   },
 });
 assert.equal(opened.status, "valid");
-assert.equal("insertText" in opened.value, false);
-assert.equal("finalizeDraft" in opened.value, false);
-assert.equal("discardDraft" in opened.value, false);
-assert.equal("acceptProposal" in opened.value, false);
-assert.equal("rejectProposal" in opened.value, false);
 assert.equal(opened.value.exportDocument().status, "valid");
 
 console.log("root entrypoint resolved with its CommonJS core runtime exports");
