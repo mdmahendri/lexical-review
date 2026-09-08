@@ -5,7 +5,6 @@ import { ScenarioRailFixture } from "./ScenarioRailFixture";
 import { StructureFixture } from "./StructureFixture";
 import { FormattingFixture } from "./FormattingFixture";
 import { createRoot } from "react-dom/client";
-import ReviewEditorFixture from "./ReviewEditorFixture";
 
 import { DeletionFixture } from "./DeletionFixture";
 import { InsertionFixture } from "./InsertionFixture";
@@ -28,6 +27,6 @@ createRoot(document.getElementById("root")!).render(
   ) : location.search === "?insertions" ? (
     <InsertionFixture />
   ) : (
-    <ReviewEditorFixture />
+    <ScenarioRailFixture />
   ),
 );

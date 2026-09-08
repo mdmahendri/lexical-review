@@ -5,7 +5,7 @@ const root = require("lexical-review");
 
 assert.equal(typeof root.ReviewInsertionNode, "function");
 assert.equal(typeof root.ReviewDeletionNode, "function");
-assert.equal(typeof root.LegacyReviewTextNode, "function");
+assert.equal("LegacyReviewTextNode" in root, false);
 assert.equal("ReviewTextNode" in root, false);
 assert.equal(typeof root.openReviewSession, "function");
 for (const name of [

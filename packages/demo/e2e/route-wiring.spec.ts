@@ -173,7 +173,7 @@ test("capability surface is labelled, narrow-safe, and free of legacy step conce
   );
   const legacyAbsent = await page.evaluate(
     () =>
-      window.__lexicalReviewEditorFixture === undefined &&
+      !("__lexicalReviewEditorFixture" in window) &&
       !("undo" in (window.__routeWiringFixture as object)),
   );
   expect(legacyAbsent).toBe(true);

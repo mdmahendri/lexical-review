@@ -26,8 +26,7 @@ iOS Safari.
 ## Entrypoints
 
 - React-free core entrypoint: `import { ReviewInsertionNode } from "lexical-review"`.
-- Client/editor integration is available through the v3 session registration
-  and explicitly named legacy v2 editor-wide exports.
+- Client/editor integration is available through the v3 session registration.
 
 Core nodes, helpers, and types are exported only from the root entrypoint. The root entrypoint does not import React or `@lexical/react`, so it is suitable for server-side model and serialization code; DOM rendering and editor registration require a client environment.
 
@@ -181,35 +180,6 @@ reports the outcome via `onOutcome`, adding routing and claiming only.
 To reproduce in the browser fixture, open `/?insertions`, select `AB`, and type
 `new`. The editor displays `<del>AB</del><ins>new</ins>`. Select all of `new` and
 press Backspace: the editor restores `AB` without either review wrapper.
-
-## Legacy editor-wide review mode
-
-The v2 segment implementation remains available behind explicitly named
-`Legacy*` compatibility exports. It is not v3 review state or native
-serialization authority:
-
-```tsx
-import { TextNode } from "lexical";
-import {
-  $createLegacyReviewTextNode,
-  LegacyReviewTextNode,
-} from "lexical-review";
-
-const initialConfig = {
-  nodes: [
-    LegacyReviewTextNode,
-    {
-      replace: TextNode,
-      with: (node: TextNode) =>
-        $createLegacyReviewTextNode(node.getTextContent(), "original"),
-      withKlass: LegacyReviewTextNode,
-    },
-  ],
-};
-```
-
-`LegacyReviewTextPlugin` and `registerLegacyReviewText` are exported from
-`lexical-review/client` for this compatibility surface.
 
 Please visit the [homepage](https://github.com/mahendrimd/lexical-review).
 

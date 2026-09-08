@@ -1,6 +1,6 @@
 {
   "name": "lexical-review",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "A custom lexical plugin provides suggestion, review, or track changes mode",
   "keywords": [
     "lexical",

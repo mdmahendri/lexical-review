@@ -1,10 +1,4 @@
 export {
-  ReviewTextNode as LegacyReviewTextNode,
-  $createReviewTextNode as $createLegacyReviewTextNode,
-  $isReviewTextNode as $isLegacyReviewTextNode,
-  type TextReviewType as LegacyTextReviewType,
-} from "./ReviewTextNode";
-export {
   ReviewDeletionNode,
   ReviewElementNode,
   ReviewInsertionNode,

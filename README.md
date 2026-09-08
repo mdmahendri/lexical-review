@@ -6,15 +6,15 @@
 
 ## Features
 
-- Editor-wide review mode for text edits.
-- Typing and pasted text are recorded as insertions.
-- Deleting original text marks it as deleted; deleting inserted text removes it; deleting deleted text restores the original text.
-- Character-level or word-level deletion granularity.
-- Lexical formatting and inline styles are preserved inside review markers.
-- Review metadata survives Lexical JSON serialization and deserialization.
-- Custom theme classes for inserted (`<ins>`) and deleted (`<del>`) text.
+- Node-backed v3 review session with stable proposal identity on creation.
+- Pending insertion, deletion, replacement, formatting, paragraph split/merge, and atomic document-fragment proposals.
+- Explicit accept, reject, and removal operations with no terminal history.
+- No-mutation refusals that preserve content, pending work, projection, and selection.
+- Content-only clipboard projections; untrusted clipboard content never confers proposal identity.
+- Lexical formatting and inline styles are preserved inside review markers (`<ins>`/`<del>` outermost).
+- Native review documents serialize accepted content plus current pending proposals only.
 
-The native v3 session authors pending text, formatting, and paragraph-boundary proposals with identity on creation and explicit accept, reject, and removal operations. See the [session API](packages/lexical-review/README.md#pending-insertion-proposals). The editor-wide features below describe the legacy integration.
+See the [session API](packages/lexical-review/README.md#pending-insertion-proposals).
 
 ## Installation
 
@@ -37,19 +37,22 @@ Lexical minors and browser boundary scenarios in Chromium, Firefox, and
 Playwright WebKit. Playwright WebKit results do not certify native Safari or
 iOS Safari.
 
-## Legacy quick start
+## Quick start
 
-Register `ReviewTextNode` and replace Lexical's regular `TextNode` so review mode applies to all editable text:
+Open a native v3 review document against a Lexical editor and register the session route:
 
 ```tsx
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
-import { TextNode } from "lexical";
 import {
-  $createLegacyReviewTextNode as $createReviewTextNode,
-  LegacyReviewTextNode as ReviewTextNode,
+  openReviewSession,
+  ReviewBoundaryNode,
+  ReviewDeletionNode,
+  ReviewFormattingNode,
+  ReviewFragmentNode,
+  ReviewInsertionNode,
 } from "lexical-review";
-import { LegacyReviewTextPlugin as ReviewTextPlugin } from "lexical-review/client";
+import { ReviewSessionPlugin } from "lexical-review/client";
 
 const initialConfig = {
   namespace: "review-editor",
@@ -57,29 +60,30 @@ const initialConfig = {
     throw error;
   },
   nodes: [
-    ReviewTextNode,
-    {
-      replace: TextNode,
-      with: (node: TextNode) =>
-        $createReviewTextNode(node.getTextContent(), "original"),
-      withKlass: ReviewTextNode,
-    },
+    ReviewInsertionNode,
+    ReviewDeletionNode,
+    ReviewFormattingNode,
+    ReviewFragmentNode,
+    ReviewBoundaryNode,
   ],
 };
+
+const session = openReviewSession(editor, initialDocument);
+if (session.status !== "valid") {
+  throw new Error(session.issues[0]?.message ?? "Invalid review document.");
+}
 
 export function ReviewEditor() {
   return (
     <LexicalComposer initialConfig={initialConfig}>
-      <ReviewTextPlugin
-        granularity="character"
-        contentEditable={<ContentEditable aria-label="Review editor" />}
-      />
+      <ReviewSessionPlugin session={session.value} />
+      <ContentEditable aria-label="Review editor" />
     </LexicalComposer>
   );
 }
 ```
 
-`ReviewTextPlugin` registers the review commands and normalizes text nodes created after registration. For a non-React integration, call `registerReviewText(editor, "word")` directly and keep the returned cleanup function.
+`ReviewSessionPlugin` routes typing, deletion, formatting, structural, clipboard, and composition input through the same v3 semantic operations. For a non-React integration, call `registerReviewSession(editor, session)` directly and keep the returned cleanup function.
 
 ## Development
 
