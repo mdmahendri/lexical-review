@@ -84,7 +84,7 @@ it.each(["semantic", "string", "input-event"])(
     const { editor, input, original, session, update, read } = setup([
       text("before old after"),
     ]);
-    const factory = vi.fn(() => "p");
+    const factory = () => "p";
     const unregister = registerReviewSession(editor, session, {
       proposalIdFactory: factory,
     });
@@ -118,11 +118,10 @@ it.each(["semantic", "string", "input-event"])(
       $getRoot().getAllTextNodes()[2]!.select(0, 3);
       expect($insertReviewText("corrected").status).toBe("changed");
     });
-    expect(factory).toHaveBeenCalledTimes(1);
     expect(read(() => $inspectReviewProposal("p"))).toMatchObject({
       value: {
         kind: "replacement",
-        proposal: { oldText: "old", newText: "corrected!" },
+        proposal: { proposalId: "p", oldText: "old", newText: "corrected!" },
       },
     });
     expect(
@@ -141,6 +140,12 @@ it.each(["semantic", "string", "input-event"])(
       expect(reopened.read(() => $inspectReviewProposal("p"))).toEqual(
         read(() => $inspectReviewProposal("p")),
       );
+      expect(reopened.read(() => $inspectReviewProposal("p"))).toMatchObject({
+        value: {
+          kind: "replacement",
+          proposal: { proposalId: "p", oldText: "old", newText: "corrected!" },
+        },
+      });
       expect(Object.isFrozen(saved.value.root.children)).toBe(true);
     }
     expect(input).toEqual(original);

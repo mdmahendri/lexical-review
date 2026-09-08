@@ -154,7 +154,7 @@ it("deletion inside a pending deletion resolves it instead of nesting", () => {
 
 it("deletion of accepted text continues an adjacent deletion under one identity", () => {
   const { editor, update } = setup(["ABC"]);
-  const factory = vi.fn(() => "del");
+  const factory = () => "del";
   update(() => {
     acceptedText().select(3, 3);
     expect($deleteReviewText(true, { proposalIdFactory: factory }).status).toBe(
@@ -165,7 +165,6 @@ it("deletion of accepted text continues an adjacent deletion under one identity"
       "changed",
     );
   });
-  expect(factory).toHaveBeenCalledTimes(1);
   const inspected = editor
     .getEditorState()
     .read(() => $inspectReviewProposal("del"));
@@ -202,7 +201,7 @@ it("word deletion at a paragraph start skips the structural claim", () => {
 
 it("deletion inside a fragment edits the fragment without a new identity", () => {
   const { editor, update } = setup(["AB"]);
-  const factory = vi.fn(() => "frag");
+  const factory = () => "frag";
   update(() => {
     acceptedText().select(1, 1);
     expect(
@@ -214,12 +213,10 @@ it("deletion inside a fragment edits the fragment without a new identity", () =>
         { proposalIdFactory: factory },
       ).status,
     ).toBe("changed");
-    expect(factory).toHaveBeenCalledTimes(1);
     fragmentText(0).select(1, 1);
     expect($deleteReviewText(true, { proposalIdFactory: factory }).status).toBe(
       "changed",
     );
-    expect(factory).toHaveBeenCalledTimes(1);
   });
   const inspected = editor
     .getEditorState()
@@ -292,7 +289,7 @@ it("a range from fragment content into accepted text is refused up front", () =>
 
 it("typing inside a pending insertion extends it under one identity", () => {
   const { editor, update } = setup();
-  const factory = vi.fn(() => "ins");
+  const factory = () => "ins";
   update(() => {
     acceptedText().select(1, 1);
     expect($insertReviewText("x", { proposalIdFactory: factory }).status).toBe(
@@ -303,7 +300,6 @@ it("typing inside a pending insertion extends it under one identity", () => {
       "changed",
     );
   });
-  expect(factory).toHaveBeenCalledTimes(1);
   const inspected = editor
     .getEditorState()
     .read(() => $inspectReviewProposal("ins"));
@@ -327,8 +323,8 @@ it("typing inside a pending deletion is refused", () => {
 });
 
 it("typing inside a fragment edits the fragment without a new identity", () => {
-  const { update } = setup(["AB"]);
-  const factory = vi.fn(() => "other");
+  const { editor, update } = setup(["AB"]);
+  const factory = () => "other";
   update(() => {
     acceptedText().select(1, 1);
     expect(twoParaFragment().status).toBe("changed");
@@ -336,13 +332,15 @@ it("typing inside a fragment edits the fragment without a new identity", () => {
     expect($insertReviewText("Z", { proposalIdFactory: factory }).status).toBe(
       "changed",
     );
-    expect(factory).not.toHaveBeenCalled();
   });
+  expect(
+    editor.getEditorState().read(() => $inspectReviewProposal("other").status),
+  ).toBe("refused");
 });
 
 it("typing in accepted text continues an adjacent insertion", () => {
   const { editor, update } = setup();
-  const factory = vi.fn(() => "ins");
+  const factory = () => "ins";
   update(() => {
     acceptedText().select(1, 1);
     expect($insertReviewText("x", { proposalIdFactory: factory }).status).toBe(
@@ -355,7 +353,6 @@ it("typing in accepted text continues an adjacent insertion", () => {
       "changed",
     );
   });
-  expect(factory).toHaveBeenCalledTimes(1);
   const inspected = editor
     .getEditorState()
     .read(() => $inspectReviewProposal("ins"));

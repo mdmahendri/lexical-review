@@ -267,6 +267,10 @@ describe("node-backed ReviewDocumentV3", () => {
       { discrete: true },
     );
     const before = editor.getEditorState();
+    // Failure-injection exception (allowed system boundary): Lexical parsing
+    // is an external boundary, and a silently divergent parse is unreachable
+    // via any public review document. Stubbing parseEditorState is the only
+    // way to prove the no-mutation refusal below.
     vitest
       .spyOn(editor, "parseEditorState")
       .mockReturnValue(createReviewEditor().getEditorState());
@@ -628,6 +632,9 @@ describe("node-backed ReviewDocumentV3", () => {
     const before = editor.getEditorState();
     const beforeJson = before.toJSON();
     const input = reviewDocument([paragraph([text("next")])]);
+    // Failure-injection exception (allowed system boundary): install failure
+    // is unreachable via any public review document. Stubbing the Lexical
+    // install step is the only way to prove the rollback below.
     vitest.spyOn(editor, "setEditorState").mockImplementationOnce(() => {
       throw new Error("install failed");
     });

@@ -50,16 +50,21 @@ test("keyboard and programmatic routes reach the same insertion intent", async (
 test("toolbar and programmatic routes reach the same formatting intent", async ({
   page,
 }) => {
+  const editor = page.getByTestId("route-wiring-editor");
   const rootSnapshot = await page.evaluate(() => {
     window.__routeWiringFixture!.reset();
     window.__routeWiringFixture!.formatRoot();
     return window.__routeWiringFixture!.snapshot();
   });
+  await expect(editor).toHaveText("AB");
+  await expect(editor.locator("[data-review-formatting]")).toHaveCount(1);
   const toolbarSnapshot = await page.evaluate(() => {
     window.__routeWiringFixture!.reset();
     window.__routeWiringFixture!.formatToolbar();
     return window.__routeWiringFixture!.snapshot();
   });
+  await expect(editor).toHaveText("AB");
+  await expect(editor.locator("[data-review-formatting]")).toHaveCount(1);
 
   for (const snapshot of [rootSnapshot, toolbarSnapshot]) {
     expect(snapshot.proposals).toEqual(["route-wiring-1"]);
@@ -91,6 +96,10 @@ test("proposal-side continuation keeps identity with changed", async ({
       proposal: { proposalId: "route-wiring-1", text: "x!" },
     },
   });
+  const editor = page.getByTestId("route-wiring-editor");
+  await expect(editor).toHaveText("Ax!B");
+  await expect(editor.locator("ins")).toHaveCount(1);
+  await expect(editor.locator("ins")).toHaveText("x!");
 });
 
 test("accepted-side deletion refuses without mutation or selection change", async ({
@@ -114,6 +123,10 @@ test("accepted-side deletion refuses without mutation or selection change", asyn
   expect(stripKeys(after.document)).toEqual(stripKeys(before.document));
   expect(after.selection).toEqual(before.selection);
   expect(after.text).toEqual(before.text);
+  const editor = page.getByTestId("route-wiring-editor");
+  await expect(editor).toHaveText("AxB");
+  await expect(editor.locator("ins")).toHaveCount(1);
+  await expect(editor.locator("ins")).toHaveText("x");
 });
 
 test("one physical action is claimed once", async ({ page }) => {
@@ -163,16 +176,19 @@ test("toolbar resolve matches direct resolution as one action", async ({
     expect(snapshot.text).toBe("AxB");
   }
   expect(stripKeys(viaCommand.document)).toEqual(stripKeys(direct.document));
+  const editor = page.getByTestId("route-wiring-editor");
+  await expect(editor).toHaveText("AxB");
+  await expect(editor.locator("ins, del")).toHaveCount(0);
 });
 
 test("capability surface is labelled and narrow-safe", async ({ page }) => {
   await expect(page.getByTestId("capability-label")).toHaveText(
     "Capability demo — non-normative, not a host UI pattern",
   );
-  const failedSlot = await page.evaluate(
-    () => window.__routeWiringFixture!.snapshot().failedExample,
-  );
-  expect(failedSlot).toMatchObject({ status: "failed" });
+  // failedExample is a hardcoded typed slot in the fixture (never produced
+  // live inside an update), so asserting its status would pass by
+  // construction. Observable capability coverage is the label above plus the
+  // narrow-safe layout below.
 
   await page.setViewportSize({ height: 800, width: 320 });
   const overflow = await page.evaluate(

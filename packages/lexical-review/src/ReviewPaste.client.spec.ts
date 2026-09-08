@@ -464,6 +464,8 @@ describe("review single-paragraph paste", () => {
     });
     expect(routedOutcomes.at(-1)).toMatchObject({ status: "changed" });
     expect(directOutcomes.at(-1)).toMatchObject({ status: "changed" });
+    expect(contentOf(routed)).toBe("AxB");
+    expect(contentOf(direct)).toBe("AxB");
     expect(contentOf(routed)).toBe(contentOf(direct));
   });
 });

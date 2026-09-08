@@ -457,6 +457,9 @@ it("unexpected mutation failure rolls back content and selection", () => {
   update(() => $getRoot().getAllTextNodes()[0]!.select(0, 0));
   const before = editor.getEditorState();
   const selection = selectionSnapshot();
+  // Failure-injection exception (allowed system boundary): a mid-mutation
+  // Lexical throw is unreachable via public resolution input. Stubbing
+  // selectEnd is the only way to prove the rollback below.
   const original = TextNode.prototype.selectEnd;
   const spy = vi
     .spyOn(TextNode.prototype, "selectEnd")

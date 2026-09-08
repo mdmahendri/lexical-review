@@ -622,6 +622,10 @@ describe("composition normalization (#64)", () => {
     const beforeDocument = editor.getEditorState().toJSON();
     const beforeSelection = editor.getEditorState().read(liveSelection);
     await startComposition(editor);
+    // Failure-injection exception (allowed system boundary): a throwing
+    // Lexical update is unreachable via public composition input. Stubbing
+    // the apply step is the only way to prove the failed + snapshot-recovery
+    // outcome below.
     const applyUpdate = vi
       .spyOn(editor, "update")
       .mockImplementationOnce(() => {

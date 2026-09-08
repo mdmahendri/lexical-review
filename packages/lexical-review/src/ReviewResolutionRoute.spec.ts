@@ -267,6 +267,8 @@ describe("resolution route parity", () => {
         expect(routedId).toBe(directId);
         const directOutcome = resolveDirect(direct, [directId], "accept");
         const routedOutcome = resolveViaRoute(routed, [routedId], "accept");
+        expect(directOutcome).toMatchObject({ status: "changed" });
+        expect(routedOutcome).toMatchObject({ status: "changed" });
         expect(routedOutcome).toEqual(directOutcome);
         expect(documentSnapshot(routed.session)).toEqual(
           documentSnapshot(direct.session),
@@ -291,6 +293,8 @@ describe("resolution route parity", () => {
         const routedId = author(routed, "insertion");
         const directOutcome = resolveDirect(direct, [directId], action);
         const routedOutcome = resolveViaRoute(routed, [routedId], action);
+        expect(directOutcome).toMatchObject({ status: "changed" });
+        expect(routedOutcome).toMatchObject({ status: "changed" });
         expect(routedOutcome).toEqual(directOutcome);
         expect(documentSnapshot(routed.session)).toEqual(
           documentSnapshot(direct.session),
@@ -322,6 +326,8 @@ describe("resolution route parity", () => {
         [routedInsertion, routedInsertion],
         "reject",
       );
+      expect(directBatch).toMatchObject({ status: "changed" });
+      expect(routedBatch).toMatchObject({ status: "changed" });
       expect(routedBatch).toEqual(directBatch);
       expect(documentSnapshot(routed.session)).toEqual(
         documentSnapshot(direct.session),
@@ -339,9 +345,11 @@ describe("resolution route parity", () => {
       expect(selectionSnapshot(routed.editor)).toEqual(beforeSelection);
 
       // Empty batch is unchanged on both paths.
-      expect(resolveDirect(direct, [], "accept")).toEqual(
-        resolveViaRoute(routed, [], "accept"),
-      );
+      const directEmpty = resolveDirect(direct, [], "accept");
+      const routedEmpty = resolveViaRoute(routed, [], "accept");
+      expect(directEmpty).toMatchObject({ status: "unchanged" });
+      expect(routedEmpty).toMatchObject({ status: "unchanged" });
+      expect(routedEmpty).toEqual(directEmpty);
     } finally {
       direct.unregister();
       routed.unregister();
@@ -423,6 +431,9 @@ describe("resolution route parity", () => {
       });
       const before = documentSnapshot(h.session);
       const selection = selectionSnapshot(h.editor);
+      // Failure-injection exception (allowed system boundary): a mid-mutation
+      // Lexical throw is unreachable via the public resolve route. Stubbing
+      // selectEnd is the only way to prove the rollback below.
       const original = TextNode.prototype.selectEnd;
       const spy = vi
         .spyOn(TextNode.prototype, "selectEnd")

@@ -99,7 +99,7 @@ it.each(properties)(
     for (const route of ["semantic", "command", "set", "beforeinput"]) {
       const { editor, session, input, update, read } = setup();
       const original = structuredClone(input);
-      const id = vi.fn(factory);
+      const id = () => "format-p";
       const unregister = registerReviewSession(editor, session, {
         proposalIdFactory: id,
       });
@@ -141,8 +141,13 @@ it.each(properties)(
             .find((node) => node.getTextContent() === "target")
             ?.hasFormat(property),
         ).toBe(true);
+        expect($inspectReviewProposal("format-p")).toMatchObject({
+          value: {
+            kind: "formatting",
+            proposal: { proposalId: "format-p" },
+          },
+        });
       });
-      expect(id).toHaveBeenCalledTimes(1);
       const saved = session.exportDocument();
       expect(saved.status).toBe("valid");
       if (saved.status === "valid") {
@@ -154,10 +159,20 @@ it.each(properties)(
         expect(reopened.read(() => $inspectReviewProposal("format-p"))).toEqual(
           read(() => $inspectReviewProposal("format-p")),
         );
+        expect(
+          reopened.read(() => $inspectReviewProposal("format-p")),
+        ).toMatchObject({
+          value: {
+            kind: "formatting",
+            proposal: { proposalId: "format-p" },
+          },
+        });
       }
       expect(input).toEqual(original);
       unregister();
     }
+    expect(documents).toHaveLength(4);
+    expect(JSON.stringify(documents[0])).toContain("format-p");
     for (const doc of documents) expect(doc).toEqual(documents[0]);
   },
 );
@@ -170,7 +185,7 @@ it.each([false, true])(
       text("def", 2),
       text("ghi", 8),
     ]);
-    const id = vi.fn(factory);
+    const id = () => "format-p";
     update(() => {
       const [first, , last] = $getRoot().getAllTextNodes();
       const selection = first!.select();
@@ -221,7 +236,9 @@ it.each([false, true])(
           .status,
       ).toBe("changed");
     });
-    expect(id).toHaveBeenCalledTimes(1);
+    read(() => {
+      expect($inspectReviewProposal("format-p").status).toBe("unchanged");
+    });
     expect(session.exportDocument().status).toBe("valid");
     update(() =>
       expect($resolveReviewProposal("format-p", "reject").status).toBe(
@@ -245,7 +262,7 @@ it.each([false, true])(
 
 it("detects no-ops before splitting or allocating identity and removes fully reverted pending work", () => {
   const { update, snapshot, read } = setup([text("bold", 1)]);
-  const id = vi.fn(factory);
+  const id = () => "format-p";
   update(() => $getRoot().getAllTextNodes()[0]!.select(1, 3));
   const before = snapshot();
   update(() =>
@@ -254,7 +271,7 @@ it("detects no-ops before splitting or allocating identity and removes fully rev
     ).toBe("unchanged"),
   );
   expect(snapshot()).toEqual(before);
-  expect(id).not.toHaveBeenCalled();
+  expect(read(() => $inspectReviewProposal("format-p").status)).toBe("refused");
   update(() =>
     expect(
       $setReviewFormatting({ bold: false }, { proposalIdFactory: id }).status,
@@ -306,7 +323,7 @@ it.each(["insertion", "replacement", "deletion"])(
         ? [old, inserted]
         : [kind === "deletion" ? old : inserted],
     );
-    const id = vi.fn(factory);
+    const id = () => "format-p";
     update(() => $getRoot().getAllTextNodes().at(-1)!.select(2, 1));
     const before = snapshot();
     update(() =>
@@ -314,7 +331,9 @@ it.each(["insertion", "replacement", "deletion"])(
         $setReviewFormatting({ bold: true }, { proposalIdFactory: id }).status,
       ).toBe(kind === "deletion" ? "refused" : "changed"),
     );
-    expect(id).not.toHaveBeenCalled();
+    expect(read(() => $inspectReviewProposal("format-p").status)).toBe(
+      "refused",
+    );
     if (kind === "deletion") expect(snapshot()).toEqual(before);
     else
       read(() =>
@@ -432,7 +451,7 @@ it.each(["accepted", "insertion", "replacement"])(
       ...children,
       text("bold", 1),
     ]);
-    const id = vi.fn(factory);
+    const id = () => "format-p";
     const unregister = registerReviewSession(editor, session, {
       proposalIdFactory: id,
     });
@@ -444,7 +463,6 @@ it.each(["accepted", "insertion", "replacement"])(
     const before = snapshot().document;
     update(() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "italic"));
     expect(snapshot().document).toEqual(before);
-    expect(id).not.toHaveBeenCalled();
     update(() =>
       editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, "X"),
     );

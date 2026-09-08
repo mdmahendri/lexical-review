@@ -43,7 +43,7 @@ function setup(children: unknown[] = [text("one two three")]) {
   ]);
   const opened = openReviewSession(editor, input);
   if (opened.status !== "valid") throw new Error("Invalid fixture");
-  const factory = vi.fn(() => "deletion-1");
+  const factory = () => "deletion-1";
   const unregister = registerReviewSession(editor, opened.value, {
     proposalIdFactory: factory,
   });
@@ -109,9 +109,11 @@ it.each([false, true])(
       ).toBe("changed"),
     );
     expect(inspect()).toMatchObject({
-      value: { kind: "deletion", proposal: { text: "abcdef" } },
+      value: {
+        kind: "deletion",
+        proposal: { proposalId: "deletion-1", text: "abcdef" },
+      },
     });
-    expect(factory).toHaveBeenCalledTimes(1);
     unregister();
   },
 );
