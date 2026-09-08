@@ -5,6 +5,8 @@ import {
   $getRoot,
   $getSelection,
   $isRangeSelection,
+  COMPOSITION_END_COMMAND,
+  COMPOSITION_START_COMMAND,
   CONTROLLED_TEXT_INSERTION_COMMAND,
   FORMAT_TEXT_COMMAND,
   createEditor,
@@ -193,11 +195,91 @@ export function RouteWiringFixture() {
         );
         return { before, after: outcomeCount };
       },
+      startComposition() {
+        editor.dispatchCommand(
+          COMPOSITION_START_COMMAND,
+          new CompositionEvent("compositionstart", {
+            bubbles: true,
+            data: "",
+          }),
+        );
+        return { isComposing: editor.isComposing(), outcomeCount };
+      },
+      commitComposition(data: string) {
+        editor.dispatchCommand(
+          COMPOSITION_END_COMMAND,
+          new CompositionEvent("compositionend", {
+            bubbles: true,
+            cancelable: true,
+            data,
+          }),
+        );
+        return { isComposing: editor.isComposing(), outcomeCount };
+      },
+      compose(data: string) {
+        editor.dispatchCommand(
+          COMPOSITION_START_COMMAND,
+          new CompositionEvent("compositionstart", {
+            bubbles: true,
+            data: "",
+          }),
+        );
+        editor.dispatchCommand(
+          COMPOSITION_END_COMMAND,
+          new CompositionEvent("compositionend", {
+            bubbles: true,
+            cancelable: true,
+            data,
+          }),
+        );
+        return { isComposing: editor.isComposing(), outcomeCount };
+      },
+      commitSafari(
+        data: string,
+        order: "insert-first" | "end-first" = "insert-first",
+      ) {
+        const beforeinput = new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          data,
+        });
+        Object.defineProperty(beforeinput, "inputType", {
+          configurable: true,
+          value: "insertFromComposition",
+        });
+        const end = new CompositionEvent("compositionend", {
+          bubbles: true,
+          cancelable: true,
+          data,
+        });
+        if (order === "insert-first") {
+          editor.dispatchCommand(
+            CONTROLLED_TEXT_INSERTION_COMMAND,
+            beforeinput,
+          );
+          editor.dispatchCommand(COMPOSITION_END_COMMAND, end);
+        } else {
+          editor.dispatchCommand(COMPOSITION_END_COMMAND, end);
+          editor.dispatchCommand(
+            CONTROLLED_TEXT_INSERTION_COMMAND,
+            beforeinput,
+          );
+        }
+        return { isComposing: editor.isComposing(), outcomeCount };
+      },
+      isComposing() {
+        return editor.isComposing();
+      },
       snapshot() {
         return editor.getEditorState().read(() => {
           const ids = $listReviewProposals();
           const first = ids[0];
           const selection = $getSelection();
+          const anchorNode =
+            selection !== null && $isRangeSelection(selection)
+              ? selection.anchor.getNode()
+              : null;
+          const anchorParent = anchorNode?.getParent();
           return {
             document: opened.value.exportDocument(),
             proposals: ids,
@@ -210,6 +292,13 @@ export function RouteWiringFixture() {
             lastOutcome,
             outcomeCount,
             text: $getRoot().getTextContent(),
+            paragraphCount: $getRoot().getChildren().length,
+            selectionCollapsed:
+              selection !== null && $isRangeSelection(selection)
+                ? selection.isCollapsed()
+                : null,
+            selectionParentType:
+              anchorParent?.getType() ?? anchorNode?.getType() ?? null,
             selection:
               selection !== null && $isRangeSelection(selection)
                 ? {
@@ -273,6 +362,17 @@ declare global {
       resolveViaCommand(action: "accept" | "reject" | "remove"): void;
       resolveRoot(action: "accept" | "reject" | "remove"): void;
       claimSameObject(): { before: number; after: number };
+      startComposition(): { isComposing: boolean; outcomeCount: number };
+      commitComposition(data: string): {
+        isComposing: boolean;
+        outcomeCount: number;
+      };
+      compose(data: string): { isComposing: boolean; outcomeCount: number };
+      commitSafari(
+        data: string,
+        order?: "insert-first" | "end-first",
+      ): { isComposing: boolean; outcomeCount: number };
+      isComposing(): boolean;
       snapshot(): {
         document: unknown;
         proposals: unknown;
@@ -281,6 +381,9 @@ declare global {
         lastOutcome: unknown;
         outcomeCount: number;
         text: unknown;
+        paragraphCount: number;
+        selectionCollapsed: boolean | null;
+        selectionParentType: string | null;
         selection: unknown;
         failedExample: unknown;
       };
