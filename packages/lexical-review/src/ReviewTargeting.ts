@@ -1,6 +1,5 @@
 import { $isReviewBoundaryNode } from "./ReviewBoundaryNode";
 import {
-  $createTextNode,
   $getSelection,
   $isElementNode,
   $isRangeSelection,
@@ -1417,64 +1416,6 @@ export function inspectProposalKind(
 function isReplacementKind(proposalId: string): boolean {
   const kind = inspectProposalKind(proposalId);
   return kind.status === "ready" && kind.value === "replacement";
-}
-
-export function insertProposalText(
-  target: ProposalCaretTarget,
-  format: number,
-  text: string,
-): Preparation<void> {
-  const children = getTextChildren(target.wrapper)!;
-  let offset = target.offset;
-  let node = target.node;
-  if (node === null) {
-    for (const child of children) {
-      if (offset <= child.getTextContentSize()) {
-        node = child;
-        break;
-      }
-      offset -= child.getTextContentSize();
-    }
-  }
-  if (node === null)
-    return refusal(
-      "invalid-structural-target",
-      "The proposal caret cannot be resolved.",
-    );
-  if (node.getFormat() === format) {
-    node.spliceText(offset, 0, text, true);
-  } else {
-    const inserted = $createTextNode(text).setFormat(format);
-    if (offset === 0) node.insertBefore(inserted);
-    else if (offset === node.getTextContentSize()) node.insertAfter(inserted);
-    else node.splitText(offset)[1]!.insertBefore(inserted);
-    inserted.selectEnd();
-  }
-  const mapped = proposalMapOf(target);
-  if (mapped.status !== "ready") return mapped;
-  const proposalOffset = getProposalOffset(
-    {
-      association: "proposal",
-      childIndex: target.childIndex,
-      node: target.node,
-      offset: target.offset,
-      paragraph: target.paragraph,
-      wrapper: target.wrapper,
-    },
-    mapped.value,
-  );
-  if (proposalOffset === null)
-    return refusal(
-      "invalid-structural-target",
-      "The proposal caret cannot be resolved in the live tree.",
-    );
-  placeProposalCaret(
-    target.paragraph,
-    target.wrappers,
-    proposalOffset + text.length,
-    target.childIndex,
-  );
-  return { status: "ready", value: undefined };
 }
 
 export type ProposalCaretDeletion =

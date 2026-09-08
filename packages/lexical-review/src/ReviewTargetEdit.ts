@@ -379,6 +379,77 @@ export function buildPastePlan(
   };
 }
 
+/**
+ * Non-mutating deletion classification behind the seam. Each arm delegates
+ * to the same verify helper the matching commit branch re-runs, so the
+ * read-only refusal rules live once: the classifier states them, the commit
+ * revalidates them within its own update, and the cut preflight reaches them
+ * through the classifier. Never mints proposal identity and never resolves:
+ * resolution stays kind-owned behind TargetEditEffect.
+ */
+export function $classifyReviewDeletion(
+  target: ReviewTarget,
+  backward: boolean,
+  granularity: "character" | "word",
+  options: ReviewAuthoringOptions,
+): Preparation<ResolvingEditPlan> {
+  const plan = buildTextDeletionPlan(
+    target.kind,
+    selectedWrapperSide(target),
+    backward,
+    granularity,
+    options,
+  );
+  if (plan.status !== "ready") return plan;
+  switch (plan.value.kind) {
+    case "delete-proposal-caret": {
+      if (target.kind !== "proposal-caret") return kindMismatch();
+      const prepared = prepareProposalCaretDeletion(
+        target,
+        backward,
+        granularity,
+      );
+      if (prepared.status !== "ready") return prepared;
+      return plan;
+    }
+    case "delete-proposal-range": {
+      if (target.kind !== "proposal-range") return kindMismatch();
+      const prepared = prepareProposalRangeDeletion(target);
+      if (prepared.status !== "ready") return prepared;
+      return plan;
+    }
+    case "delete-accepted-caret": {
+      if (target.kind !== "accepted-caret") return kindMismatch();
+      const verified = verifyAcceptedCaretDeletion(
+        target,
+        backward,
+        granularity,
+      );
+      if (verified.status !== "ready") return verified;
+      // The commit resolves through the kind owner here; classification
+      // stays ready so the resolution path is preserved verbatim.
+      if (verified.value.action === "reject-replacement") return plan;
+      const span = verifyDeleteAcceptedSpan(
+        verified.value.range,
+        backward,
+        plan.value.registration,
+      );
+      if (span.status !== "ready") return span;
+      return plan;
+    }
+    case "delete-accepted-range": {
+      if (target.kind !== "accepted-range") return kindMismatch();
+      const span = verifyDeleteAcceptedSpan(
+        target,
+        backward,
+        plan.value.registration,
+      );
+      if (span.status !== "ready") return span;
+      return plan;
+    }
+  }
+}
+
 function commitDeleteProposalCaret(
   target: ReviewTarget,
   backward: boolean,
@@ -463,18 +534,84 @@ function commitDeleteProposalRange(
   return mutated();
 }
 
+/**
+ * Read-only accepted-span verification shared by the classifier and the
+ * commit: registration first, then deletion continuation. One encoding of
+ * the span refusal prefix; the commit re-runs it as revalidation within its
+ * own update, and the cut preflight reaches it through the classifier.
+ */
+function verifyDeleteAcceptedSpan(
+  target: AcceptedRangeTarget,
+  backward: boolean,
+  registration: ReviewEditRegistration,
+): Preparation<{
+  node: ReviewDeletionNode | null;
+  proposalId: string | null;
+}> {
+  const missing = checkRegistration(registration);
+  if (missing !== null) return missing;
+  const continuation = findAcceptedDeletionContinuation(target, backward);
+  if (continuation.status !== "ready") return continuation;
+  return continuation;
+}
+
+type AcceptedCaretDeletion =
+  | Readonly<{ action: "delete-span"; range: AcceptedRangeTarget }>
+  | Readonly<{ action: "reject-replacement"; proposalId: string }>;
+
+/**
+ * Read-only accepted-caret verification shared by the classifier and the
+ * commit: adjacent-replacement resolution first, then deletion-target math.
+ * Returns the span to delete or the kind-owned resolution the commit
+ * performs; this verification never resolves itself.
+ */
+function verifyAcceptedCaretDeletion(
+  target: AcceptedCaretTarget,
+  backward: boolean,
+  granularity: "character" | "word",
+): Preparation<AcceptedCaretDeletion> {
+  if (
+    target.node !== null &&
+    (backward
+      ? target.offset === 0
+      : target.offset === target.node.getTextContentSize())
+  ) {
+    const adjacent = backward
+      ? target.node.getPreviousSibling()
+      : target.node.getNextSibling();
+    if ($isReviewDeletionNode(adjacent)) {
+      const kind = inspectProposalKind(adjacent.getProposalId());
+      if (kind.status !== "ready") return kind;
+      if (kind.value === "replacement")
+        return {
+          status: "ready",
+          value: {
+            action: "reject-replacement",
+            proposalId: adjacent.getProposalId(),
+          },
+        };
+    }
+  }
+  const range = acceptedDeletionTarget(target, backward, granularity);
+  if (range === null || range.start === range.end) {
+    return refusal(
+      "deletion-target-unavailable",
+      "Deletion may not cross proposal content or an empty accepted boundary.",
+    );
+  }
+  return { status: "ready", value: { action: "delete-span", range } };
+}
+
 function commitDeleteAcceptedSpan(
   target: AcceptedRangeTarget,
   backward: boolean,
   identityOptions: ReviewAuthoringOptions,
   registration: ReviewEditRegistration,
 ): Preparation<TargetEditEffect> {
-  const missing = checkRegistration(registration);
-  if (missing !== null) return missing;
-  const continuation = findAcceptedDeletionContinuation(target, backward);
-  if (continuation.status !== "ready") return continuation;
-  const continued = continuation.value.node;
-  const continuedId = continuation.value.proposalId;
+  const verified = verifyDeleteAcceptedSpan(target, backward, registration);
+  if (verified.status !== "ready") return verified;
+  const continued = verified.value.node;
+  const continuedId = verified.value.proposalId;
   const minted =
     continued === null || continuedId === null
       ? prepareProposalId(identityOptions)
@@ -508,38 +645,20 @@ function commitDeleteAcceptedCaret(
   registration: ReviewEditRegistration,
 ): Preparation<TargetEditEffect> {
   if (target.kind !== "accepted-caret") return kindMismatch();
-  if (
-    target.node !== null &&
-    (backward
-      ? target.offset === 0
-      : target.offset === target.node.getTextContentSize())
-  ) {
-    const adjacent = backward
-      ? target.node.getPreviousSibling()
-      : target.node.getNextSibling();
-    if ($isReviewDeletionNode(adjacent)) {
-      const kind = inspectProposalKind(adjacent.getProposalId());
-      if (kind.status !== "ready") return kind;
-      if (kind.value === "replacement")
-        return {
-          status: "ready",
-          value: {
-            kind: "resolution-required",
-            action: "reject-replacement",
-            proposalId: adjacent.getProposalId(),
-          },
-        };
-    }
-  }
-  const range = acceptedDeletionTarget(target, backward, granularity);
-  if (range === null || range.start === range.end) {
-    return refusal(
-      "deletion-target-unavailable",
-      "Deletion may not cross proposal content or an empty accepted boundary.",
-    );
+  const verified = verifyAcceptedCaretDeletion(target, backward, granularity);
+  if (verified.status !== "ready") return verified;
+  if (verified.value.action === "reject-replacement") {
+    return {
+      status: "ready",
+      value: {
+        kind: "resolution-required",
+        action: "reject-replacement",
+        proposalId: verified.value.proposalId,
+      },
+    };
   }
   return commitDeleteAcceptedSpan(
-    range,
+    verified.value.range,
     backward,
     identityOptions,
     registration,

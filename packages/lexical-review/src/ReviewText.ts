@@ -22,8 +22,8 @@ export type {
   ReviewIntentOutcome,
 } from "./ReviewIntent";
 import {
+  $classifyReviewDeletion,
   $commitTargetEdit,
-  buildTextDeletionPlan,
   buildTextInsertionPlan,
   selectedWrapperSide,
 } from "./ReviewTargetEdit";
@@ -63,9 +63,8 @@ export function $claimTextDeletion(
   backward: boolean,
   options: ReviewDeletionOptions,
 ): ReviewIntentOutcome {
-  const plan = buildTextDeletionPlan(
-    target.kind,
-    selectedWrapperSide(target),
+  const plan = $classifyReviewDeletion(
+    target,
     backward,
     options.granularity ?? "character",
     options,

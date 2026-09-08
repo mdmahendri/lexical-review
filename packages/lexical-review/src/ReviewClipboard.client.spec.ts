@@ -616,4 +616,36 @@ describe("review clipboard projections", () => {
     });
     unregister();
   });
+
+  it("refuses cut over a formatting proposal without touching the clipboard", async () => {
+    const editor = createClipboardEditor();
+    const outcomes: ReviewIntentOutcome[] = [];
+    const { unregister } = open(
+      editor,
+      reviewDocument([
+        paragraph([
+          formattingNode("fmt-a", [text("AB", 1)], [{ format: 0, text: "AB" }]),
+        ]),
+      ]),
+      outcomes,
+    );
+    const [node] = textNodes(editor);
+    await update(editor, () => node!.select(0, 2));
+    const beforeDocument = editor.getEditorState().toJSON();
+    const beforeSelection = editor.getEditorState().read(liveSelection);
+    const clipboard = mockClipboard();
+
+    expect(editor.dispatchCommand(CUT_COMMAND, clipboard.event)).toBe(true);
+    await Promise.resolve();
+
+    expect(outcomes).toMatchObject([
+      { code: "unsupported-proposal-edit", status: "refused" },
+    ]);
+    expect(clipboard.setData).not.toHaveBeenCalled();
+    expect(editor.getEditorState().toJSON()).toEqual(beforeDocument);
+    expect(editor.getEditorState().read(liveSelection)).toEqual(
+      beforeSelection,
+    );
+    unregister();
+  });
 });

@@ -33,10 +33,12 @@ import {
 } from "./index";
 import { $applyPasteRuns } from "./ReviewPaste";
 import {
+  $classifyReviewDeletion,
   buildPastePlan,
   buildTextDeletionPlan,
   buildTextInsertionPlan,
 } from "./ReviewTargetEdit";
+import { inspectReviewTarget } from "./ReviewTargeting";
 import {
   paragraph,
   reviewDocument,
@@ -210,6 +212,88 @@ describe("target-edit builders (pure, editor-free)", () => {
       status: "ready",
       value: { kind: "insert-runs-at-caret", continuation: "fresh" },
     });
+  });
+});
+
+describe("deletion classification without mutation", () => {
+  it("classifies a supported range to a ready plan with state preserved", () => {
+    const editor = setup([text("AB")]);
+    editor.update(
+      () => {
+        $getRoot().getAllTextNodes()[0]!.select(0, 1);
+      },
+      { discrete: true },
+    );
+    const beforeDoc = snapshotState(editor);
+    const beforeSelection = snapshotSelection(editor);
+    let plan: unknown;
+    editor.update(
+      () => {
+        const inspection = inspectReviewTarget();
+        expect(inspection.status).toBe("ready");
+        if (inspection.status !== "ready") return;
+        plan = $classifyReviewDeletion(
+          inspection.value,
+          false,
+          "character",
+          {},
+        );
+      },
+      { discrete: true },
+    );
+    expect(plan).toMatchObject({
+      status: "ready",
+      value: { kind: "delete-accepted-range" },
+    });
+    expectPreserved(editor, beforeDoc, beforeSelection);
+  });
+
+  it("refuses a formatting proposal range with the delete route's code", () => {
+    const editor = setup(
+      [text("target")],
+      [ReviewFormattingNode, ReviewInsertionNode, ReviewDeletionNode],
+    );
+    const factory = () => "fmt";
+    editor.update(
+      () => {
+        $getRoot().getAllTextNodes()[0]!.select(0, 6);
+        expect(
+          $setReviewFormatting({ bold: true }, { proposalIdFactory: factory })
+            .status,
+        ).toBe("changed");
+        $getRoot().getAllTextNodes()[0]!.select(1, 3);
+      },
+      { discrete: true },
+    );
+    const beforeDoc = snapshotState(editor);
+    const beforeSelection = snapshotSelection(editor);
+    let classified: ReviewIntentOutcome | undefined;
+    let deleted: ReviewIntentOutcome | undefined;
+    editor.update(
+      () => {
+        const inspection = inspectReviewTarget();
+        expect(inspection.status).toBe("ready");
+        if (inspection.status !== "ready") return;
+        const plan = $classifyReviewDeletion(
+          inspection.value,
+          false,
+          "character",
+          {},
+        );
+        if (plan.status !== "ready") classified = plan;
+        deleted = $deleteReviewText(false, {});
+      },
+      { discrete: true },
+    );
+    expect(classified).toMatchObject({
+      status: "refused",
+      code: "unsupported-proposal-edit",
+    });
+    expect(deleted).toMatchObject({
+      status: "refused",
+      code: "unsupported-proposal-edit",
+    });
+    expectPreserved(editor, beforeDoc, beforeSelection);
   });
 });
 

@@ -15,7 +15,6 @@
  * no mutation. Cut mutates through the shared deletion operation.
  */
 import {
-  $getEditor,
   $getRoot,
   $getSelection,
   $isRangeSelection,
@@ -31,7 +30,6 @@ import {
   $isReviewInsertionNode,
   isReviewElementNode,
   isRootParagraph,
-  ReviewDeletionNode,
 } from "./ReviewNodes";
 import {
   refusal,
@@ -41,11 +39,10 @@ import {
   type ReviewIntentRefusal,
 } from "./ReviewIntent";
 import { $deleteReviewText } from "./ReviewIntentDispatch";
+import { $classifyReviewDeletion } from "./ReviewTargetEdit";
 import {
-  findAcceptedDeletionContinuation,
   inspectFragmentSelection,
   inspectReviewTarget,
-  prepareProposalRangeDeletion,
 } from "./ReviewTargeting";
 import { validateStructuralState } from "./ReviewStructure";
 
@@ -321,10 +318,13 @@ export function $copyReviewSelection(
 }
 
 /**
- * Read-only cut preflight mirroring `$deleteReviewText` dispatch order:
- * fragment ownership, then the classified target. `null` means the follow-up
- * deletion is supported; any outcome must be reported with the clipboard
- * untouched.
+ * Read-only cut preflight in `$deleteReviewText` dispatch order: fragment
+ * ownership, then the classified target. Range checks delegate to the shared
+ * deletion classifier so refusal precedence lives in one module. `null`
+ * means the follow-up deletion is supported; any outcome must be reported
+ * with the clipboard untouched. The follow-up `$deleteReviewText` after the
+ * clipboard write revalidates from scratch: a classified target is never
+ * assumed to stay valid across that step.
  */
 function $preflightCutDeletion(): ReviewIntentOutcome | null {
   const fragment = inspectFragmentSelection();
@@ -341,18 +341,13 @@ function $preflightCutDeletion(): ReviewIntentOutcome | null {
   if (target.kind === "accepted-range") {
     if (target.start === target.end)
       return { status: "unchanged", value: undefined };
-    if (!$getEditor().hasNode(ReviewDeletionNode))
-      return refusal(
-        "invalid-structural-target",
-        "The editor must register the review-deletion node before cutting accepted content.",
-      );
-    const continuation = findAcceptedDeletionContinuation(target, false);
-    if (continuation.status !== "ready") return continuation;
+    const classified = $classifyReviewDeletion(target, false, "character", {});
+    if (classified.status !== "ready") return classified;
     return null;
   }
   if (target.kind === "proposal-range") {
-    const prepared = prepareProposalRangeDeletion(target);
-    if (prepared.status !== "ready") return prepared;
+    const classified = $classifyReviewDeletion(target, false, "character", {});
+    if (classified.status !== "ready") return classified;
     return null;
   }
   return refusal(
