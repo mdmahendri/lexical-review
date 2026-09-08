@@ -3,8 +3,10 @@
  *
  * Kind owners (ReviewText, ReviewPaste) classify once via
  * inspectReviewTarget(), build a declarative plan from scalar inputs, and
- * make exactly one $commitTargetEdit() call. Maps, spans, entries, offsets,
- * caret placement, and internal remapping never cross the seam.
+ * make exactly one $commitTargetEdit() call. No maps, spans, entries,
+ * offsets, caret placement, or internal remapping cross the kind-owner
+ * seam; the commit implementation below walks the read-only offset maps
+ * it imports from ReviewTargeting.
  *
  * Ownership:
  * - Kind owners decide granularity, runs, identity policy (fresh / continue /
@@ -26,6 +28,7 @@ import {
   $createTextNode,
   $getEditor,
   $isTextNode,
+  type ParagraphNode,
   type TextNode,
 } from "lexical";
 import {
@@ -42,28 +45,34 @@ import {
   getTextChildren,
   ReviewDeletionNode,
   ReviewInsertionNode,
+  type ReviewElementNode,
 } from "./ReviewNodes";
 import {
+  changed,
   refusal,
+  unchanged,
   type Preparation,
+  type ReviewIntentOutcome,
   type ReviewIntentRefusal,
 } from "./ReviewIntent";
 import {
-  acceptedDeletionTarget,
-  findAcceptedDeletionContinuation,
+  buildAcceptedMap,
+  getAcceptedOffset,
+  getProposalOffset,
+  inspectProposalGroup,
   inspectProposalKind,
-  isolateAcceptedTextRange,
-  placeProposalCaret,
-  prepareProposalCaretDeletion,
-  prepareProposalRangeDeletion,
-  replaceProposalRange,
-  spliceProposalRange,
+  isTextBoundary,
+  nextCharacterOffset,
+  previousCharacterOffset,
+  proposalMapOf,
   type AcceptedCaretTarget,
+  type AcceptedMapEntry,
   type AcceptedRangeTarget,
   type ProposalCaretTarget,
+  type ProposalMapEntry,
+  type ProposalRangeTarget,
   type ReviewTarget,
 } from "./ReviewTargeting";
-import { readAcceptedRangeText } from "./ReviewTargeting";
 
 export type ReviewEditRun = Readonly<{ text: string; format: number }>;
 
@@ -202,6 +211,535 @@ function mutated(): Preparation<TargetEditEffect> {
 
 function noOp(): Preparation<TargetEditEffect> {
   return { status: "ready", value: { kind: "no-op" } };
+}
+
+/**
+ * Target-owned edit mechanics: accepted-deletion math, proposal-deletion
+ * preparation, span isolation, proposal-range mutation, and caret restore.
+ * Single-consumer helpers owned here so all commit mutation lives behind the
+ * $commitTargetEdit seam. Read-only offset maps and the proposal-kind oracle
+ * stay owned by ReviewTargeting and are imported, never duplicated.
+ * Entry resolution moved here with its sole consumer; the entry
+ * representation stays owned by ReviewTargeting.
+ * Known remaining crossings: the map/entry representation, and span-split
+ * mechanics behind the formatting span seam.
+ */
+/**
+ * Half-open entry resolution, always used as a pair: start entries satisfy
+ * start <= offset < end, end entries satisfy start < offset <= end.
+ * Keep the asymmetry in sync.
+ */
+function getStartEntry(
+  entries: readonly ProposalMapEntry[],
+  offset: number,
+): ProposalMapEntry | null;
+function getStartEntry(
+  entries: readonly AcceptedMapEntry[],
+  offset: number,
+): AcceptedMapEntry | null;
+function getStartEntry(
+  entries: readonly AcceptedMapEntry[] | readonly ProposalMapEntry[],
+  offset: number,
+): AcceptedMapEntry | ProposalMapEntry | null {
+  return (
+    entries.find((entry) => entry.start <= offset && offset < entry.end) ?? null
+  );
+}
+
+function getEndEntry(
+  entries: readonly ProposalMapEntry[],
+  offset: number,
+): ProposalMapEntry | null;
+function getEndEntry(
+  entries: readonly AcceptedMapEntry[],
+  offset: number,
+): AcceptedMapEntry | null;
+function getEndEntry(
+  entries: readonly AcceptedMapEntry[] | readonly ProposalMapEntry[],
+  offset: number,
+): AcceptedMapEntry | ProposalMapEntry | null {
+  return (
+    entries.find((entry) => entry.start < offset && offset <= entry.end) ?? null
+  );
+}
+
+function acceptedRange(
+  target: AcceptedCaretTarget,
+  backward: boolean,
+  start: number,
+  end: number,
+): AcceptedRangeTarget | null {
+  const map = buildAcceptedMap(target.paragraph);
+  const startEntry = getStartEntry(map.entries, start);
+  const endEntry = getEndEntry(map.entries, end);
+  if (startEntry === null || endEntry === null) {
+    return null;
+  }
+  return {
+    kind: "accepted-range",
+    paragraph: target.paragraph,
+    start,
+    end,
+    backward,
+    selection: target.selection,
+  };
+}
+
+function deletionOffset(
+  text: string,
+  offset: number,
+  backward: boolean,
+  granularity: "character" | "word",
+): number {
+  if (granularity === "character")
+    return backward
+      ? previousCharacterOffset(text, offset)
+      : nextCharacterOffset(text, offset);
+  // A word intention consumes adjacent whitespace followed by one word or
+  // punctuation run. Boundaries are computed without changing live selection.
+  const pattern = backward
+    ? /(?:[\p{L}\p{N}\p{M}_]+|[^\p{L}\p{N}\p{M}_\s]+)\s*$|\s+$/u
+    : /^\s*(?:[\p{L}\p{N}\p{M}_]+|[^\p{L}\p{N}\p{M}_\s]+)|^\s+/u;
+  const match = (backward ? text.slice(0, offset) : text.slice(offset)).match(
+    pattern,
+  );
+  const length = match?.[0].length ?? 0;
+  return backward ? offset - length : offset + length;
+}
+
+export function acceptedDeletionTarget(
+  target: AcceptedCaretTarget,
+  backward: boolean,
+  granularity: "character" | "word",
+): AcceptedRangeTarget | null {
+  const map = buildAcceptedMap(target.paragraph);
+  const offset = getAcceptedOffset(
+    {
+      association: "accepted",
+      childIndex: target.childIndex,
+      node: target.node,
+      offset: target.offset,
+      paragraph: target.paragraph,
+    },
+    map,
+  );
+  if (offset === null) {
+    return null;
+  }
+  if (granularity === "word") {
+    const children = target.paragraph.getChildren();
+    let index = target.childIndex;
+    if (target.node === null && backward) index -= 1;
+    if (!$isTextNode(children[index])) return null;
+    let left = index;
+    let right = index;
+    while ($isTextNode(children[left - 1])) left -= 1;
+    while ($isTextNode(children[right + 1])) right += 1;
+    const run = map.entries.filter(
+      (entry) => entry.childIndex >= left && entry.childIndex <= right,
+    );
+    const base = run[0]?.start;
+    if (base === undefined) return null;
+    const text = run.map((entry) => entry.node.getTextContent()).join("");
+    const local = offset - base;
+    const boundary = deletionOffset(text, local, backward, granularity);
+    return acceptedRange(
+      target,
+      backward,
+      base + Math.min(local, boundary),
+      base + Math.max(local, boundary),
+    );
+  }
+  if (target.node !== null) {
+    const text = target.node.getTextContent();
+    if (backward && target.offset > 0) {
+      return acceptedRange(
+        target,
+        backward,
+        offset - (target.offset - previousCharacterOffset(text, target.offset)),
+        offset,
+      );
+    }
+    if (!backward && target.offset < text.length) {
+      return acceptedRange(
+        target,
+        backward,
+        offset,
+        offset + (nextCharacterOffset(text, target.offset) - target.offset),
+      );
+    }
+  }
+  const adjacentIndex = backward
+    ? target.childIndex - 1
+    : target.node === null
+      ? target.childIndex
+      : target.childIndex + 1;
+  const adjacent = target.paragraph.getChildAtIndex(adjacentIndex);
+  if (!$isTextNode(adjacent) || adjacent.getTextContentSize() === 0) {
+    return null;
+  }
+  const adjacentEntry = map.entries.find(
+    (entry) => entry.node.getKey() === adjacent.getKey(),
+  );
+  if (adjacentEntry === undefined) {
+    return null;
+  }
+  if (backward) {
+    const start = previousCharacterOffset(
+      adjacent.getTextContent(),
+      adjacent.getTextContentSize(),
+    );
+    return acceptedRange(
+      target,
+      backward,
+      adjacentEntry.start + start,
+      adjacentEntry.end,
+    );
+  }
+  const end = nextCharacterOffset(adjacent.getTextContent(), 0);
+  return acceptedRange(
+    target,
+    backward,
+    adjacentEntry.start,
+    adjacentEntry.start + end,
+  );
+}
+
+/**
+ * Accepted-deletion continuation behind the seam: edge nodes stay inside.
+ */
+export function findAcceptedDeletionContinuation(
+  target: AcceptedRangeTarget,
+  backward: boolean,
+): Preparation<{
+  proposalId: string | null;
+  node: ReviewDeletionNode | null;
+}> {
+  const map = buildAcceptedMap(target.paragraph);
+  const first = getStartEntry(map.entries, target.start);
+  const last = getEndEntry(map.entries, target.end);
+  if (first === null || last === null)
+    return refusal(
+      "invalid-structural-target",
+      "The accepted selection points cannot be resolved in the live tree.",
+    );
+  const adjacent = backward
+    ? target.end === last.end
+      ? last.node.getNextSibling()
+      : null
+    : target.start === first.start
+      ? first.node.getPreviousSibling()
+      : null;
+  const continuation = $isReviewDeletionNode(adjacent) ? adjacent : null;
+  if (continuation === null)
+    return { status: "ready", value: { proposalId: null, node: null } };
+  const kind = inspectProposalKind(continuation.getProposalId());
+  if (kind.status !== "ready") return kind;
+  if (kind.value === "replacement")
+    return { status: "ready", value: { proposalId: null, node: null } };
+  return {
+    status: "ready",
+    value: { proposalId: continuation.getProposalId(), node: continuation },
+  };
+}
+
+function isReplacementKind(proposalId: string): boolean {
+  const kind = inspectProposalKind(proposalId);
+  return kind.status === "ready" && kind.value === "replacement";
+}
+
+export type ProposalCaretDeletion =
+  | Readonly<{ action: "splice"; start: number; end: number }>
+  | Readonly<{ action: "resolve-deletion" }>
+  | Readonly<{ action: "resolve-replacement" }>;
+
+/**
+ * Proposal-caret deletion math behind the seam. Resolve actions name the
+ * owner-side resolution the caller performs; this module never imports it.
+ */
+export function prepareProposalCaretDeletion(
+  target: ProposalCaretTarget,
+  backward: boolean,
+  granularity: "character" | "word",
+): Preparation<ProposalCaretDeletion> {
+  if ($isReviewFormattingNode(target.wrapper))
+    return refusal(
+      "unsupported-proposal-edit",
+      "Text deletion cannot alter a pending formatting target.",
+    );
+  const mapped = proposalMapOf(target);
+  if (mapped.status !== "ready") return mapped;
+  const offset = getProposalOffset(
+    {
+      association: "proposal",
+      childIndex: target.childIndex,
+      node: target.node,
+      offset: target.offset,
+      paragraph: target.paragraph,
+      wrapper: target.wrapper,
+    },
+    mapped.value,
+  );
+  if (offset === null)
+    return refusal(
+      "invalid-structural-target",
+      "The proposal caret cannot be resolved in the live tree.",
+    );
+  const text = mapped.value.entries
+    .map((entry) => entry.node.getTextContent())
+    .join("");
+  if (!isTextBoundary(text, offset)) {
+    return refusal(
+      "invalid-structural-target",
+      "The proposal caret is not on a supported Unicode text boundary.",
+    );
+  }
+  if (backward && offset === 0) {
+    return refusal(
+      "deletion-target-unavailable",
+      "Backward deletion may not cross from proposal content into accepted content.",
+    );
+  }
+  if (!backward && offset === mapped.value.total) {
+    return refusal(
+      "deletion-target-unavailable",
+      "Forward deletion may not cross from proposal content into accepted content.",
+    );
+  }
+  if ($isReviewDeletionNode(target.wrapper))
+    return { status: "ready", value: { action: "resolve-deletion" } };
+  const boundary = deletionOffset(text, offset, backward, granularity);
+  const start = Math.min(offset, boundary);
+  const end = Math.max(offset, boundary);
+  if (
+    end - start === mapped.value.total &&
+    isReplacementKind(target.proposalId)
+  )
+    return { status: "ready", value: { action: "resolve-replacement" } };
+  return { status: "ready", value: { action: "splice", start, end } };
+}
+
+export type ProposalRangeDeletion =
+  | Readonly<{ action: "splice" }>
+  | Readonly<{ action: "unchanged" }>
+  | Readonly<{ action: "resolve-deletion" }>
+  | Readonly<{ action: "resolve-replacement" }>;
+
+/**
+ * Proposal-range deletion behind the seam. Check order mirrors the former
+ * owner logic exactly: formatting, empty span, deletion, validation,
+ * replacement. Empty spans resolve here so resolve branches keep their
+ * original position on both sides of the empty check.
+ */
+export function prepareProposalRangeDeletion(
+  target: ProposalRangeTarget,
+): Preparation<ProposalRangeDeletion> {
+  if ($isReviewFormattingNode(target.wrappers[0]))
+    return refusal(
+      "unsupported-proposal-edit",
+      "Text deletion cannot alter a pending formatting target.",
+    );
+  if (target.start === target.end)
+    return { status: "ready", value: { action: "unchanged" } };
+  if ($isReviewDeletionNode(target.wrappers[0]))
+    return { status: "ready", value: { action: "resolve-deletion" } };
+  const group = inspectProposalGroup(target.proposalId);
+  if (group.status !== "ready") return group;
+  const insertionTotal = group.value.wrappers
+    .filter($isReviewInsertionNode)
+    .reduce((sum, node) => sum + node.getTextContentSize(), 0);
+  if (
+    group.value.kind === "replacement" &&
+    target.end - target.start === insertionTotal
+  )
+    return { status: "ready", value: { action: "resolve-replacement" } };
+  return { status: "ready", value: { action: "splice" } };
+}
+
+export function isolateAcceptedTextRange(
+  target: AcceptedRangeTarget,
+): TextNode[] | null {
+  if (target.start >= target.end) {
+    return null;
+  }
+  const map = buildAcceptedMap(target.paragraph);
+  const startEntry = getStartEntry(map.entries, target.start);
+  const endEntry = getEndEntry(map.entries, target.end);
+  if (startEntry === null || endEntry === null) {
+    return null;
+  }
+  const startOffset = target.start - startEntry.start;
+  const endOffset = target.end - endEntry.start;
+  if (startEntry.node.getKey() === endEntry.node.getKey()) {
+    const parts = startEntry.node.splitText(startOffset, endOffset);
+    const selected = startOffset === 0 ? parts[0] : parts[1];
+    return selected === undefined ? null : [selected];
+  }
+
+  let first = startEntry.node;
+  if (startOffset > 0) {
+    const parts = first.splitText(startOffset);
+    first = parts[1] ?? first;
+  }
+  let last = endEntry.node;
+  if (endOffset < last.getTextContentSize()) {
+    const parts = last.splitText(endOffset);
+    last = parts[0] ?? last;
+  }
+  const firstIndex = getChildIndex(target.paragraph, first);
+  const lastIndex = getChildIndex(target.paragraph, last);
+  if (firstIndex === null || lastIndex === null || firstIndex > lastIndex) {
+    return null;
+  }
+  const selected = target.paragraph
+    .getChildren()
+    .slice(firstIndex, lastIndex + 1);
+  return selected.every($isTextNode) ? selected : null;
+}
+
+/**
+ * Split-free read of an accepted range: joined span text plus whether every
+ * overlapping node carries the live selection format. Null when the span
+ * cannot be resolved in the live tree. Read-only: no splits, no caret moves.
+ */
+export function readAcceptedRangeText(
+  target: AcceptedRangeTarget,
+): { text: string; uniformSelectionFormat: boolean } | null {
+  const map = buildAcceptedMap(target.paragraph);
+  const startEntry = getStartEntry(map.entries, target.start);
+  const endEntry = getEndEntry(map.entries, target.end);
+  if (startEntry === null || endEntry === null) {
+    return null;
+  }
+  let text = "";
+  let uniformSelectionFormat = true;
+  for (const entry of map.entries) {
+    if (entry.end <= target.start || entry.start >= target.end) {
+      continue;
+    }
+    const sliceStart = Math.max(target.start - entry.start, 0);
+    const sliceEnd = Math.min(
+      target.end - entry.start,
+      entry.end - entry.start,
+    );
+    text += entry.node.getTextContent().slice(sliceStart, sliceEnd);
+    if (entry.node.getFormat() !== target.selection.format) {
+      uniformSelectionFormat = false;
+    }
+  }
+  return { text, uniformSelectionFormat };
+}
+
+export function placeProposalCaret(
+  paragraph: ParagraphNode,
+  wrappers: readonly ReviewElementNode[],
+  offset: number,
+  fallbackIndex: number,
+): void {
+  let cursor = 0;
+  let lastText: TextNode | null = null;
+  for (const child of wrappers) {
+    // Removing wrappers can clone the paragraph; its key remains stable.
+    if (child.getParent()?.getKey() !== paragraph.getKey()) {
+      continue;
+    }
+    const textChildren = getTextChildren(child);
+    if (textChildren === null) {
+      continue;
+    }
+    for (const textNode of textChildren) {
+      const length = textNode.getTextContentSize();
+      if (offset <= cursor + length) {
+        textNode.select(offset - cursor, offset - cursor);
+        return;
+      }
+      cursor += length;
+      lastText = textNode;
+    }
+  }
+  if (lastText !== null) {
+    lastText.selectEnd();
+    return;
+  }
+  const paragraphOffset = Math.min(
+    Math.max(fallbackIndex, 0),
+    paragraph.getChildrenSize(),
+  );
+  paragraph.select(paragraphOffset, paragraphOffset);
+}
+
+export function spliceProposalRange(
+  target: ProposalRangeTarget | ProposalCaretTarget,
+  start: number,
+  end: number,
+  replacement: Readonly<{ node: TextNode; text: string }> | null = null,
+): Preparation<void> {
+  const mapped = proposalMapOf(target);
+  if (mapped.status !== "ready") return mapped;
+  const entries = mapped.value.entries;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry === undefined) {
+      continue;
+    }
+    const localStart = Math.max(start, entry.start) - entry.start;
+    const localEnd = Math.min(end, entry.end) - entry.start;
+    if (localStart >= localEnd) {
+      continue;
+    }
+    if (
+      replacement !== null &&
+      entry.node.getKey() === replacement.node.getKey()
+    ) {
+      entry.node.spliceText(
+        localStart,
+        localEnd - localStart,
+        replacement.text,
+        true,
+      );
+    } else {
+      entry.node.spliceText(localStart, localEnd - localStart, "", false);
+      if (entry.node.getTextContentSize() === 0) {
+        entry.node.remove();
+      }
+    }
+  }
+  for (const wrapper of target.wrappers) {
+    if (wrapper.getChildrenSize() === 0) {
+      wrapper.remove();
+    }
+  }
+  return { status: "ready", value: undefined };
+}
+
+export function replaceProposalRange(
+  target: ProposalRangeTarget,
+  text: string,
+): ReviewIntentOutcome {
+  if (target.start === target.end) {
+    return unchanged();
+  }
+  const mapped = proposalMapOf(target);
+  if (mapped.status !== "ready") return mapped;
+  const startEntry = getStartEntry(mapped.value.entries, target.start);
+  if (startEntry === null)
+    return refusal(
+      "invalid-structural-target",
+      "The proposal selection points cannot be resolved in the live tree.",
+    );
+  const fallbackIndex = getChildIndex(target.paragraph, target.wrappers[0]!);
+  const spliced = spliceProposalRange(target, target.start, target.end, {
+    node: startEntry.node,
+    text,
+  });
+  if (spliced.status !== "ready") return spliced;
+  placeProposalCaret(
+    target.paragraph,
+    target.wrappers,
+    target.start + text.length,
+    fallbackIndex ?? 0,
+  );
+  return changed();
 }
 
 /** Text deletion plan. Pure: no editor reads, no editor writes. */
