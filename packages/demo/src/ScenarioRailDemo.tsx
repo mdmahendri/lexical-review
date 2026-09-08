@@ -168,6 +168,7 @@ export default function ScenarioRailDemo({
   const [outcomeCount, setOutcomeCount] = useState(0);
   const [normalization, setNormalization] = useState<string | null>(null);
   const [textFormat, setTextFormat] = useState({ bold: false, italic: false });
+  const [refusedFlash, setRefusedFlash] = useState(false);
   const {
     evidence,
     evidenceReason,
@@ -252,11 +253,19 @@ export default function ScenarioRailDemo({
     });
   }, [editor]);
 
+  useEffect(() => {
+    if (outcome?.status !== "refused") return;
+    setRefusedFlash(true);
+    const timer = window.setTimeout(() => setRefusedFlash(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [outcome, outcomeCount]);
+
   const clearScenarioState = useCallback(() => {
     factoryCounter.current = 0;
     setOutcome(null);
     setOutcomeCount(0);
     setNormalization(null);
+    setRefusedFlash(false);
     resetEvidence();
   }, [resetEvidence]);
 
@@ -443,6 +452,15 @@ export default function ScenarioRailDemo({
 
   const activeScenario = SCENARIOS.find((entry) => entry.id === scenario);
 
+  const feedbackText =
+    outcome === null
+      ? "Start with the first button above. Your change will appear in the document."
+      : outcome.status === "refused"
+        ? "This edit was refused. Your existing work is preserved."
+        : proposals.length
+          ? `${proposals.length} pending proposal${proposals.length === 1 ? "" : "s"}. The change is visible, but has not been accepted.`
+          : "No pending proposals remain. Try the example again or explore the next capability.";
+
   const index = SCENARIOS.findIndex((entry) => entry.id === scenario);
   const nextScenario = SCENARIOS[index + 1];
   const explanations: Record<ScenarioId, string> = {
@@ -579,9 +597,11 @@ export default function ScenarioRailDemo({
             className="editor-sheet"
           >
             <div className="editor-caption">
-              <h4 id="scenario-editor-heading">Your document</h4>
+              <div className="editor-title">
+                <h4 id="scenario-editor-heading">YOUR DOCUMENT</h4>
+                <span className="review-mode-label">review mode is on</span>
+              </div>
               <div className="editor-tools" aria-label="Editor tools">
-                <span className="review-mode-label">Review mode is on</span>
                 <button
                   type="button"
                   className="format-button"
@@ -621,24 +641,21 @@ export default function ScenarioRailDemo({
               aria-label="Editable review document"
               className="review-editor"
             />
-            <div className="editor-legend">
-              <span>
-                <ins>Inserted</ins> text is pending
-              </span>
-              <span>
-                <del>Deleted</del> text stays visible until resolved
-              </span>
-            </div>
+            <p
+              className={`editor-status${refusedFlash ? " is-error" : ""}`}
+              role="status"
+            >
+              {feedbackText}
+            </p>
           </section>
-          <p className="feedback" role="status">
-            {outcome === null
-              ? "Start with the first button above. Your change will appear in the document."
-              : outcome.status === "refused"
-                ? "This edit was refused. Your existing work is preserved."
-                : proposals.length
-                  ? `${proposals.length} pending proposal${proposals.length === 1 ? "" : "s"}. The change is visible, but has not been accepted.`
-                  : "No pending proposals remain. Try the example again or explore the next capability."}
-          </p>
+          <div className="editor-legend">
+            <span>
+              <ins>Inserted</ins> text is pending
+            </span>
+            <span>
+              <del>Deleted</del> text stays visible until resolved
+            </span>
+          </div>
         </section>
         <section aria-label="Proposal list" className="review-section">
           <h3>

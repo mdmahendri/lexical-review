@@ -216,6 +216,7 @@ h4 {
 }
 .editor-caption {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid #e7ebe7;
@@ -224,6 +225,12 @@ h4 {
 }
 .editor-caption span {
   color: #617368;
+}
+.editor-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 .editor-tools {
   display: flex;
@@ -246,7 +253,7 @@ h4 {
   border-color: #486553;
 }
 .review-mode-label {
-  margin-right: 4px;
+  margin-right: 0;
 }
 .editor-tools .reset-button {
   border-left-color: #dbe1dc;
@@ -266,14 +273,29 @@ h4 {
 .review-editor:focus-visible {
   outline-offset: -4px;
 }
+.editor-status {
+  margin: 0;
+  padding: 10px 18px;
+  border-top: 1px solid #e7ebe7;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #5c6a60;
+  background: white;
+  transition:
+    color 0.6s ease,
+    background-color 0.6s ease;
+}
+.editor-status.is-error {
+  color: #9b2c2c;
+  background: #fdf0ef;
+}
 .editor-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  font-size: 11px;
+  margin: 10px 2px 0;
+  font-size: 12px;
   color: #617368;
-  padding: 10px 18px;
-  border-top: 1px solid #e7ebe7;
 }
 ins,
 .review-insertion {
@@ -285,13 +307,6 @@ del,
 .review-deletion {
   background: #f6e2df;
   text-decoration: line-through;
-}
-.feedback {
-  margin-top: 16px;
-  font-size: 13px;
-  line-height: 1.6;
-  border-left: 2px solid #8aa493;
-  padding-left: 12px;
 }
 .proposal-list {
   margin-bottom: 14px;
