@@ -515,7 +515,7 @@ export default function ScenarioRailDemo({
     outcome === null
       ? "Start with the first button above. Your change will appear in the document."
       : outcome.status === "refused"
-        ? "This edit was refused. Your existing work is preserved."
+        ? `This edit was refused. ${outcome.message} Your existing work is preserved.`
         : proposals.length
           ? `${proposals.length} pending proposal${proposals.length === 1 ? "" : "s"}. The change is visible, but has not been accepted.`
           : "No pending proposals remain. Try the example again or explore the next capability.";
