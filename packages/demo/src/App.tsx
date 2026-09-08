@@ -5,11 +5,11 @@ import {
   ReviewInsertionNode,
 } from "lexical-review";
 import "./index.css";
+import ProposalEvidenceDemo from "./ProposalEvidenceDemo";
 import RouteWiringDemo from "./RouteWiringDemo";
 
 function App() {
   const initialConfig = {
-    namespace: "route-wiring-demo",
     onError(error: Error) {
       throw error;
     },
@@ -32,14 +32,30 @@ function App() {
         <header className="mb-4 min-w-0">
           <h1 className="text-2xl font-bold text-gray-800">lexical-review</h1>
           <p className="text-gray-600">
-            Route-wiring capability step: keyboard, toolbar-command, and
-            programmatic routes reach the same review intent.
+            Route-wiring and proposal-evidence capability steps.
           </p>
         </header>
         <div className="min-w-0 overflow-hidden rounded-lg border">
           <div className="min-w-0 bg-white p-2">
-            <LexicalComposer initialConfig={initialConfig}>
+            <LexicalComposer
+              initialConfig={{
+                ...initialConfig,
+                namespace: "route-wiring-demo",
+              }}
+            >
               <RouteWiringDemo />
+            </LexicalComposer>
+          </div>
+        </div>
+        <div className="mt-4 min-w-0 overflow-hidden rounded-lg border">
+          <div className="min-w-0 bg-white p-2">
+            <LexicalComposer
+              initialConfig={{
+                ...initialConfig,
+                namespace: "proposal-evidence-demo",
+              }}
+            >
+              <ProposalEvidenceDemo />
             </LexicalComposer>
           </div>
         </div>
