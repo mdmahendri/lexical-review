@@ -46,6 +46,7 @@ import {
   $createReviewInsertionNode,
   $deleteReviewText,
   $inspectReviewProposal,
+  $inspectReviewProposalSnapshot,
   $insertReviewFragment,
   $insertReviewText,
   $mergeReviewParagraph,
@@ -481,6 +482,12 @@ describe("compatibility matrix: shared identity is rejected live and on import",
     update(row.buildLive);
     read(() =>
       expect($inspectReviewProposal(row.inspect)).toMatchObject({
+        status: "refused",
+        code: "unsafe-proposal-intersection",
+      }),
+    );
+    read(() =>
+      expect($inspectReviewProposalSnapshot(row.inspect)).toMatchObject({
         status: "refused",
         code: "unsafe-proposal-intersection",
       }),

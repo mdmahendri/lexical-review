@@ -27,12 +27,14 @@ import {
   $createReviewBoundaryNode,
   $insertReviewFragment,
   $insertReviewText,
+  $inspectReviewProposal,
   $inspectReviewProposalSnapshot,
   $listReviewProposals,
   $mergeReviewParagraph,
   $previewAcceptedState,
   $previewAllAccepted,
   $resolveReviewProposal,
+  $resolveReviewProposals,
   $setReviewFormatting,
   $splitReviewParagraph,
   getNextProposal,
@@ -489,6 +491,32 @@ describe("reviewer previews", () => {
         code: "invalid-structural-target",
       });
       expect(() => $previewAllAccepted()).toThrow();
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("inspection and batch refuse the invalid-boundary identity without mutation", () => {
+    const { update, read, snapshot } = setup([
+      paragraph([text("sp1")]),
+      paragraph([boundaryFixture("e", "split"), text("sp2")]),
+    ]);
+    update(() => {
+      $getRoot()
+        .getChildren<ParagraphNode>()[1]!
+        .append($createReviewBoundaryNode("z", "merge", 0, 0));
+    });
+    const before = snapshot();
+    read(() => {
+      expect($inspectReviewProposal("e")).toMatchObject({
+        status: "refused",
+        code: "unsafe-proposal-intersection",
+      });
+    });
+    update(() => {
+      expect($resolveReviewProposals(["e"], "accept")).toMatchObject({
+        status: "refused",
+        code: "unsafe-proposal-intersection",
+      });
     });
     expect(snapshot()).toEqual(before);
   });

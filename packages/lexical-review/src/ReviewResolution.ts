@@ -19,8 +19,7 @@ import {
   type ReviewIntentOutcome,
 } from "./ReviewIntent";
 import {
-  inspectFragment,
-  inspectFragmentProposal,
+  inspectCollectedFragmentProposal,
   resolveFragment,
   type ReviewFragmentProposal,
 } from "./ReviewFragment";
@@ -32,7 +31,7 @@ import {
   type ReviewStructuralProposal,
 } from "./ReviewStructure";
 import {
-  inspectFormattingProposal,
+  inspectCollectedFormattingProposal,
   resolveFormatting,
   type ReviewFormattingProposal,
 } from "./ReviewFormatting";
@@ -41,8 +40,17 @@ import type {
   ReviewInsertionProposal,
   ReviewReplacementProposal,
 } from "./ReviewText";
-import { inspectProposalGroup, inspectProposalKind } from "./ReviewTargeting";
+import {
+  inspectCollectedProposalGroup,
+  inspectCollectedProposalKind,
+  inspectProposalGroup,
+} from "./ReviewTargeting";
 import type { ProposalKind } from "./ReviewTargeting";
+import {
+  collectProposalNodes,
+  inspectCollectedFragmentGroup,
+  type CollectedProposalNodes,
+} from "./ReviewProposalCollection";
 import type { LexicalNode, ParagraphNode, TextNode } from "lexical";
 
 export type ProposalResolutionAction = "accept" | "reject" | "remove";
@@ -56,7 +64,24 @@ export function findProposal(
   paragraph: ParagraphNode;
   text: string;
 }> {
-  const group = inspectProposalGroup(proposalId);
+  return findCollectedProposal(
+    collectProposalNodes(proposalId),
+    proposalId,
+    kind,
+  );
+}
+
+/** Text extraction read-only over one shared observation. */
+export function findCollectedProposal(
+  collected: CollectedProposalNodes,
+  proposalId: string,
+  kind: "insertion" | "deletion",
+): Preparation<{
+  wrappers: ReviewElementNode[];
+  paragraph: ParagraphNode;
+  text: string;
+}> {
+  const group = inspectCollectedProposalGroup(collected, proposalId);
   if (group.status !== "ready") return group;
   if (group.value.kind !== kind)
     return refusal(
@@ -182,7 +207,11 @@ export type InspectedReviewProposal =
 export function $inspectReviewProposal(
   proposalId: string,
 ): ReviewIntentOutcome<InspectedReviewProposal> {
-  const fragment = inspectFragmentProposal(proposalId);
+  // One shared observation per read; the nested revalidation below reads
+  // from it instead of recollecting. Order, gating, and translation match
+  // the pre-spike sequence exactly.
+  const collected = collectProposalNodes(proposalId);
+  const fragment = inspectCollectedFragmentProposal(collected, proposalId);
   if (fragment.status === "unchanged")
     return {
       status: "unchanged",
@@ -194,11 +223,11 @@ export function $inspectReviewProposal(
       status: "unchanged",
       value: { kind: "structure", proposal: boundary.value },
     };
-  const group = inspectProposalGroup(proposalId);
+  const group = inspectCollectedProposalGroup(collected, proposalId);
   if (group.status !== "ready") return group;
   switch (group.value.kind) {
     case "fragment": {
-      const retried = inspectFragmentProposal(proposalId);
+      const retried = inspectCollectedFragmentProposal(collected, proposalId);
       if (retried.status === "unchanged")
         return {
           status: "unchanged",
@@ -212,7 +241,7 @@ export function $inspectReviewProposal(
       return retried;
     }
     case "formatting": {
-      const found = inspectFormattingProposal(proposalId);
+      const found = inspectCollectedFormattingProposal(collected, proposalId);
       if (found.status === "unchanged")
         return {
           status: "unchanged",
@@ -226,7 +255,11 @@ export function $inspectReviewProposal(
       return found;
     }
     case "insertion": {
-      const prepared = findProposal(proposalId, "insertion");
+      const prepared = findCollectedProposal(
+        collected,
+        proposalId,
+        "insertion",
+      );
       if (prepared.status !== "ready") return prepared;
       return {
         status: "unchanged",
@@ -237,7 +270,7 @@ export function $inspectReviewProposal(
       };
     }
     case "deletion": {
-      const prepared = findProposal(proposalId, "deletion");
+      const prepared = findCollectedProposal(collected, proposalId, "deletion");
       if (prepared.status !== "ready") return prepared;
       return {
         status: "unchanged",
@@ -314,7 +347,11 @@ export function $resolveReviewProposals(
     // reports those IDs as kind "fragment" without distinguishing the
     // structural marker. Fall through to inspectProposalKind for text kinds;
     // it is the single source of invalid-proposal-id vs unsupported-target.
-    const fragment = inspectFragment(id);
+    // One shared observation per ID covers the fragment and kind checks;
+    // structural inspection keeps its own scope and the mutations below
+    // re-observe through owner revalidation.
+    const collected = collectProposalNodes(id);
+    const fragment = inspectCollectedFragmentGroup(collected);
     if (fragment.status === "ready") {
       groups.push({ id, kind: "fragment" });
       continue;
@@ -324,7 +361,7 @@ export function $resolveReviewProposals(
       groups.push({ id, kind: "boundary" });
       continue;
     }
-    const kind = inspectProposalKind(id);
+    const kind = inspectCollectedProposalKind(collected, id);
     if (kind.status !== "ready") return kind;
     groups.push({ id, kind: kind.value });
   }

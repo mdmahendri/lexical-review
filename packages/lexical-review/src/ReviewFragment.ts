@@ -52,7 +52,12 @@ import {
   isSupportedFormat,
   type ReviewFormatRun,
 } from "./ReviewFormattingState";
-import { inspectFragmentGroup } from "./ReviewProposalCollection";
+import {
+  collectProposalNodes,
+  inspectCollectedFragmentGroup,
+  inspectFragmentGroup,
+  type CollectedProposalNodes,
+} from "./ReviewProposalCollection";
 
 export type ReviewFragmentParagraph = Readonly<{
   runs: readonly ReviewFormatRun[];
@@ -81,7 +86,22 @@ function payload(group: Group): ReviewFragment {
 export function inspectFragmentProposal(
   proposalId: string,
 ): ReviewIntentOutcome<ReviewFragmentProposal> {
-  const group = inspectFragment(proposalId);
+  return inspectCollectedFragmentProposal(
+    collectProposalNodes(proposalId),
+    proposalId,
+  );
+}
+
+/**
+ * Fragment-proposal inspection read-only over one shared observation.
+ * Group success translates to `unchanged` here; callers must not treat
+ * group `ready` and proposal `unchanged` as interchangeable outcomes.
+ */
+export function inspectCollectedFragmentProposal(
+  collected: CollectedProposalNodes,
+  proposalId: string,
+): ReviewIntentOutcome<ReviewFragmentProposal> {
+  const group = inspectCollectedFragmentGroup(collected);
   return group.status === "ready"
     ? {
         status: "unchanged",

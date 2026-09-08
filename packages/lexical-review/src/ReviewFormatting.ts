@@ -34,10 +34,14 @@ import {
 } from "./ReviewNodes";
 import {
   getTargetSpanNodes,
-  inspectProposalGroup,
+  inspectCollectedProposalGroup,
   inspectReviewTarget,
   isolateTargetSpanNodes,
 } from "./ReviewTargeting";
+import {
+  collectProposalNodes,
+  type CollectedProposalNodes,
+} from "./ReviewProposalCollection";
 import {
   canonicalFormatRuns,
   sameFormatRuns,
@@ -115,7 +119,14 @@ function selectRange(
 }
 
 function findFormatting(proposalId: string): Preparation<ReviewFormattingNode> {
-  const group = inspectProposalGroup(proposalId);
+  return findCollectedFormatting(collectProposalNodes(proposalId), proposalId);
+}
+
+function findCollectedFormatting(
+  collected: CollectedProposalNodes,
+  proposalId: string,
+): Preparation<ReviewFormattingNode> {
+  const group = inspectCollectedProposalGroup(collected, proposalId);
   if (group.status !== "ready") return group;
   const node = group.value.wrappers[0];
   return $isReviewFormattingNode(node)
@@ -129,7 +140,18 @@ function findFormatting(proposalId: string): Preparation<ReviewFormattingNode> {
 export function inspectFormattingProposal(
   proposalId: string,
 ): ReviewIntentOutcome<ReviewFormattingProposal> {
-  const found = findFormatting(proposalId);
+  return inspectCollectedFormattingProposal(
+    collectProposalNodes(proposalId),
+    proposalId,
+  );
+}
+
+/** Formatting-proposal inspection read-only over one shared observation. */
+export function inspectCollectedFormattingProposal(
+  collected: CollectedProposalNodes,
+  proposalId: string,
+): ReviewIntentOutcome<ReviewFormattingProposal> {
+  const found = findCollectedFormatting(collected, proposalId);
   if (found.status !== "ready") return found;
   return {
     status: "unchanged",

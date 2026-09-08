@@ -50,12 +50,17 @@ export function collectProposalNodes(
  * Shared fragment placement check. Lives in a leaf so review targeting and
  * fragment authoring import it without a cycle; both previously walked the
  * whole tree with identical visitors.
+ *
+ * The collected form validates read-only over one shared observation; the
+ * identity form collects first. Neither checks ID syntax: malformed IDs
+ * simply match no nodes and refuse below.
  */
-export function inspectFragmentGroup(proposalId: string): Preparation<{
+export function inspectCollectedFragmentGroup(
+  collected: CollectedProposalNodes,
+): Preparation<{
   wrappers: ReviewFragmentNode[];
   paragraphs: ParagraphNode[];
 }> {
-  const collected = collectProposalNodes(proposalId);
   const wrappers = collected.fragments;
   const paragraphs = wrappers.map((node) => node.getParent());
   if (
@@ -92,4 +97,11 @@ export function inspectFragmentGroup(proposalId: string): Preparation<{
     status: "ready",
     value: { wrappers, paragraphs: paragraphs as ParagraphNode[] },
   };
+}
+
+export function inspectFragmentGroup(proposalId: string): Preparation<{
+  wrappers: ReviewFragmentNode[];
+  paragraphs: ParagraphNode[];
+}> {
+  return inspectCollectedFragmentGroup(collectProposalNodes(proposalId));
 }

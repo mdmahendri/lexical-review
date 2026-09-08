@@ -32,7 +32,9 @@ import {
 import { isValidProposalId } from "./ProposalIdentity";
 import {
   collectProposalNodes,
+  inspectCollectedFragmentGroup,
   inspectFragmentGroup,
+  type CollectedProposalNodes,
 } from "./ReviewProposalCollection";
 
 const SUPPORTED_TEXT_FORMAT_MASK = 0b1111;
@@ -638,7 +640,15 @@ function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
  * resolution and proposal unwrapping. Validation-only callers use
  * inspectProposalKind; no owner walks groups for classification anymore.
  */
-export function inspectProposalGroup(proposalId: string): Preparation<{
+/**
+ * Text-group validation read-only over one shared observation. The syntax
+ * check runs here at the text-group stage, never hoisted ahead of fragment
+ * or structural evaluation by callers.
+ */
+export function inspectCollectedProposalGroup(
+  collected: CollectedProposalNodes,
+  proposalId: string,
+): Preparation<{
   kind: "insertion" | "deletion" | "replacement" | "formatting" | "fragment";
   wrappers: ReviewElementNode[];
 }> {
@@ -647,14 +657,23 @@ export function inspectProposalGroup(proposalId: string): Preparation<{
       "invalid-proposal-id",
       "Expected a valid proposal identity.",
     );
-  const { wrappers, boundaryIdentity } = collectProposalNodes(proposalId);
+  return validateCollectedProposalGroup(collected);
+}
+
+function validateCollectedProposalGroup(
+  collected: CollectedProposalNodes,
+): Preparation<{
+  kind: "insertion" | "deletion" | "replacement" | "formatting" | "fragment";
+  wrappers: ReviewElementNode[];
+}> {
+  const { wrappers, boundaryIdentity } = collected;
   if (boundaryIdentity)
     return refusal(
       "unsafe-proposal-intersection",
       "A text proposal identity cannot also identify a structural boundary.",
     );
   if (wrappers.some($isReviewFragmentNode)) {
-    const fragment = inspectFragmentGroup(proposalId);
+    const fragment = inspectCollectedFragmentGroup(collected);
     return fragment.status === "ready"
       ? {
           status: "ready",
@@ -714,6 +733,18 @@ export function inspectProposalGroup(proposalId: string): Preparation<{
             : "deletion",
     },
   };
+}
+
+export function inspectProposalGroup(proposalId: string): Preparation<{
+  kind: "insertion" | "deletion" | "replacement" | "formatting" | "fragment";
+  wrappers: ReviewElementNode[];
+}> {
+  if (!isValidProposalId(proposalId))
+    return refusal(
+      "invalid-proposal-id",
+      "Expected a valid proposal identity.",
+    );
+  return validateCollectedProposalGroup(collectProposalNodes(proposalId));
 }
 
 type OffsetUnit<Taken> = Readonly<{
@@ -1043,7 +1074,17 @@ export type ProposalKind =
 export function inspectProposalKind(
   proposalId: string,
 ): Preparation<ProposalKind> {
-  const group = inspectProposalGroup(proposalId);
+  return inspectCollectedProposalKind(
+    collectProposalNodes(proposalId),
+    proposalId,
+  );
+}
+
+export function inspectCollectedProposalKind(
+  collected: CollectedProposalNodes,
+  proposalId: string,
+): Preparation<ProposalKind> {
+  const group = inspectCollectedProposalGroup(collected, proposalId);
   if (group.status !== "ready") return group;
   return { status: "ready", value: group.value.kind };
 }

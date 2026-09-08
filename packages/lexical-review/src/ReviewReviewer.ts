@@ -22,11 +22,12 @@ import {
   canonicalFormatRuns,
   type ReviewFormatRun,
 } from "./ReviewFormattingState";
-import { inspectFormattingProposal } from "./ReviewFormatting";
-import { inspectFragmentProposal } from "./ReviewFragment";
-import { findProposal } from "./ReviewResolution";
+import { inspectCollectedFormattingProposal } from "./ReviewFormatting";
+import { inspectCollectedFragmentProposal } from "./ReviewFragment";
+import { findCollectedProposal } from "./ReviewResolution";
 import { inspectBoundary, validateStructuralState } from "./ReviewStructure";
-import { inspectProposalGroup } from "./ReviewTargeting";
+import { collectProposalNodes } from "./ReviewProposalCollection";
+import { inspectCollectedProposalGroup } from "./ReviewTargeting";
 import {
   refusal,
   type Preparation,
@@ -233,9 +234,14 @@ export function getPrevProposal(
 export function $inspectReviewProposalSnapshot(
   proposalId: string,
 ): Preparation<ReviewProposalSnapshot> {
-  const fragment = inspectFragmentProposal(proposalId);
+  // One shared observation per read: fragment inspection, text-group
+  // fallback, and the nested revalidation below all read from it instead of
+  // recollecting. Observations expire at the next mutation. Structural
+  // inspection keeps its own traversal scope.
+  const collected = collectProposalNodes(proposalId);
+  const fragment = inspectCollectedFragmentProposal(collected, proposalId);
   if (fragment.status === "unchanged" || fragment.status === "changed") {
-    const group = inspectProposalGroup(proposalId);
+    const group = inspectCollectedProposalGroup(collected, proposalId);
     if (group.status !== "ready") return group;
     const anchored = anchorOf(group.value.wrappers);
     if (anchored.status !== "ready") return anchored;
@@ -278,7 +284,7 @@ export function $inspectReviewProposalSnapshot(
   }
   if (boundary.status === "refused" && boundary.code !== "unsupported-target")
     return boundary;
-  const group = inspectProposalGroup(proposalId);
+  const group = inspectCollectedProposalGroup(collected, proposalId);
   if (group.status !== "ready") return group;
   const anchored = anchorOf(group.value.wrappers);
   if (anchored.status !== "ready") return anchored;
@@ -286,7 +292,7 @@ export function $inspectReviewProposalSnapshot(
   if (attachment.status !== "ready") return attachment;
   switch (group.value.kind) {
     case "fragment": {
-      const retried = inspectFragmentProposal(proposalId);
+      const retried = inspectCollectedFragmentProposal(collected, proposalId);
       if (retried.status !== "unchanged" && retried.status !== "changed")
         return retried.status === "refused"
           ? retried
@@ -302,7 +308,7 @@ export function $inspectReviewProposalSnapshot(
       };
     }
     case "formatting": {
-      const found = inspectFormattingProposal(proposalId);
+      const found = inspectCollectedFormattingProposal(collected, proposalId);
       if (found.status !== "unchanged" && found.status !== "changed")
         return found.status === "refused"
           ? found
@@ -323,7 +329,7 @@ export function $inspectReviewProposalSnapshot(
     case "insertion":
     case "deletion": {
       const kind = group.value.kind;
-      const prepared = findProposal(proposalId, kind);
+      const prepared = findCollectedProposal(collected, proposalId, kind);
       if (prepared.status !== "ready") return prepared;
       const nodes = wrapperRuns(prepared.value.wrappers, () => true);
       if (nodes === null)
