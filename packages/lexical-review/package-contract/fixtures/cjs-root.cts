@@ -1,10 +1,34 @@
 import review = require("lexical-review");
+import lexical = require("lexical");
 
-const reviewType: review.TextReviewType = "original";
-const reviewNode: review.ReviewTextNode = review.$createReviewTextNode(
-  "commonjs root consumer",
-  reviewType,
-);
-const isReviewNode: boolean = review.$isReviewTextNode(reviewNode);
+const nodeClass: typeof review.ReviewInsertionNode = review.ReviewInsertionNode;
+const editor = lexical.createEditor({
+  nodes: [review.ReviewInsertionNode, review.ReviewDeletionNode],
+  onError: (error) => void error,
+});
+const opened: review.ValidationResult<review.ReviewSession> =
+  review.openReviewSession(editor, {
+    root: {
+      children: [
+        {
+          children: [],
+          direction: null,
+          format: "",
+          indent: 0,
+          textFormat: 0,
+          textStyle: "",
+          type: "paragraph",
+          version: 1,
+        },
+      ],
+      direction: null,
+      format: "",
+      indent: 0,
+      type: "root",
+      version: 1,
+      $: { "lexical-review": { extensions: [], version: 3 } },
+    },
+  });
 
-void isReviewNode;
+void nodeClass;
+void opened;

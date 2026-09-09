@@ -1,22 +1,22 @@
 import type { JSX } from "react";
-import type { LexicalEditor } from "lexical";
-import { registerReviewText, ReviewTextPlugin } from "lexical-review/client";
+import {
+  registerReviewSession,
+  ReviewSessionPlugin,
+} from "lexical-review/client";
+import type { ReviewSession } from "lexical-review";
 
-// @ts-expect-error Core node APIs belong to the root entrypoint in v3.
-import { ReviewTextNode } from "lexical-review/client";
-// @ts-expect-error React/editor APIs belong to the client entrypoint in v3.
-import { ReviewTextPlugin as RootReviewTextPlugin } from "lexical-review";
+// @ts-expect-error Core node APIs belong to the root entrypoint, not the client entrypoint.
+import { ReviewInsertionNode } from "lexical-review/client";
+// @ts-expect-error Client/editor APIs belong to the client entrypoint, not the root.
+import { ReviewSessionPlugin as RootReviewSessionPlugin } from "lexical-review";
 
-const plugin: (props: {
-  contentEditable: JSX.Element;
-  granularity?: "word" | "character";
-}) => JSX.Element = ReviewTextPlugin;
-const register: (
-  editor: LexicalEditor,
-  granularity?: "word" | "character",
-) => () => void = registerReviewText;
-
-void plugin;
-void register;
-void ReviewTextNode;
-void RootReviewTextPlugin;
+const v3Plugin: (props: { session: ReviewSession }) => JSX.Element | null =
+  ReviewSessionPlugin;
+const v3Register: (
+  editor: import("lexical").LexicalEditor,
+  session: ReviewSession,
+) => () => void = registerReviewSession;
+void v3Plugin;
+void v3Register;
+void ReviewInsertionNode;
+void RootReviewSessionPlugin;

@@ -19,6 +19,6 @@
     "**/*.spec.tsx",
     "**/*.test.ts",
     "**/*.test.tsx",
-    "src/test-utils.ts"
+    "src/ReviewDocument.test-fixtures.ts"
   ]
 }

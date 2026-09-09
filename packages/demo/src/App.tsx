@@ -1,62 +1,88 @@
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import { TextNode } from "lexical";
-import { $createReviewTextNode, ReviewTextNode } from "lexical-review";
+import {
+  ReviewBoundaryNode,
+  ReviewDeletionNode,
+  ReviewFormattingNode,
+  ReviewFragmentNode,
+  ReviewInsertionNode,
+} from "lexical-review";
 import "./index.css";
-import ReviewEditor from "./ReviewEditor";
+import ScenarioRailDemo from "./ScenarioRailDemo";
+
+const AUTHORING_DOCS_URL =
+  "https://github.com/mahendrimd/lexical-review/blob/main/packages/lexical-review/README.md#version-3-review-session-authoring";
 
 function App() {
   const initialConfig = {
-    namespace: "demo",
     onError(error: Error) {
       throw error;
     },
     nodes: [
-      ReviewTextNode,
-      {
-        replace: TextNode,
-        with: (node: TextNode) => {
-          return $createReviewTextNode(node.getTextContent(), "original");
-        },
-        withKlass: ReviewTextNode,
-      },
+      ReviewInsertionNode,
+      ReviewDeletionNode,
+      ReviewFormattingNode,
+      ReviewFragmentNode,
+      ReviewBoundaryNode,
     ],
     theme: {
-      ins: "bg-green-300 no-underline",
-      del: "bg-red-300 no-underline",
+      ins: "review-insertion",
+      del: "review-deletion",
+      text: {
+        bold: "font-bold",
+        italic: "italic",
+        underline: "underline",
+        strikethrough: "line-through",
+      },
     },
   };
 
   return (
-    <div className="bg-gray-100 h-screen flex items-center justify-center">
-      <div className="bg-white shadow-lg rounded-lg p-6 w-full max-w-4xl">
-        <header className="mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">lexical-review</h1>
-          <p className="text-gray-600">
-            A custom lexical plugin provides suggestion, review, or track
-            changes mode—whatever you want to call it—similar to those found in
-            popular word processing applications like Microsoft Word and Google
-            Docs.
-          </p>
-        </header>
-        <div className="border rounded-lg overflow-hidden">
-          <div className="p-2 bg-white h-96">
-            <LexicalComposer initialConfig={initialConfig}>
-              <ReviewEditor />
-            </LexicalComposer>
-          </div>
-        </div>
-        <footer className="mt-4 flex justify-between text-gray-600">
+    <div className="demo-app">
+      <header className="site-header">
+        <a className="wordmark" href="#">
+          lexical-review
+        </a>
+        <nav aria-label="Resources">
+          <a
+            href={AUTHORING_DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="read-the-docs"
+          >
+            Documentation ↗
+          </a>
           <a
             href="https://github.com/mahendrimd/lexical-review"
-            className="text-blue-500 hover:underline"
             target="_blank"
             rel="noopener noreferrer"
           >
-            View on GitHub
+            GitHub ↗
           </a>
-          <p>created by Mahendri Dwicahyo</p>
-        </footer>
+        </nav>
+      </header>
+      <div className="intro">
+        <p className="eyebrow">An interactive introduction</p>
+        <h1>Make edits. Keep the decision open.</h1>
+        <p>
+          lexical-review turns edits in a Lexical editor into proposals you can
+          accept, reject, or keep refining. Try a change below and see how it
+          affects the document.
+        </p>
+        <a className="start-link" href="#try-it-live">
+          Start with a text suggestion ↓
+        </a>
       </div>
+      <LexicalComposer
+        initialConfig={{
+          ...initialConfig,
+          namespace: "scenario-rail-demo",
+        }}
+      >
+        <ScenarioRailDemo />
+      </LexicalComposer>
+      <footer className="site-footer">
+        demo for lexical-review · built by Mahendri Dwicahyo
+      </footer>
     </div>
   );
 }

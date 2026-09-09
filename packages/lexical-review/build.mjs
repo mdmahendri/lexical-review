@@ -1,5 +1,3 @@
-/* global process */
-
 import { execFile } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
