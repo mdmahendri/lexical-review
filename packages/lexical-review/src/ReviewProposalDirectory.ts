@@ -6,7 +6,7 @@ import {
   type CollectedProposalNodes,
 } from "./ReviewProposalCollection";
 import type { ReviewElementNode, ReviewFragmentNode } from "./ReviewNodes";
-import { inspectBoundary } from "./ReviewStructure";
+import { inspectCollectedBoundary } from "./ReviewStructure";
 import { inspectCollectedProposalGroup } from "./ReviewTargeting";
 
 /**
@@ -29,9 +29,11 @@ export type ClassifiedProposal =
     };
 
 /**
- * Route one shared observation to its kind. Fragment and structural checks
- * run before the identity syntax check, which stays at the text-group stage;
- * failure is the group error, the single source of invalid-proposal-id vs
+ * Route one shared observation to its kind. Fragment placement is evaluated
+ * once here and reused below, so the text-group stage never re-runs it over
+ * the same observation. Fragment and structural checks run before the
+ * identity syntax check, which stays at the text-group stage; failure is the
+ * group error, the single source of invalid-proposal-id vs
  * unsupported-target. Callers needing the strict structural error (snapshot)
  * apply their own rule on failure.
  */
@@ -49,28 +51,19 @@ export function classifyCollectedProposal(
         paragraphs: fragment.value.paragraphs,
       },
     };
-  const boundary = inspectBoundary(proposalId);
+  const boundary = inspectCollectedBoundary(collected);
   if (boundary.status === "ready")
     return {
       status: "ready",
       value: { kind: "boundary", boundary: boundary.value },
     };
-  const group = inspectCollectedProposalGroup(collected, proposalId);
+  const group = inspectCollectedProposalGroup(collected, proposalId, fragment);
   if (group.status !== "ready") return group;
   if (group.value.kind === "fragment") {
-    // Unreachable: the group reports fragment only when the placement check
-    // above is ready, which already returned. Re-read to stay total.
-    const retried = inspectCollectedFragmentGroup(collected);
-    if (retried.status === "ready")
-      return {
-        status: "ready",
-        value: {
-          kind: "fragment",
-          wrappers: retried.value.wrappers,
-          paragraphs: retried.value.paragraphs,
-        },
-      };
-    return retried;
+    // Totality guard, not a re-read: the fragment arm above returns the
+    // stashed outcome, so a ready group here is always a text kind. A refused
+    // stashed fragment surfaces here exactly as the group would report it.
+    return fragment;
   }
   return {
     status: "ready",

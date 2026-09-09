@@ -613,11 +613,18 @@ function sameProposal(left: ProposalPoint, right: ProposalPoint): boolean {
 /**
  * Text-group validation read-only over one shared observation. The syntax
  * check runs here at the text-group stage, never hoisted ahead of fragment
- * or structural evaluation by callers.
+ * or structural evaluation by callers. Callers that already evaluated
+ * fragment placement over the same observation (the proposal directory) pass
+ * it as knownFragment so the placement math runs once per classification;
+ * direct callers omit it and the check runs here.
  */
 export function inspectCollectedProposalGroup(
   collected: CollectedProposalNodes,
   proposalId: string,
+  knownFragment?: Preparation<{
+    wrappers: ReviewFragmentNode[];
+    paragraphs: ParagraphNode[];
+  }>,
 ): Preparation<{
   kind: "insertion" | "deletion" | "replacement" | "formatting" | "fragment";
   wrappers: ReviewElementNode[];
@@ -627,23 +634,27 @@ export function inspectCollectedProposalGroup(
       "invalid-proposal-id",
       "Expected a valid proposal identity.",
     );
-  return validateCollectedProposalGroup(collected);
+  return validateCollectedProposalGroup(collected, knownFragment);
 }
 
 function validateCollectedProposalGroup(
   collected: CollectedProposalNodes,
+  knownFragment?: Preparation<{
+    wrappers: ReviewFragmentNode[];
+    paragraphs: ParagraphNode[];
+  }>,
 ): Preparation<{
   kind: "insertion" | "deletion" | "replacement" | "formatting" | "fragment";
   wrappers: ReviewElementNode[];
 }> {
-  const { wrappers, boundaryIdentity } = collected;
-  if (boundaryIdentity)
+  const { wrappers } = collected;
+  if (collected.boundaries.length > 0)
     return refusal(
       "unsafe-proposal-intersection",
       "A text proposal identity cannot also identify a structural boundary.",
     );
   if (wrappers.some($isReviewFragmentNode)) {
-    const fragment = inspectCollectedFragmentGroup(collected);
+    const fragment = knownFragment ?? inspectCollectedFragmentGroup(collected);
     return fragment.status === "ready"
       ? {
           status: "ready",

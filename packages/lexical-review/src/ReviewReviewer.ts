@@ -28,7 +28,6 @@ import { findCollectedProposal } from "./ReviewResolution";
 import { inspectBoundary, validateStructuralState } from "./ReviewStructure";
 import { collectProposalNodes } from "./ReviewProposalCollection";
 import { classifyCollectedProposal } from "./ReviewProposalDirectory";
-import { inspectCollectedProposalGroup } from "./ReviewTargeting";
 import {
   refusal,
   type Preparation,
@@ -235,10 +234,11 @@ export function getPrevProposal(
 export function $inspectReviewProposalSnapshot(
   proposalId: string,
 ): Preparation<ReviewProposalSnapshot> {
-  // One shared observation per read, routed once in canonical order; the
-  // nested owner reads below revalidate from it instead of recollecting.
-  // Observations expire at the next mutation. Structural inspection keeps
-  // its own traversal scope.
+  // One shared observation per read, collected once and routed in canonical
+  // order; the nested owner reads below revalidate from it instead of
+  // recollecting. Observations expire at the next mutation. The structural
+  // marker classifies from the same observation; only the strict-error
+  // fallback below keeps its own read.
   const collected = collectProposalNodes(proposalId);
   const classified = classifyCollectedProposal(collected, proposalId);
   if (classified.status !== "ready") {
@@ -252,9 +252,9 @@ export function $inspectReviewProposalSnapshot(
   if (classified.value.kind === "fragment") {
     const fragment = inspectCollectedFragmentProposal(collected, proposalId);
     if (fragment.status === "unchanged" || fragment.status === "changed") {
-      const group = inspectCollectedProposalGroup(collected, proposalId);
-      if (group.status !== "ready") return group;
-      const anchored = anchorOf(group.value.wrappers);
+      // Anchor from the classified observation: its wrappers are the same
+      // placement-validated nodes the group read would return, so no re-read.
+      const anchored = anchorOf(classified.value.wrappers);
       if (anchored.status !== "ready") return anchored;
       const attachment = attachmentOf(anchored.value);
       if (attachment.status !== "ready") return attachment;

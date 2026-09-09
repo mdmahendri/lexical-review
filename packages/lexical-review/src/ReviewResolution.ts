@@ -204,9 +204,10 @@ export type InspectedReviewProposal =
 export function $inspectReviewProposal(
   proposalId: string,
 ): ReviewIntentOutcome<InspectedReviewProposal> {
-  // One shared observation per read, routed once in canonical order; the
-  // nested owner reads below revalidate from it instead of recollecting.
-  // Order, gating, and translation match the pre-spike sequence exactly.
+  // One shared observation per read, collected once and routed in canonical
+  // order; the nested owner reads below revalidate from it instead of
+  // recollecting. Order, gating, and translation match the pre-spike sequence
+  // exactly.
   const collected = collectProposalNodes(proposalId);
   const classified = classifyCollectedProposal(collected, proposalId);
   if (classified.status !== "ready") return classified;
@@ -338,11 +339,12 @@ export function $resolveReviewProposals(
     );
   const groups: PreflightedGroup[] = [];
   for (const id of new Set(proposalIds)) {
-    // One shared observation per ID, routed once in canonical order
-    // (fragment, structural marker, text kind); classification failure is the
-    // group error, the single source of invalid-proposal-id vs
-    // unsupported-target. Structural inspection keeps its own scope and the
-    // mutations below re-observe through owner revalidation.
+    // One shared observation per ID, collected once and routed in canonical
+    // order (fragment, structural marker, text kind); classification failure
+    // is the group error, the single source of invalid-proposal-id vs
+    // unsupported-target. The structural marker classifies from the same
+    // observation and the mutations below re-observe through owner
+    // revalidation.
     const classified = classifyCollectedProposal(collectProposalNodes(id), id);
     if (classified.status !== "ready") return classified;
     const kind = classified.value.kind;

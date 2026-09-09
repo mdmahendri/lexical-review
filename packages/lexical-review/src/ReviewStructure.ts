@@ -20,6 +20,10 @@ import {
   type ReviewBoundaryKind,
 } from "./ReviewBoundaryNode";
 import {
+  collectProposalNodes,
+  type CollectedProposalNodes,
+} from "./ReviewProposalCollection";
+import {
   prepareProposalId,
   type ReviewAuthoringOptions,
 } from "./ReviewAuthoring";
@@ -91,16 +95,23 @@ export function validateStructuralState(): ReviewIntentOutcome | null {
 export function inspectBoundary(
   proposalId: string,
 ): Preparation<ReviewBoundaryNode> {
-  const occurrences: LexicalNode[] = [];
-  for (const paragraph of $getRoot().getChildren()) {
-    if (!isRootParagraph(paragraph)) continue;
-    for (const child of paragraph.getChildren())
-      if (
-        (isReviewElementNode(child) || $isReviewBoundaryNode(child)) &&
-        child.getProposalId() === proposalId
-      )
-        occurrences.push(child);
-  }
+  return inspectCollectedBoundary(collectProposalNodes(proposalId));
+}
+
+/**
+ * Boundary classification read-only over one shared observation. The
+ * collection is already scoped to the identity, so no proposal ID is needed.
+ * Scoping mirrors the standalone walk exactly: only direct children of root
+ * paragraphs participate, so duplicate identities and misplaced markers
+ * refuse identically whether read here or through the wrapper.
+ */
+export function inspectCollectedBoundary(
+  collected: CollectedProposalNodes,
+): Preparation<ReviewBoundaryNode> {
+  const occurrences: LexicalNode[] = [
+    ...collected.wrappers.filter((node) => isRootParagraph(node.getParent())),
+    ...collected.boundaries.filter((node) => isRootParagraph(node.getParent())),
+  ];
   const node = occurrences[0];
   if (occurrences.length !== 1 || !$isReviewBoundaryNode(node))
     return refusal(

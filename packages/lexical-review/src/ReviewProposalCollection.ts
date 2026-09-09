@@ -5,7 +5,10 @@ import {
   type LexicalNode,
   type ParagraphNode,
 } from "lexical";
-import { $isReviewBoundaryNode } from "./ReviewBoundaryNode";
+import {
+  $isReviewBoundaryNode,
+  type ReviewBoundaryNode,
+} from "./ReviewBoundaryNode";
 import { validFragmentPositions } from "./ReviewFragmentInvariant";
 import { isSupportedFormat } from "./ReviewFormattingState";
 import {
@@ -20,11 +23,15 @@ import { refusal, type Preparation } from "./ReviewIntent";
 /**
  * Live nodes carrying one proposal identity, gathered in a single tree walk.
  * Kind-specific validation stays with the callers; this module only collects.
+ * Boundary observations are carried alongside element wrappers so structural
+ * classification reads the same walk instead of re-walking; every matching
+ * boundary node is kept so duplicates and misplaced markers stay visible to
+ * validation rather than collapsing to the first match.
  */
 export type CollectedProposalNodes = {
   wrappers: ReviewElementNode[];
   fragments: ReviewFragmentNode[];
-  boundaryIdentity: boolean;
+  boundaries: ReviewBoundaryNode[];
 };
 
 export function collectProposalNodes(
@@ -32,10 +39,10 @@ export function collectProposalNodes(
 ): CollectedProposalNodes {
   const wrappers: ReviewElementNode[] = [];
   const fragments: ReviewFragmentNode[] = [];
-  let boundaryIdentity = false;
+  const boundaries: ReviewBoundaryNode[] = [];
   const visit = (node: LexicalNode): void => {
     if ($isReviewBoundaryNode(node) && node.getProposalId() === proposalId)
-      boundaryIdentity = true;
+      boundaries.push(node);
     if (isReviewElementNode(node) && node.getProposalId() === proposalId) {
       wrappers.push(node);
       if ($isReviewFragmentNode(node)) fragments.push(node);
@@ -43,7 +50,7 @@ export function collectProposalNodes(
     if ($isElementNode(node)) node.getChildren().forEach(visit);
   };
   visit($getRoot());
-  return { wrappers, fragments, boundaryIdentity };
+  return { wrappers, fragments, boundaries };
 }
 
 /**
@@ -64,7 +71,7 @@ export function inspectCollectedFragmentGroup(
   const wrappers = collected.fragments;
   const paragraphs = wrappers.map((node) => node.getParent());
   if (
-    collected.boundaryIdentity ||
+    collected.boundaries.length > 0 ||
     wrappers.length !== collected.wrappers.length ||
     paragraphs.some((parent) => !isRootParagraph(parent)) ||
     !validFragmentPositions(
