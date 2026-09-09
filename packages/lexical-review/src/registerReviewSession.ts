@@ -1,4 +1,6 @@
 import { $insertReviewFragment, type ReviewFragment } from "./ReviewFragment";
+import { createReviewCompositionLifecycle } from "./ReviewComposition";
+import { classifyTransferInput } from "./ReviewTransferPolicy";
 import {
   $copyReviewSelection,
   $cutReviewSelection,
@@ -39,7 +41,6 @@ import {
   PASTE_COMMAND,
   REMOVE_TEXT_COMMAND,
   SET_TEXT_FORMAT_COMMAND,
-  type EditorState,
   type LexicalEditor,
 } from "lexical";
 import { mergeRegister } from "@lexical/utils";
@@ -53,7 +54,6 @@ import {
   $splitReviewParagraph,
 } from "./ReviewIntentDispatch";
 import type { ReviewAuthoringOptions } from "./ReviewAuthoring";
-import { validateStructuralState } from "./ReviewStructure";
 import {
   $resolveReviewProposals,
   type ProposalResolutionAction,
@@ -135,129 +135,15 @@ export function registerReviewSession(
     );
   }
   const handledEvents = new WeakSet<Event>();
-  // #64 composition adapter state. Intermediate native DOM mutations during
-  // composition carry no proposal identity; the pre-composition EditorState is
-  // snapshotted on COMPOSITION_START and a single semantic intention is
-  // applied from snapshot plus committed data once composition ends.
-  let compositionSnapshot: EditorState | null = null;
-  let pendingCompositionData: string | null = null;
-  let compositionEnterArmed = false;
-  let normalizingComposition = false;
-  const snapshotCompositionStart = (): boolean => {
-    compositionSnapshot = editor.getEditorState();
-    pendingCompositionData = null;
-    compositionEnterArmed = false;
-    return false;
-  };
-  const recordCompositionEnd = (data: string): boolean => {
-    // First completion wins; a trailing duplicate (e.g. Safari
-    // insertFromComposition followed by compositionend) must not create a
-    // second proposal. Always return false so Lexical clears its composition
-    // key and provisional subclass state.
-    if (pendingCompositionData === null) {
-      pendingCompositionData = data;
-      compositionEnterArmed = /[\r\n]/u.test(data);
-    }
-    return false;
-  };
-  const recordCompositionInsertion = (event: InputEvent): boolean => {
-    if (handledEvents.has(event)) return true;
-    handledEvents.add(event);
-    // Safari commits via beforeinput insertFromComposition; claiming here
-    // defers the single apply to the update listener below.
-    if (pendingCompositionData === null) {
-      const data = event.data ?? "";
-      pendingCompositionData = data;
-      compositionEnterArmed = /[\r\n]/u.test(data);
-    }
-    return true;
-  };
-  const normalizeCompletedComposition = (): void => {
-    if (normalizingComposition) return;
-    if (pendingCompositionData === null || compositionSnapshot === null) return;
-    if (editor.isComposing()) return;
-    const snapshot = compositionSnapshot;
-    const data = pendingCompositionData;
-    compositionSnapshot = null;
-    pendingCompositionData = null;
-    compositionEnterArmed = false;
-    normalizingComposition = true;
-    try {
-      if (/[\r\n]/u.test(data)) {
-        editor.setEditorState(snapshot);
-        reportOutcome(
-          options,
-          unsupportedOutcome(
-            "unsupported-input",
-            "Composition commits support inline text only; paragraph breaks are refused without mutation.",
-          ),
-          null,
-        );
-        return;
-      }
-      if (data === "") {
-        const collapsed = snapshot.read(() => {
-          const selection = $getSelection();
-          return !$isRangeSelection(selection) || selection.isCollapsed();
-        });
-        editor.setEditorState(snapshot);
-        if (collapsed) {
-          reportOutcome(
-            options,
-            { status: "unchanged", value: undefined },
-            null,
-          );
-          return;
-        }
-        editor.update(
-          () => {
-            reportOutcome(
-              options,
-              $deleteReviewText(false, options),
-              "deletion",
-            );
-          },
-          { discrete: true },
-        );
-        return;
-      }
-      editor.setEditorState(snapshot);
-      editor.update(
-        () => {
-          const structural = validateStructuralState();
-          reportOutcome(
-            options,
-            structural ?? $insertReviewText(data, options),
-            "insertion",
-          );
-        },
-        { discrete: true },
-      );
-    } catch (cause) {
-      try {
-        editor.setEditorState(snapshot);
-      } catch {
-        // Preserve the live state when even the snapshot restore fails.
-      }
-      reportOutcome(
-        options,
-        {
-          error: {
-            cause,
-            code: "composition-normalization-failed",
-            message:
-              cause instanceof Error
-                ? cause.message
-                : "Composition normalization failed.",
-          },
-          status: "failed",
-        },
-        null,
-      );
-    } finally {
-      normalizingComposition = false;
-    }
-  };
+  // #64 composition lifecycle (snapshot, completion deduplication,
+  // restoration, trailing Enter suppression) lives behind this seam; no
+  // composition state is shared with the handlers below.
+  const composition = createReviewCompositionLifecycle({
+    editor,
+    handledEvents,
+    options,
+    report: (outcome, kind) => reportOutcome(options, outcome, kind),
+  });
   const handleDeletion = (
     backward: boolean,
     event?: Event | null,
@@ -293,21 +179,8 @@ export function registerReviewSession(
     // CONTROLLED_TEXT_INSERTION_COMMAND after core handling.
     if (editor.isComposing()) return false;
     if (event.inputType === "insertParagraph") return handleSplit(event);
-    if (
-      event.inputType === "deleteByCut" ||
-      event.inputType === "deleteByDrag"
-    ) {
-      return suppressTransferRoute(event);
-    }
-    if (
-      event.inputType === "insertFromPaste" ||
-      event.inputType === "insertFromPasteAsQuotation"
-    ) {
-      // Clipboard data is reliably readable only in the paste event; the
-      // PASTE_COMMAND route owns the single paste outcome. Claiming here
-      // keeps core from bridging a second PASTE_COMMAND for the gesture.
-      return suppressTransferRoute(event);
-    }
+    const transferInput = classifyTransferInput("beforeinput", event);
+    if (transferInput.kind === "suppress") return suppressTransferRoute(event);
     if (event.inputType === "insertLineBreak") {
       event.preventDefault();
       handledEvents.add(event);
@@ -418,11 +291,10 @@ export function registerReviewSession(
     return true;
   };
   const suppressTransferRoute = (event?: Event | null): boolean => {
-    // #65/#66: the cut/copy-drop/paste gesture owns its single outcome at
-    // CUT/DROP/PASTE_COMMAND, the only routes carrying clipboard data. The
-    // deletion half of the same physical gesture, the beforeinput paste
-    // bridge, and the drop-insertion half are claimed silently here so no
-    // second outcome is reported and native fallback mutation is suppressed.
+    // The owning gesture route reports the single outcome (see
+    // ReviewTransferPolicy); the follow-up half is claimed silently here so
+    // no second outcome is reported and native fallback mutation is
+    // suppressed.
     event?.preventDefault();
     if (event) handledEvents.add(event);
     return true;
@@ -478,12 +350,9 @@ export function registerReviewSession(
   const handleRemoval = (event: InputEvent | null): boolean => {
     if (event !== null) {
       if (handledEvents.has(event)) return true;
-      if (
-        event.inputType === "deleteByCut" ||
-        event.inputType === "deleteByDrag"
-      ) {
+      const transferInput = classifyTransferInput("removal", event);
+      if (transferInput.kind === "suppress")
         return suppressTransferRoute(event);
-      }
       event.preventDefault();
       handledEvents.add(event);
       reportOutcome(
@@ -528,18 +397,18 @@ export function registerReviewSession(
     registerReviewInputFormatting(editor),
     editor.registerCommand(
       COMPOSITION_START_COMMAND,
-      snapshotCompositionStart,
+      composition.snapshotCompositionStart,
       COMMAND_PRIORITY_CRITICAL,
     ),
     editor.registerCommand(
       COMPOSITION_END_COMMAND,
       (event) =>
-        recordCompositionEnd(
+        composition.recordCompositionEnd(
           event && typeof event.data === "string" ? event.data : "",
         ),
       COMMAND_PRIORITY_HIGH,
     ),
-    editor.registerUpdateListener(normalizeCompletedComposition),
+    editor.registerUpdateListener(composition.normalizeCompletedComposition),
     editor.registerCommand(
       INSERT_REVIEW_FRAGMENT_COMMAND,
       (fragment) => {
@@ -605,7 +474,7 @@ export function registerReviewSession(
           typeof eventOrText !== "string" &&
           eventOrText.inputType === "insertFromComposition"
         ) {
-          return recordCompositionInsertion(eventOrText);
+          return composition.recordCompositionInsertion(eventOrText);
         }
         if (editor.isComposing()) {
           // Lexical composition anchoring (COMPOSITION_START_CHAR): raw
@@ -618,20 +487,17 @@ export function registerReviewSession(
           }
           return false;
         }
-        if (
-          typeof eventOrText !== "string" &&
-          eventOrText.inputType === "insertFromDrop"
-        ) {
-          // The DROP_COMMAND route owns the single drop outcome.
-          return suppressTransferRoute(eventOrText);
-        }
-        if (
-          typeof eventOrText !== "string" &&
-          (eventOrText.dataTransfer != null ||
-            eventOrText.inputType === "insertFromYank")
-        ) {
-          handledEvents.add(eventOrText);
-          return refuseTransfer(eventOrText);
+        if (typeof eventOrText !== "string") {
+          const transferInput = classifyTransferInput(
+            "controlled",
+            eventOrText,
+          );
+          if (transferInput.kind === "suppress")
+            return suppressTransferRoute(eventOrText);
+          if (transferInput.kind === "refuse") {
+            handledEvents.add(eventOrText);
+            return refuseTransfer(eventOrText);
+          }
         }
         const text =
           typeof eventOrText === "string" ? eventOrText : eventOrText.data;
@@ -731,13 +597,7 @@ export function registerReviewSession(
     editor.registerCommand(
       KEY_ENTER_COMMAND,
       (event) => {
-        if (compositionEnterArmed) {
-          // Trailing-newline dispatch from Lexical's composition-end path is
-          // part of the same physical commit. Claim silently: the single
-          // composition outcome (refusal) is reported by the normalizer.
-          event?.preventDefault();
-          return true;
-        }
+        if (composition.consumeTrailingEnter(event)) return true;
         if (editor.isComposing()) return false;
         event?.preventDefault();
         return event?.shiftKey ? refuseStructure() : handleSplit(event);
