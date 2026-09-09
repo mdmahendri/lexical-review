@@ -24,8 +24,6 @@ import {
   type ReviewFragmentProposal,
 } from "./ReviewFragment";
 import {
-  inspectBoundary,
-  inspectStructureProposal,
   resolveStructure,
   validateStructuralState,
   type ReviewStructuralProposal,
@@ -42,15 +40,14 @@ import type {
 } from "./ReviewText";
 import {
   inspectCollectedProposalGroup,
-  inspectCollectedProposalKind,
   inspectProposalGroup,
 } from "./ReviewTargeting";
 import type { ProposalKind } from "./ReviewTargeting";
 import {
   collectProposalNodes,
-  inspectCollectedFragmentGroup,
   type CollectedProposalNodes,
 } from "./ReviewProposalCollection";
+import { classifyCollectedProposal } from "./ReviewProposalDirectory";
 import type { LexicalNode, ParagraphNode, TextNode } from "lexical";
 
 export type ProposalResolutionAction = "accept" | "reject" | "remove";
@@ -207,25 +204,13 @@ export type InspectedReviewProposal =
 export function $inspectReviewProposal(
   proposalId: string,
 ): ReviewIntentOutcome<InspectedReviewProposal> {
-  // One shared observation per read; the nested revalidation below reads
-  // from it instead of recollecting. Order, gating, and translation match
-  // the pre-spike sequence exactly.
+  // One shared observation per read, routed once in canonical order; the
+  // nested owner reads below revalidate from it instead of recollecting.
+  // Order, gating, and translation match the pre-spike sequence exactly.
   const collected = collectProposalNodes(proposalId);
-  const fragment = inspectCollectedFragmentProposal(collected, proposalId);
-  if (fragment.status === "unchanged")
-    return {
-      status: "unchanged",
-      value: { kind: "fragment", proposal: fragment.value },
-    };
-  const boundary = inspectStructureProposal(proposalId);
-  if (boundary.status === "unchanged")
-    return {
-      status: "unchanged",
-      value: { kind: "structure", proposal: boundary.value },
-    };
-  const group = inspectCollectedProposalGroup(collected, proposalId);
-  if (group.status !== "ready") return group;
-  switch (group.value.kind) {
+  const classified = classifyCollectedProposal(collected, proposalId);
+  if (classified.status !== "ready") return classified;
+  switch (classified.value.kind) {
     case "fragment": {
       const retried = inspectCollectedFragmentProposal(collected, proposalId);
       if (retried.status === "unchanged")
@@ -239,6 +224,16 @@ export function $inspectReviewProposal(
           value: { kind: "fragment", proposal: retried.value },
         };
       return retried;
+    }
+    case "boundary": {
+      const boundary = classified.value.boundary;
+      return {
+        status: "unchanged",
+        value: {
+          kind: "structure",
+          proposal: { proposalId, kind: boundary.getKind() },
+        },
+      };
     }
     case "formatting": {
       const found = inspectCollectedFormattingProposal(collected, proposalId);
@@ -287,11 +282,11 @@ export function $inspectReviewProposal(
           kind: "replacement",
           proposal: {
             proposalId,
-            oldText: group.value.wrappers
+            oldText: classified.value.wrappers
               .filter($isReviewDeletionNode)
               .map((node) => node.getTextContent())
               .join(""),
-            newText: group.value.wrappers
+            newText: classified.value.wrappers
               .filter($isReviewInsertionNode)
               .map((node) => node.getTextContent())
               .join(""),
@@ -343,27 +338,21 @@ export function $resolveReviewProposals(
     );
   const groups: PreflightedGroup[] = [];
   for (const id of new Set(proposalIds)) {
-    // Fragment and boundary checks come first because inspectProposalKind
-    // reports those IDs as kind "fragment" without distinguishing the
-    // structural marker. Fall through to inspectProposalKind for text kinds;
-    // it is the single source of invalid-proposal-id vs unsupported-target.
-    // One shared observation per ID covers the fragment and kind checks;
-    // structural inspection keeps its own scope and the mutations below
-    // re-observe through owner revalidation.
-    const collected = collectProposalNodes(id);
-    const fragment = inspectCollectedFragmentGroup(collected);
-    if (fragment.status === "ready") {
-      groups.push({ id, kind: "fragment" });
-      continue;
-    }
-    const boundary = inspectBoundary(id);
-    if (boundary.status === "ready") {
-      groups.push({ id, kind: "boundary" });
-      continue;
-    }
-    const kind = inspectCollectedProposalKind(collected, id);
-    if (kind.status !== "ready") return kind;
-    groups.push({ id, kind: kind.value });
+    // One shared observation per ID, routed once in canonical order
+    // (fragment, structural marker, text kind); classification failure is the
+    // group error, the single source of invalid-proposal-id vs
+    // unsupported-target. Structural inspection keeps its own scope and the
+    // mutations below re-observe through owner revalidation.
+    const classified = classifyCollectedProposal(collectProposalNodes(id), id);
+    if (classified.status !== "ready") return classified;
+    const kind = classified.value.kind;
+    groups.push(
+      kind === "fragment"
+        ? { id, kind: "fragment" }
+        : kind === "boundary"
+          ? { id, kind: "boundary" }
+          : { id, kind },
+    );
   }
   if (!groups.length) return unchanged();
   const invalid = validateStructuralState();

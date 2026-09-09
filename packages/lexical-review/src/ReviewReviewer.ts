@@ -27,6 +27,7 @@ import { inspectCollectedFragmentProposal } from "./ReviewFragment";
 import { findCollectedProposal } from "./ReviewResolution";
 import { inspectBoundary, validateStructuralState } from "./ReviewStructure";
 import { collectProposalNodes } from "./ReviewProposalCollection";
+import { classifyCollectedProposal } from "./ReviewProposalDirectory";
 import { inspectCollectedProposalGroup } from "./ReviewTargeting";
 import {
   refusal,
@@ -234,35 +235,47 @@ export function getPrevProposal(
 export function $inspectReviewProposalSnapshot(
   proposalId: string,
 ): Preparation<ReviewProposalSnapshot> {
-  // One shared observation per read: fragment inspection, text-group
-  // fallback, and the nested revalidation below all read from it instead of
-  // recollecting. Observations expire at the next mutation. Structural
-  // inspection keeps its own traversal scope.
+  // One shared observation per read, routed once in canonical order; the
+  // nested owner reads below revalidate from it instead of recollecting.
+  // Observations expire at the next mutation. Structural inspection keeps
+  // its own traversal scope.
   const collected = collectProposalNodes(proposalId);
-  const fragment = inspectCollectedFragmentProposal(collected, proposalId);
-  if (fragment.status === "unchanged" || fragment.status === "changed") {
-    const group = inspectCollectedProposalGroup(collected, proposalId);
-    if (group.status !== "ready") return group;
-    const anchored = anchorOf(group.value.wrappers);
-    if (anchored.status !== "ready") return anchored;
-    const attachment = attachmentOf(anchored.value);
-    if (attachment.status !== "ready") return attachment;
-    return {
-      status: "ready",
-      value: {
-        proposalId,
-        attachment: attachment.value,
-        kind: "fragment",
-        content: { paragraphs: fragment.value.paragraphs },
-      },
-    };
+  const classified = classifyCollectedProposal(collected, proposalId);
+  if (classified.status !== "ready") {
+    // Snapshot surfaces structural invalidity where inspection and batch
+    // surface the group error; re-observe the marker on failure paths only.
+    const boundary = inspectBoundary(proposalId);
+    if (boundary.status === "refused" && boundary.code !== "unsupported-target")
+      return boundary;
+    return classified;
   }
-  if (fragment.status === "failed") throw new Error(fragment.error.message);
-  const boundary = inspectBoundary(proposalId);
-  if (boundary.status === "ready") {
-    const attachment = attachmentOf(boundary.value);
+  if (classified.value.kind === "fragment") {
+    const fragment = inspectCollectedFragmentProposal(collected, proposalId);
+    if (fragment.status === "unchanged" || fragment.status === "changed") {
+      const group = inspectCollectedProposalGroup(collected, proposalId);
+      if (group.status !== "ready") return group;
+      const anchored = anchorOf(group.value.wrappers);
+      if (anchored.status !== "ready") return anchored;
+      const attachment = attachmentOf(anchored.value);
+      if (attachment.status !== "ready") return attachment;
+      return {
+        status: "ready",
+        value: {
+          proposalId,
+          attachment: attachment.value,
+          kind: "fragment",
+          content: { paragraphs: fragment.value.paragraphs },
+        },
+      };
+    }
+    if (fragment.status === "failed") throw new Error(fragment.error.message);
+    return fragment;
+  }
+  if (classified.value.kind === "boundary") {
+    const boundary = classified.value.boundary;
+    const attachment = attachmentOf(boundary);
     if (attachment.status !== "ready") return attachment;
-    if (boundary.value.getKind() === "split")
+    if (boundary.getKind() === "split")
       return {
         status: "ready",
         value: {
@@ -282,31 +295,12 @@ export function $inspectReviewProposalSnapshot(
       },
     };
   }
-  if (boundary.status === "refused" && boundary.code !== "unsupported-target")
-    return boundary;
-  const group = inspectCollectedProposalGroup(collected, proposalId);
-  if (group.status !== "ready") return group;
-  const anchored = anchorOf(group.value.wrappers);
+  const wrappers = classified.value.wrappers;
+  const anchored = anchorOf(wrappers);
   if (anchored.status !== "ready") return anchored;
   const attachment = attachmentOf(anchored.value);
   if (attachment.status !== "ready") return attachment;
-  switch (group.value.kind) {
-    case "fragment": {
-      const retried = inspectCollectedFragmentProposal(collected, proposalId);
-      if (retried.status !== "unchanged" && retried.status !== "changed")
-        return retried.status === "refused"
-          ? retried
-          : refusal("invalid-structural-target", retried.error.message);
-      return {
-        status: "ready",
-        value: {
-          proposalId,
-          attachment: attachment.value,
-          kind: "fragment",
-          content: { paragraphs: retried.value.paragraphs },
-        },
-      };
-    }
+  switch (classified.value.kind) {
     case "formatting": {
       const found = inspectCollectedFormattingProposal(collected, proposalId);
       if (found.status !== "unchanged" && found.status !== "changed")
@@ -328,7 +322,7 @@ export function $inspectReviewProposalSnapshot(
     }
     case "insertion":
     case "deletion": {
-      const kind = group.value.kind;
+      const kind = classified.value.kind;
       const prepared = findCollectedProposal(collected, proposalId, kind);
       if (prepared.status !== "ready") return prepared;
       const nodes = wrapperRuns(prepared.value.wrappers, () => true);
@@ -349,11 +343,8 @@ export function $inspectReviewProposalSnapshot(
       };
     }
     case "replacement": {
-      const oldNodes = wrapperRuns(group.value.wrappers, $isReviewDeletionNode);
-      const newNodes = wrapperRuns(
-        group.value.wrappers,
-        $isReviewInsertionNode,
-      );
+      const oldNodes = wrapperRuns(wrappers, $isReviewDeletionNode);
+      const newNodes = wrapperRuns(wrappers, $isReviewInsertionNode);
       if (oldNodes === null || newNodes === null)
         return refusal(
           "invalid-structural-target",
